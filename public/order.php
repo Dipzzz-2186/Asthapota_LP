@@ -37,7 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = 'Only JPG or PNG allowed.';
             } else {
                 $name = 'proof_' . $order_id . '_' . time() . '.' . $ext;
-                $target = $CONFIG['upload_dir'] . '/' . $name;
+                $uploadDir = $CONFIG['upload_dir'];
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0775, true);
+                }
+                $target = $uploadDir . '/' . $name;
                 if (!move_uploaded_file($file['tmp_name'], $target)) {
                     $errors[] = 'Failed to upload file.';
                 } else {
