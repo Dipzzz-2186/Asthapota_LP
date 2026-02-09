@@ -15,6 +15,120 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Temu Padel</title>
   <link rel="stylesheet" href="/assets/css/style.css">
+  <style>
+    /* Marquee Slider Container */
+    .sponsor-slider-container {
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .marquee-content {
+      display: flex;
+      gap: 24px;
+      width: max-content;
+      padding: 10px 0;
+      animation: marquee 120s linear infinite;
+    }
+
+    .marquee-content:hover {
+      animation-play-state: paused;
+    }
+
+    .marquee-content .logo-chip {
+      flex: 0 0 auto;
+      padding: 20px;
+      border-radius: 15px;
+      background: var(--surface-2);
+      display: grid;
+      place-items: center;
+      min-height: 75px;
+      min-width: 170px;
+      transition: all 0.3s ease;
+      border: 1px solid transparent;
+    }
+
+    .marquee-content .logo-chip:hover {
+      border-color: var(--primary);
+      transform: translateY(-6px);
+      box-shadow: 0 15px 30px rgba(30, 94, 216, 0.15);
+    }
+
+    .marquee-content .logo-chip img {
+      max-height: 35px;
+      max-width: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+    }
+
+    .marquee-content .logo-chip.dark {
+      background: #0c1b36;
+    }
+
+    .marquee-content .logo-chip.dark img {
+      max-height: 65px;
+    }
+
+    /* Marquee Animation - SLOW */
+    @keyframes marquee {
+      0% {
+        transform: translateX(0);
+      }
+      100% {
+        transform: translateX(-100%);
+      }
+    }
+
+    /* Gradient overlay untuk efek fading di pinggir */
+    .sponsor-slider-container::before,
+    .sponsor-slider-container::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      width: 100px;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .sponsor-slider-container::before {
+      left: 0;
+      background: linear-gradient(to right, var(--surface) 0%, transparent 100%);
+    }
+
+    .sponsor-slider-container::after {
+      right: 0;
+      background: linear-gradient(to left, var(--surface) 0%, transparent 100%);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .sponsor-slider-container::before,
+      .sponsor-slider-container::after {
+        width: 60px;
+      }
+      
+      .marquee-content .logo-chip {
+        min-width: 140px;
+        padding: 16px;
+      }
+      
+      .marquee-content {
+        gap: 16px;
+      }
+      
+      @keyframes marquee {
+        0% {
+          transform: translateX(0);
+        }
+        100% {
+          transform: translateX(-100%);
+        }
+      }
+    }
+  </style>
 </head>
 <body class="page">
   <header class="page-header">
@@ -92,18 +206,63 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
   <section class="section" id="about">
     <div class="container sponsor-bar fade-up delay-2">
       <div class="section-title">Supported By</div>
-      <div class="sponsor-logos">
-        <div class="logo-chip">
-          <img src="/assets/img/logo.webp" alt="HIPPI">
-        </div>
-        <div class="logo-chip">
-          <img src="/assets/img/fcom.png" alt="FCOM">
-        </div>
-        <div class="logo-chip dark">
-          <img src="/assets/img/mypadel.png" alt="MyPadel">
-        </div>
-        <div class="logo-chip dark">
-          <img src="/assets/img/hippi.png" alt="BAPORA">
+      <div class="sponsor-slider-container">
+        <div class="marquee-content">
+          <!-- Set 1 -->
+          <div class="logo-chip">
+            <img src="/assets/img/logo.webp" alt="HIPPI">
+          </div>
+          <div class="logo-chip">
+            <img src="/assets/img/fcom.png" alt="FCOM">
+          </div>
+          <div class="logo-chip dark">
+            <img src="/assets/img/mypadel.png" alt="MyPadel">
+          </div>
+          <div class="logo-chip dark">
+            <img src="/assets/img/hippi.png" alt="BAPORA">
+          </div>
+          
+          <!-- Set 2 (Duplikat) -->
+          <div class="logo-chip">
+            <img src="/assets/img/logo.webp" alt="HIPPI">
+          </div>
+          <div class="logo-chip">
+            <img src="/assets/img/fcom.png" alt="FCOM">
+          </div>
+          <div class="logo-chip dark">
+            <img src="/assets/img/mypadel.png" alt="MyPadel">
+          </div>
+          <div class="logo-chip dark">
+            <img src="/assets/img/hippi.png" alt="BAPORA">
+          </div>
+          
+          <!-- Set 3 (Duplikat untuk smoothness) -->
+          <div class="logo-chip">
+            <img src="/assets/img/logo.webp" alt="HIPPI">
+          </div>
+          <div class="logo-chip">
+            <img src="/assets/img/fcom.png" alt="FCOM">
+          </div>
+          <div class="logo-chip dark">
+            <img src="/assets/img/mypadel.png" alt="MyPadel">
+          </div>
+          <div class="logo-chip dark">
+            <img src="/assets/img/hippi.png" alt="BAPORA">
+          </div>
+          
+          <!-- Set 4 (Duplikat untuk extra smooth) -->
+          <div class="logo-chip">
+            <img src="/assets/img/logo.webp" alt="HIPPI">
+          </div>
+          <div class="logo-chip">
+            <img src="/assets/img/fcom.png" alt="FCOM">
+          </div>
+          <div class="logo-chip dark">
+            <img src="/assets/img/mypadel.png" alt="MyPadel">
+          </div>
+          <div class="logo-chip dark">
+            <img src="/assets/img/hippi.png" alt="BAPORA">
+          </div>
         </div>
       </div>
     </div>
@@ -275,8 +434,25 @@ document.addEventListener('DOMContentLoaded', function() {
   
   window.addEventListener('scroll', updateActiveNav);
   updateActiveNav(); // Panggil pertama kali
+  
+  // Kontrol kecepatan marquee berdasarkan layar
+  const marqueeContent = document.querySelector('.marquee-content');
+  if (marqueeContent) {
+    // Sesuaikan kecepatan berdasarkan ukuran layar
+    function adjustMarqueeSpeed() {
+      const isMobile = window.innerWidth <= 768;
+      const duration = isMobile ? 80 : 120; // Lebih lambat di mobile (80s) vs desktop (120s)
+      
+      marqueeContent.style.animationDuration = `${duration}s`;
+    }
+    
+    // Atur kecepatan awal
+    adjustMarqueeSpeed();
+    
+    // Update saat resize
+    window.addEventListener('resize', adjustMarqueeSpeed);
+  }
 });
 </script>
 </body>
 </html>
-
