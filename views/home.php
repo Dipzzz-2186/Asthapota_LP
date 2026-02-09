@@ -148,13 +148,14 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
           <a href="#packages"><i class="bi bi-bag"></i> Packages</a>
         </nav>
         <div class="topbar-actions">
-          <a class="icon-btn" href="/register"><i class="bi bi-person"></i></a>
-          <a class="icon-btn" href="#packages"><i class="bi bi-bag"></i></a>
           <?php if ($isAdmin): ?>
-          <a class="btn ghost" href="/admin/dashboard">Admin Dashboard</a>
+            <a class="btn ghost" href="/admin/dashboard">Admin Dashboard</a>
+            <a class="btn primary" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
           <?php else: ?>
-          <a class="btn ghost" href="/admin/login">Admin Login</a>
-          <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
+            <a class="icon-btn" href="/register"><i class="bi bi-person"></i></a>
+            <a class="icon-btn" href="#packages"><i class="bi bi-bag"></i></a>
+            <a class="btn ghost" href="/admin/login">Admin Login</a>
+            <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
           <?php endif; ?>
         </div>
       </div>
@@ -168,7 +169,11 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
         <h1>Temu Padel 2026</h1>
         <p>Experience a vibrant padel gathering with curated packages, friendly matches, and community energy. Register first to unlock the best packages.</p>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
-          <a class="btn primary" href="/register">Register Here <i class="bi bi-arrow-right"></i></a>
+          <?php if ($isAdmin): ?>
+            <button class="btn primary" type="button" disabled>Admin tidak bisa order</button>
+          <?php else: ?>
+            <a class="btn primary" href="/register">Register Here <i class="bi bi-arrow-right"></i></a>
+          <?php endif; ?>
           <a class="btn ghost" href="#packages">View Packages</a>
         </div>
         <div class="hero-meta">
@@ -363,7 +368,11 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
             </ul>
             <div style="font-size:22px;font-weight:700;"><?= h(rupiah((int)$p['price'])) ?>,-</div>
             <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
-              <a class="btn primary" href="/register">Register to Order</a>
+              <?php if ($isAdmin): ?>
+                <button class="btn primary" type="button" disabled>Admin tidak bisa order</button>
+              <?php else: ?>
+                <a class="btn primary" href="/register">Register to Order</a>
+              <?php endif; ?>
               <a class="btn ghost" href="/packages-view">View Detail</a>
             </div>
           </div>
