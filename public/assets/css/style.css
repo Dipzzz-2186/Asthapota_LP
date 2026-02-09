@@ -306,7 +306,7 @@ a {
 
 .sponsor-logos {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
 }
 
@@ -317,6 +317,25 @@ a {
   text-align: center;
   font-weight: 600;
   color: var(--primary);
+  display: grid;
+  place-items: center;
+  min-height: 54px;
+}
+
+.logo-chip img {
+  max-height: 28px;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.logo-chip.dark {
+  background: #0c1b36;
+}
+
+.logo-chip.dark img {
+  max-height: 56px;
 }
 
 .grid-2 {
@@ -601,6 +620,7 @@ a {
     transform: translateY(-6px);
   }
 }
+
 
 @media (max-width: 960px) {
   .hero-grid, .grid-2 {

@@ -80,14 +80,20 @@ ensure_session();
 
   <section class="section" id="about">
     <div class="container sponsor-bar fade-up delay-2">
-      <div class="section-title">Our Title Sponsor</div>
+      <div class="section-title">Supported By</div>
       <div class="sponsor-logos">
-        <div class="logo-chip">Enterprise</div>
-        <div class="logo-chip">Irish Life</div>
-        <div class="logo-chip">Ishka</div>
-        <div class="logo-chip">Activa</div>
-        <div class="logo-chip">Dublin Bus</div>
-        <div class="logo-chip">Fáilte</div>
+        <div class="logo-chip">
+          <img src="/assets/img/logo.webp" alt="HIPPI">
+        </div>
+        <div class="logo-chip">
+          <img src="/assets/img/fcom.png" alt="FCOM">
+        </div>
+        <div class="logo-chip dark">
+          <img src="/assets/img/mypadel.png" alt="MyPadel">
+        </div>
+        <div class="logo-chip">
+          <img src="/assets/img/HIPPI.png" alt="BAPORA">
+        </div>
       </div>
     </div>
   </section>
