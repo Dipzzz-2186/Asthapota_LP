@@ -20,8 +20,8 @@ if (!function_exists('render_navbar')) {
         </div>
         <?php if ($showNav): ?>
         <nav class="nav">
+          <a href="/"><i class="bi bi-house"></i> Home</a>
           <a href="/#about"><i class="bi bi-flag"></i> About</a>
-          <a href="/#program"><i class="bi bi-calendar-event"></i> Program</a>
           <a href="/#social"><i class="bi bi-share"></i> Social</a>
           <a href="/#packages"><i class="bi bi-bag"></i> Packages</a>
         </nav>
