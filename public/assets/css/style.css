@@ -619,6 +619,47 @@ a {
   font-size: clamp(32px, 4.5vw, 52px); /* Sedikit lebih besar */
 }
 
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 27, 54, 0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 2000;
+}
+
+.modal.show {
+  display: flex;
+}
+
+.modal-card {
+  width: min(520px, 92vw);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+}
+
+.modal-title {
+  font-family: 'Fraunces', serif;
+  font-size: 24px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.help-text {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .fade-up {
   animation: fadeUp 0.9s ease both;
 }

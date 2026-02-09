@@ -3,23 +3,95 @@ require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 ensure_session();
 
+if (!empty($_GET['cancel_otp']) && $_GET['cancel_otp'] === '1') {
+    unset($_SESSION['reg_pending']);
+    redirect('/register.php');
+}
+
 $errors = [];
+$otp_errors = [];
+$step = $_POST['step'] ?? '';
+$pending = $_SESSION['reg_pending'] ?? null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $full_name = trim($_POST['full_name'] ?? '');
-    $phone = trim($_POST['phone'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $instagram = trim($_POST['instagram'] ?? '');
+    if ($step === 'send_otp') {
+        $full_name = trim($_POST['full_name'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $instagram = trim($_POST['instagram'] ?? '');
 
-    if ($full_name === '') $errors[] = 'Full name is required.';
-    if ($phone === '') $errors[] = 'Phone number is required.';
-    if ($email === '') $errors[] = 'Email is required.';
+        if ($full_name === '') $errors[] = 'Full name is required.';
+        if ($phone === '') $errors[] = 'Phone number is required.';
+        if ($email === '') $errors[] = 'Email is required.';
+        if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Email format is invalid.';
 
-    if (!$errors) {
-        $db = get_db();
-        $stmt = $db->prepare('INSERT INTO users (full_name, phone, email, instagram, created_at) VALUES (?, ?, ?, ?, ?)');
-        $stmt->execute([$full_name, $phone, $email, $instagram, date('c')]);
-        $_SESSION['user_id'] = (int)$db->lastInsertId();
-        redirect('/packages.php');
+        if (!$errors) {
+            $db = get_db();
+            $check = $db->prepare('SELECT id FROM users WHERE email = ?');
+            $check->execute([$email]);
+            if ($check->fetch()) {
+                $errors[] = 'Email already registered. Please use another email.';
+            } else {
+                $otp = (string)random_int(100000, 999999);
+                $_SESSION['reg_pending'] = [
+                    'full_name' => $full_name,
+                    'phone' => $phone,
+                    'email' => $email,
+                    'instagram' => $instagram,
+                    'otp' => $otp,
+                    'otp_expires' => time() + 600,
+                ];
+                $pending = $_SESSION['reg_pending'];
+                if (!send_otp_email($email, $otp)) {
+                    $errors[] = 'Failed to send OTP email. Please check SMTP config.';
+                    unset($_SESSION['reg_pending']);
+                    $pending = null;
+                }
+            }
+        }
+    }
+
+    if ($step === 'verify_otp') {
+        $otp = trim($_POST['otp'] ?? '');
+        $pending = $_SESSION['reg_pending'] ?? null;
+
+        if (!$pending) {
+            $otp_errors[] = 'OTP session expired. Please resend OTP.';
+        } elseif (($pending['otp_expires'] ?? 0) < time()) {
+            $otp_errors[] = 'OTP expired. Please resend OTP.';
+            unset($_SESSION['reg_pending']);
+            $pending = null;
+        } elseif ($otp !== ($pending['otp'] ?? '')) {
+            $otp_errors[] = 'OTP is incorrect.';
+        } else {
+            $db = get_db();
+            $stmt = $db->prepare('INSERT INTO users (full_name, phone, email, instagram, created_at) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([
+                $pending['full_name'],
+                $pending['phone'],
+                $pending['email'],
+                $pending['instagram'],
+                date('c')
+            ]);
+            $_SESSION['user_id'] = (int)$db->lastInsertId();
+            unset($_SESSION['reg_pending']);
+            redirect('/packages.php');
+        }
+    }
+
+    if ($step === 'resend_otp') {
+        $pending = $_SESSION['reg_pending'] ?? null;
+        if ($pending && !empty($pending['email'])) {
+            $otp = (string)random_int(100000, 999999);
+            $_SESSION['reg_pending']['otp'] = $otp;
+            $_SESSION['reg_pending']['otp_expires'] = time() + 600;
+            $pending = $_SESSION['reg_pending'];
+            if (!send_otp_email($pending['email'], $otp)) {
+                $otp_errors[] = 'Failed to resend OTP. Please check SMTP config.';
+            }
+        } else {
+            $otp_errors[] = 'OTP session expired. Please register again.';
+        }
     }
 }
 ?>
@@ -87,6 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <form class="form" method="post" action="">
+          <input type="hidden" name="step" value="send_otp">
           <label>
             Full Name*
             <input type="text" name="full_name" required>
@@ -111,5 +184,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
     </div>
   </section>
+
+  <div class="modal <?= $pending ? 'show' : '' ?>" id="otpModal">
+    <div class="modal-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div class="modal-title">Verifikasi OTP</div>
+        <a class="icon-btn" href="/register.php?cancel_otp=1" aria-label="Close"><i class="bi bi-x"></i></a>
+      </div>
+      <div class="help-text">Masukkan kode OTP yang dikirim ke email: <?= $pending ? h($pending['email']) : '-' ?></div>
+
+      <?php if ($otp_errors): ?>
+        <div class="alert">
+          <?php foreach ($otp_errors as $e): ?>
+            <div><?= h($e) ?></div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+
+      <form class="form" method="post" action="">
+        <input type="hidden" name="step" value="verify_otp">
+        <label>
+          Kode OTP*
+          <input type="text" name="otp" inputmode="numeric" required>
+        </label>
+        <div class="help-text" id="otpTimer" data-exp="<?= $pending ? (int)$pending['otp_expires'] : 0 ?>">Berlaku 10 menit.</div>
+        <div class="modal-actions">
+          <button class="btn primary" type="submit">Verifikasi <i class="bi bi-check2-circle"></i></button>
+          <button class="btn ghost" type="submit" name="step" value="resend_otp">Kirim Ulang</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      var modal = document.getElementById('otpModal');
+      if (!modal) return;
+      var timer = document.getElementById('otpTimer');
+      if (!timer) return;
+      var exp = parseInt(timer.dataset.exp || '0', 10) * 1000;
+      if (!exp) return;
+      var tick = function(){
+        var now = Date.now();
+        var diff = Math.max(0, exp - now);
+        var mins = Math.floor(diff / 60000);
+        var secs = Math.floor((diff % 60000) / 1000);
+        timer.textContent = diff > 0 ? ('Sisa waktu: ' + mins + 'm ' + (secs < 10 ? '0' : '') + secs + 's') : 'OTP expired. Silakan kirim ulang.';
+      };
+      tick();
+      setInterval(tick, 1000);
+    })();
+  </script>
 </body>
 </html>
