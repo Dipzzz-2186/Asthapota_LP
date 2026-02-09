@@ -5,6 +5,48 @@ require_once __DIR__ . '/../../app/auth.php';
 require_admin();
 
 $db = get_db();
+$flash = ['success' => '', 'error' => ''];
+
+/*
+// Accept/Reject order (admin action)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Validate request payload
+    $orderId = (int)($_POST['order_id'] ?? 0);
+    $action = $_POST['action'] ?? '';
+    $allowed = ['accept', 'reject'];
+
+    if (!$orderId || !in_array($action, $allowed, true)) {
+        $flash['error'] = 'Invalid request.';
+    } else {
+        // Load order + user for email notification
+        $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
+        $stmt->execute([$orderId]);
+        $orderRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$orderRow) {
+            $flash['error'] = 'Order not found.';
+        } elseif (empty($orderRow['payment_proof'])) {
+            // Require payment proof before any decision
+            $flash['error'] = 'Cannot update. Payment proof is required.';
+        } elseif ($orderRow['status'] !== 'paid') {
+            // Only paid orders can be accepted/rejected
+            $flash['error'] = 'Only paid orders can be accepted or rejected.';
+        } else {
+            // Update status + notify user
+            $newStatus = $action === 'accept' ? 'accepted' : 'rejected';
+            $update = $db->prepare('UPDATE orders SET status = ? WHERE id = ?');
+            $update->execute([$newStatus, $orderId]);
+
+            $orderRow['status'] = $newStatus;
+            $sent = send_order_status_email($orderRow, $orderRow['email']);
+            $flash['success'] = $sent
+                ? 'Order status updated and email sent.'
+                : 'Order status updated, but email failed to send.';
+        }
+    }
+}
+*/
+
 $packages = $db->query("SELECT id, name FROM packages ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 $selectedPackage = isset($_GET['package']) ? (int)$_GET['package'] : 0;
 
@@ -139,10 +181,30 @@ foreach ($orders as $o) {
       color: #1f7a3f;
       border-color: rgba(46, 184, 92, 0.3);
     }
+    .badge.accepted {
+      background: rgba(34, 197, 94, 0.12);
+      color: #15803d;
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+    .badge.rejected {
+      background: rgba(239, 68, 68, 0.12);
+      color: #b91c1c;
+      border-color: rgba(239, 68, 68, 0.3);
+    }
     .badge.pending {
       background: rgba(255, 180, 0, 0.12);
       color: #8a5a00;
       border-color: rgba(255, 180, 0, 0.3);
+    }
+    .action-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .btn.small {
+      padding: 6px 10px;
+      font-size: 12px;
     }
     .muted {
       color: var(--muted);
@@ -154,6 +216,96 @@ foreach ($orders as $o) {
       gap: 6px;
       font-size: 13px;
       color: var(--primary);
+      background: transparent;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+    }
+    .proof-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 18, 32, 0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 1200;
+    }
+    .proof-modal.show {
+      display: flex;
+    }
+    .proof-card {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--stroke);
+      box-shadow: var(--shadow);
+      max-width: min(92vw, 900px);
+      width: 100%;
+      overflow: hidden;
+    }
+    .proof-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--stroke);
+      background: var(--surface-2);
+    }
+    .proof-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .proof-btn {
+      border: 1px solid var(--stroke);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .proof-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .proof-title {
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .proof-close {
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      color: var(--text);
+      padding: 6px;
+    }
+    .proof-body {
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f172a;
+      overflow: hidden;
+    }
+    .proof-body img {
+      max-width: 100%;
+      max-height: 70vh;
+      border-radius: 10px;
+      background: #fff;
+      transform-origin: center center;
+      transition: transform 0.15s ease;
+      cursor: zoom-in;
+      user-select: none;
+    }
+    .proof-body img.zoomed {
+      cursor: grab;
+    }
+    .proof-body img.dragging {
+      cursor: grabbing;
     }
     @media (max-width: 1100px) {
       .stat-grid {
@@ -236,6 +388,13 @@ foreach ($orders as $o) {
         </form>
       </div>
 
+      <?php if ($flash['error']): ?>
+        <div class="alert" style="margin-bottom:12px;"><?= h($flash['error']) ?></div>
+      <?php endif; ?>
+      <?php if ($flash['success']): ?>
+        <div class="card" style="margin-bottom:12px;padding:12px 14px;"><?= h($flash['success']) ?></div>
+      <?php endif; ?>
+
       <div class="table-wrap">
         <table class="admin-table">
           <thead>
@@ -247,6 +406,7 @@ foreach ($orders as $o) {
               <th>Total</th>
               <th>Status</th>
               <th>Proof</th>
+              <!-- <th>Action</th> -->
               <th>Created</th>
             </tr>
           </thead>
@@ -268,19 +428,24 @@ foreach ($orders as $o) {
                 <td>
                   <?php if ($o['status'] === 'paid'): ?>
                     <span class="badge paid">Paid</span>
+                  <?php elseif ($o['status'] === 'accepted'): ?>
+                    <span class="badge accepted">Accepted</span>
+                  <?php elseif ($o['status'] === 'rejected'): ?>
+                    <span class="badge rejected">Rejected</span>
                   <?php else: ?>
                     <span class="badge pending"><?= h($o['status']) ?></span>
                   <?php endif; ?>
                 </td>
                 <td>
                   <?php if ($o['payment_proof']): ?>
-                    <a class="proof-link" href="/uploads/<?= h($o['payment_proof']) ?>" target="_blank" rel="noopener">
+                    <button class="proof-link" type="button" data-proof="/uploads/<?= h($o['payment_proof']) ?>" data-order="#<?= (int)$o['id'] ?>">
                       <i class="bi bi-file-earmark-image"></i> View
-                    </a>
+                    </button>
                   <?php else: ?>
                     <span class="muted">-</span>
                   <?php endif; ?>
                 </td>
+                <!-- Action column temporarily disabled -->
                 <td><?= h(date('d M Y H:i', strtotime($o['created_at']))) ?></td>
               </tr>
             <?php endforeach; ?>
@@ -289,6 +454,140 @@ foreach ($orders as $o) {
       </div>
     </div>
   </main>
+
+  <div class="proof-modal" id="proofModal" aria-hidden="true">
+    <div class="proof-card" role="dialog" aria-modal="true" aria-labelledby="proofTitle">
+      <div class="proof-head">
+        <div class="proof-title" id="proofTitle">Payment Proof</div>
+        <div class="proof-actions">
+          <button class="proof-btn" type="button" id="zoomOut">-</button>
+          <button class="proof-btn" type="button" id="zoomReset">Reset</button>
+          <button class="proof-btn" type="button" id="zoomIn">+</button>
+          <button class="proof-close" type="button" aria-label="Close">&times;</button>
+        </div>
+      </div>
+      <div class="proof-body">
+        <img id="proofImage" alt="Payment proof">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var modal = document.getElementById('proofModal');
+      var img = document.getElementById('proofImage');
+      var title = document.getElementById('proofTitle');
+      var closeBtn = modal.querySelector('.proof-close');
+      var zoomInBtn = document.getElementById('zoomIn');
+      var zoomOutBtn = document.getElementById('zoomOut');
+      var zoomResetBtn = document.getElementById('zoomReset');
+      var scale = 1;
+      var translateX = 0;
+      var translateY = 0;
+      var isDragging = false;
+      var startX = 0;
+      var startY = 0;
+      var minScale = 1;
+      var maxScale = 3;
+      var step = 0.2;
+
+      function openModal(src, orderLabel) {
+        img.src = src;
+        img.alt = 'Payment proof ' + (orderLabel || '');
+        title.textContent = orderLabel ? ('Payment Proof ' + orderLabel) : 'Payment Proof';
+        scale = 1;
+        translateX = 0;
+        translateY = 0;
+        img.style.transform = 'translate(0px, 0px) scale(1)';
+        img.classList.remove('zoomed');
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        img.src = '';
+      }
+
+      function applyTransform() {
+        img.style.transform = 'translate(' + translateX + 'px, ' + translateY + 'px) scale(' + scale.toFixed(2) + ')';
+      }
+
+      function applyZoom(next) {
+        scale = Math.min(maxScale, Math.max(minScale, next));
+        if (scale === 1) {
+          translateX = 0;
+          translateY = 0;
+        }
+        applyTransform();
+        if (scale > 1) {
+          img.classList.add('zoomed');
+        } else {
+          img.classList.remove('zoomed');
+        }
+        zoomOutBtn.disabled = scale <= minScale;
+        zoomInBtn.disabled = scale >= maxScale;
+      }
+
+      document.querySelectorAll('[data-proof]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          openModal(btn.getAttribute('data-proof'), btn.getAttribute('data-order'));
+        });
+      });
+
+      zoomInBtn.addEventListener('click', function() {
+        applyZoom(scale + step);
+      });
+      zoomOutBtn.addEventListener('click', function() {
+        applyZoom(scale - step);
+      });
+      zoomResetBtn.addEventListener('click', function() {
+        applyZoom(1);
+      });
+      img.addEventListener('click', function() {
+        if (!img.classList.contains('zoomed')) {
+          applyZoom(1.6);
+        }
+      });
+      img.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        var delta = e.deltaY > 0 ? -step : step;
+        applyZoom(scale + delta);
+      }, { passive: false });
+
+      img.addEventListener('mousedown', function(e) {
+        if (scale <= 1) return;
+        isDragging = true;
+        img.classList.add('dragging');
+        startX = e.clientX - translateX;
+        startY = e.clientY - translateY;
+      });
+      window.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        translateX = e.clientX - startX;
+        translateY = e.clientY - startY;
+        applyTransform();
+      });
+      window.addEventListener('mouseup', function() {
+        if (!isDragging) return;
+        isDragging = false;
+        img.classList.remove('dragging');
+      });
+
+      closeBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+          closeModal();
+        }
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+          closeModal();
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
 

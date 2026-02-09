@@ -111,7 +111,7 @@ function send_otp_email(string $email, string $otp): bool {
 }
 
 function send_invoice_email(array $order, array $items, string $toEmail): bool {
-    $subject = 'Temu Padel - Invoice Order #' . (int)$order['id'];
+    $subject = 'Asthapora - Invoice Order #' . (int)$order['id'];
 
     $rows = '';
     foreach ($items as $it) {
@@ -129,7 +129,7 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
       <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
         <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
           <div style="background:#1e5ed8;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">
-            Temu Padel - Invoice
+            Asthapora - Invoice
           </div>
           <div style="padding:22px;">
             <p style="margin:0 0 8px;font-size:15px;color:#0c1b36;">Halo ' . htmlspecialchars($order['full_name'], ENT_QUOTES, 'UTF-8') . ',</p>
@@ -160,6 +160,39 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
             <div style="margin-top:16px;font-size:13px;color:#5a6b86;">
               Pembayaran: BCA 1234567890 a.n. PT Manifestasi Kehidupan Berlimpah
             </div>
+          </div>
+        </div>
+      </div>
+    ';
+
+    return smtp_send($toEmail, $subject, $body);
+}
+
+function send_order_status_email(array $order, string $toEmail): bool {
+    $statusRaw = $order['status'] ?? 'pending';
+    $statusLabel = match ($statusRaw) {
+        'accepted' => 'Accepted',
+        'rejected' => 'Rejected',
+        'paid' => 'Payment Received',
+        default => ucfirst((string)$statusRaw),
+    };
+
+    $subject = 'Asthapora - Order #' . (int)$order['id'] . ' ' . $statusLabel;
+    $body = '
+      <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
+        <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
+          <div style="background:#1e5ed8;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">
+            Asthapora - Order Update
+          </div>
+          <div style="padding:22px;">
+            <p style="margin:0 0 10px;font-size:15px;color:#0c1b36;">Halo ' . htmlspecialchars($order['full_name'] ?? '', ENT_QUOTES, 'UTF-8') . ',</p>
+            <p style="margin:0 0 14px;font-size:14px;color:#5a6b86;">Status order kamu telah diperbarui.</p>
+            <div style="background:#eef4ff;border:1px solid #cfe0ff;border-radius:12px;padding:12px 14px;">
+              <div style="font-size:13px;color:#5a6b86;">Order ID</div>
+              <div style="font-size:18px;font-weight:700;color:#0c1b36;">#' . (int)$order['id'] . '</div>
+              <div style="font-size:13px;color:#5a6b86;margin-top:6px;">Status: ' . htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') . '</div>
+            </div>
+            <p style="margin:14px 0 0;font-size:13px;color:#5a6b86;">Terima kasih sudah berpartisipasi di Asthapora.</p>
           </div>
         </div>
       </div>
