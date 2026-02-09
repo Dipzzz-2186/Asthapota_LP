@@ -7,45 +7,43 @@ require_admin();
 $db = get_db();
 $flash = ['success' => '', 'error' => ''];
 
-/*
-// Accept/Reject order (admin action)
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Validate request payload
-    $orderId = (int)($_POST['order_id'] ?? 0);
-    $action = $_POST['action'] ?? '';
-    $allowed = ['accept', 'reject'];
+// Accept/Reject order (admin action) (KHOLIS)
+// if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+//     // Validate request payload
+//     $orderId = (int)($_POST['order_id'] ?? 0);
+//     $action = $_POST['action'] ?? '';
+//     $allowed = ['accept', 'reject'];
 
-    if (!$orderId || !in_array($action, $allowed, true)) {
-        $flash['error'] = 'Invalid request.';
-    } else {
-        // Load order + user for email notification
-        $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
-        $stmt->execute([$orderId]);
-        $orderRow = $stmt->fetch(PDO::FETCH_ASSOC);
+//     if (!$orderId || !in_array($action, $allowed, true)) {
+//         $flash['error'] = 'Invalid request.';
+//     } else {
+//         // Load order + user for email notification
+//         $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
+//         $stmt->execute([$orderId]);
+//         $orderRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$orderRow) {
-            $flash['error'] = 'Order not found.';
-        } elseif (empty($orderRow['payment_proof'])) {
-            // Require payment proof before any decision
-            $flash['error'] = 'Cannot update. Payment proof is required.';
-        } elseif ($orderRow['status'] !== 'paid') {
-            // Only paid orders can be accepted/rejected
-            $flash['error'] = 'Only paid orders can be accepted or rejected.';
-        } else {
-            // Update status + notify user
-            $newStatus = $action === 'accept' ? 'accepted' : 'rejected';
-            $update = $db->prepare('UPDATE orders SET status = ? WHERE id = ?');
-            $update->execute([$newStatus, $orderId]);
+//         if (!$orderRow) {
+//             $flash['error'] = 'Order not found.';
+//         } elseif (empty($orderRow['payment_proof'])) {
+//             // Require payment proof before any decision
+//             $flash['error'] = 'Cannot update. Payment proof is required.';
+//         } elseif ($orderRow['status'] !== 'paid') {
+//             // Only paid orders can be accepted/rejected
+//             $flash['error'] = 'Only paid orders can be accepted or rejected.';
+//         } else {
+//             // Update status + notify user
+//             $newStatus = $action === 'accept' ? 'accepted' : 'rejected';
+//             $update = $db->prepare('UPDATE orders SET status = ? WHERE id = ?');
+//             $update->execute([$newStatus, $orderId]);
 
-            $orderRow['status'] = $newStatus;
-            $sent = send_order_status_email($orderRow, $orderRow['email']);
-            $flash['success'] = $sent
-                ? 'Order status updated and email sent.'
-                : 'Order status updated, but email failed to send.';
-        }
-    }
-}
-*/
+//             $orderRow['status'] = $newStatus;
+//             $sent = send_order_status_email($orderRow, $orderRow['email']);
+//             $flash['success'] = $sent
+//                 ? 'Order status updated and email sent.'
+//                 : 'Order status updated, but email failed to send.';
+//         }
+//     }
+// }
 
 $packages = $db->query("SELECT id, name FROM packages ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 $selectedPackage = isset($_GET['package']) ? (int)$_GET['package'] : 0;
@@ -307,6 +305,29 @@ foreach ($orders as $o) {
     .proof-body img.dragging {
       cursor: grabbing;
     }
+    .confirm-text {
+      padding: 14px 16px 0;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .confirm-sub {
+      padding: 0 16px 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .confirm-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--stroke);
+      background: var(--surface);
+    }
+    .confirm-actions .btn {
+      padding: 10px 16px;
+      font-size: 13px;
+      border-radius: 10px;
+    }
     @media (max-width: 1100px) {
       .stat-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -406,13 +427,13 @@ foreach ($orders as $o) {
               <th>Total</th>
               <th>Status</th>
               <th>Proof</th>
-              <!-- <th>Action</th> -->
+              <!-- <th>Action</th> (KHOLIS)--> 
               <th>Created</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!$orders): ?>
-              <tr><td colspan="8" class="muted">No orders yet.</td></tr>
+              <tr><td colspan="9" class="muted">No orders yet.</td></tr>
             <?php endif; ?>
             <?php foreach ($orders as $o): ?>
               <tr>
@@ -445,7 +466,33 @@ foreach ($orders as $o) {
                     <span class="muted">-</span>
                   <?php endif; ?>
                 </td>
-                <!-- Action column temporarily disabled -->
+                <!-- <td> (KHOLIS)
+                  <?php
+                  // Buttons enabled only for paid orders with proof
+                  $canAction = !empty($o['payment_proof']) && $o['status'] === 'paid';
+                  ?>
+                  <div class="action-group">
+                    <button
+                      class="btn primary small"
+                      type="button"
+                      data-confirm-action="accept"
+                      data-order-id="<?= (int)$o['id'] ?>"
+                      data-proof="<?= $o['payment_proof'] ? '/uploads/' . h($o['payment_proof']) : '' ?>"
+                      <?= $canAction ? '' : 'disabled' ?>
+                    >Accept</button>
+                    <button
+                      class="btn ghost small"
+                      type="button"
+                      data-confirm-action="reject"
+                      data-order-id="<?= (int)$o['id'] ?>"
+                      data-proof="<?= $o['payment_proof'] ? '/uploads/' . h($o['payment_proof']) : '' ?>"
+                      <?= $canAction ? '' : 'disabled' ?>
+                    >Reject</button>
+                    <?php if (!$canAction && empty($o['payment_proof'])): ?>
+                      <span class="muted">No proof</span>
+                    <?php endif; ?>
+                  </div>
+                </td> -->
                 <td><?= h(date('d M Y H:i', strtotime($o['created_at']))) ?></td>
               </tr>
             <?php endforeach; ?>
@@ -471,6 +518,34 @@ foreach ($orders as $o) {
       </div>
     </div>
   </div>
+
+  <div class="proof-modal" id="confirmModal" aria-hidden="true">
+    <div class="proof-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="proof-head">
+        <div class="proof-title" id="confirmTitle">Confirm Action</div>
+        <div class="proof-actions">
+          <button class="proof-btn" type="button" id="confirmZoomOut">-</button>
+          <button class="proof-btn" type="button" id="confirmZoomReset">Reset</button>
+          <button class="proof-btn" type="button" id="confirmZoomIn">+</button>
+          <button class="proof-close" type="button" aria-label="Close">&times;</button>
+        </div>
+      </div>
+      <div class="confirm-text" id="confirmQuestion">Are you sure?</div>
+      <div class="confirm-sub">Please review the payment proof below before confirming.</div>
+      <div class="proof-body">
+        <img id="confirmProofImage" alt="Payment proof">
+      </div>
+      <div class="confirm-actions">
+        <button class="btn ghost" type="button" id="confirmCancel">Tidak</button>
+        <button class="btn primary" type="button" id="confirmSubmit">Ya</button>
+      </div>
+    </div>
+  </div>
+
+  <form method="post" action="/admin/dashboard" id="confirmForm" style="display:none;">
+    <input type="hidden" name="order_id" id="confirmOrderId" value="">
+    <input type="hidden" name="action" id="confirmAction" value="">
+  </form>
 
   <script>
     (function() {
@@ -530,7 +605,7 @@ foreach ($orders as $o) {
         zoomInBtn.disabled = scale >= maxScale;
       }
 
-      document.querySelectorAll('[data-proof]').forEach(function(btn) {
+      document.querySelectorAll('.proof-link[data-proof]').forEach(function(btn) {
         btn.addEventListener('click', function() {
           openModal(btn.getAttribute('data-proof'), btn.getAttribute('data-order'));
         });
@@ -585,6 +660,149 @@ foreach ($orders as $o) {
         if (e.key === 'Escape' && modal.classList.contains('show')) {
           closeModal();
         }
+      });
+    })();
+  </script>
+
+  <script>
+    (function() {
+      var modal = document.getElementById('confirmModal');
+      var img = document.getElementById('confirmProofImage');
+      var title = document.getElementById('confirmTitle');
+      var question = document.getElementById('confirmQuestion');
+      var closeBtn = modal.querySelector('.proof-close');
+      var zoomInBtn = document.getElementById('confirmZoomIn');
+      var zoomOutBtn = document.getElementById('confirmZoomOut');
+      var zoomResetBtn = document.getElementById('confirmZoomReset');
+      var cancelBtn = document.getElementById('confirmCancel');
+      var submitBtn = document.getElementById('confirmSubmit');
+      var form = document.getElementById('confirmForm');
+      var orderInput = document.getElementById('confirmOrderId');
+      var actionInput = document.getElementById('confirmAction');
+      var scale = 1;
+      var translateX = 0;
+      var translateY = 0;
+      var isDragging = false;
+      var startX = 0;
+      var startY = 0;
+      var minScale = 1;
+      var maxScale = 3;
+      var step = 0.2;
+
+      function applyTransform() {
+        img.style.transform = 'translate(' + translateX + 'px, ' + translateY + 'px) scale(' + scale.toFixed(2) + ')';
+      }
+
+      function applyZoom(next) {
+        scale = Math.min(maxScale, Math.max(minScale, next));
+        if (scale === 1) {
+          translateX = 0;
+          translateY = 0;
+        }
+        applyTransform();
+        if (scale > 1) {
+          img.classList.add('zoomed');
+        } else {
+          img.classList.remove('zoomed');
+        }
+        zoomOutBtn.disabled = scale <= minScale;
+        zoomInBtn.disabled = scale >= maxScale;
+      }
+
+      function openModal(src, orderId, action) {
+        img.src = src;
+        img.alt = 'Payment proof #' + orderId;
+        title.textContent = (action === 'accept' ? 'Confirm Accept' : 'Confirm Reject') + ' #' + orderId;
+        if (question) {
+          question.textContent = action === 'accept'
+            ? 'Apakah anda yakin ingin menerima order ini?'
+            : 'Apakah anda yakin ingin menolak order ini?';
+        }
+        orderInput.value = orderId;
+        actionInput.value = action;
+        scale = 1;
+        translateX = 0;
+        translateY = 0;
+        img.style.transform = 'translate(0px, 0px) scale(1)';
+        img.classList.remove('zoomed');
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        img.src = '';
+      }
+
+      document.querySelectorAll('[data-confirm-action]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var proof = btn.getAttribute('data-proof') || '';
+          var orderId = btn.getAttribute('data-order-id') || '';
+          var action = btn.getAttribute('data-confirm-action') || '';
+          if (!proof || !orderId || !action) return;
+          openModal(proof, orderId, action);
+        });
+      });
+
+      zoomInBtn.addEventListener('click', function() {
+        applyZoom(scale + step);
+      });
+      zoomOutBtn.addEventListener('click', function() {
+        applyZoom(scale - step);
+      });
+      zoomResetBtn.addEventListener('click', function() {
+        applyZoom(1);
+      });
+      img.addEventListener('click', function() {
+        if (!img.classList.contains('zoomed')) {
+          applyZoom(1.6);
+        }
+      });
+      img.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        var delta = e.deltaY > 0 ? -step : step;
+        applyZoom(scale + delta);
+      }, { passive: false });
+
+      img.addEventListener('mousedown', function(e) {
+        if (scale <= 1) return;
+        isDragging = true;
+        img.classList.add('dragging');
+        startX = e.clientX - translateX;
+        startY = e.clientY - translateY;
+      });
+      window.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        translateX = e.clientX - startX;
+        translateY = e.clientY - startY;
+        applyTransform();
+      });
+      window.addEventListener('mouseup', function() {
+        if (!isDragging) return;
+        isDragging = false;
+        img.classList.remove('dragging');
+      });
+
+      function handleClose() {
+        closeModal();
+      }
+
+      closeBtn.addEventListener('click', handleClose);
+      cancelBtn.addEventListener('click', handleClose);
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+          handleClose();
+        }
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+          handleClose();
+        }
+      });
+
+      submitBtn.addEventListener('click', function() {
+        form.submit();
       });
     })();
   </script>
