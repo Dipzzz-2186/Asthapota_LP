@@ -1,6 +1,10 @@
 <?php
+require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 ensure_session();
+
+$db = get_db();
+$packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!doctype html>
 <html lang="en">
@@ -25,10 +29,11 @@ ensure_session();
           <a href="#about"><i class="bi bi-flag"></i> About</a>
           <a href="#program"><i class="bi bi-calendar-event"></i> Program</a>
           <a href="#social"><i class="bi bi-share"></i> Social</a>
+          <a href="#packages"><i class="bi bi-bag"></i> Packages</a>
         </nav>
         <div class="topbar-actions">
           <a class="icon-btn" href="/register.php"><i class="bi bi-person"></i></a>
-          <a class="icon-btn" href="/packages-view.php"><i class="bi bi-bag"></i></a>
+          <a class="icon-btn" href="#packages"><i class="bi bi-bag"></i></a>
           <a class="btn ghost" href="/admin/login.php">Admin Login</a>
           <a class="btn primary" href="/register.php">Register Now <i class="bi bi-arrow-right"></i></a>
         </div>
@@ -44,7 +49,7 @@ ensure_session();
         <p>Experience a vibrant padel gathering with curated packages, friendly matches, and community energy. Register first to unlock the best packages.</p>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
           <a class="btn primary" href="/register.php">Register Here <i class="bi bi-arrow-right"></i></a>
-          <a class="btn ghost" href="/packages-view.php">View Packages</a>
+          <a class="btn ghost" href="#packages">View Packages</a>
         </div>
         <div class="hero-meta">
           <div class="meta-card">
@@ -176,39 +181,64 @@ ensure_session();
       </div>
     </div>
   </section>
+
+  <section class="section" id="packages">
+    <div class="container">
+      <div class="section-title center">Packages</div>
+      <div class="package-grid">
+        <?php foreach ($packages as $p): ?>
+          <div class="package-card fade-up">
+            <div class="pill"><i class="bi bi-bag-heart"></i> Package</div>
+            <h3><?= h($p['name']) ?></h3>
+            <div style="color:var(--muted);">What you get:</div>
+            <ul>
+              <?php foreach (explode("\n", $p['description']) as $line): ?>
+                <li><?= h($line) ?></li>
+              <?php endforeach; ?>
+            </ul>
+            <div style="font-size:22px;font-weight:700;"><?= h(rupiah((int)$p['price'])) ?>,-</div>
+            <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+              <a class="btn primary" href="/register.php">Register to Order</a>
+              <a class="btn ghost" href="/packages-view.php">View Detail</a>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </section>
   <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Smooth scroll untuk semua link navbar
-  document.querySelectorAll('.nav a[href^="#"]').forEach(anchor => {
+  // Smooth scroll untuk semua link internal
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function(e) {
-      e.preventDefault();
-      
       const targetId = this.getAttribute('href');
-      if (targetId === '#') return;
-      
+      if (!targetId || targetId === '#') return;
+
       const targetElement = document.querySelector(targetId);
       if (!targetElement) return;
-      
+
+      e.preventDefault();
+
       // Hitung offset untuk navbar
       const header = document.querySelector('.page-header');
       const headerHeight = header ? header.offsetHeight : 80;
       const extraPadding = 20;
       const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset;
       const offsetPosition = targetPosition - headerHeight - extraPadding;
-      
-      // Scroll langsung ke posisi dengan animasi cepat
+
       window.scrollTo({
         top: offsetPosition,
         behavior: 'smooth'
       });
-      
-      // Update active class
-      document.querySelectorAll('.nav a').forEach(link => {
-        link.classList.remove('active');
-      });
-      this.classList.add('active');
-      
-      // Update URL tanpa reload
+
+      // Update active class di navbar saja
+      if (this.closest('.nav')) {
+        document.querySelectorAll('.nav a').forEach(link => {
+          link.classList.remove('active');
+        });
+        this.classList.add('active');
+      }
+
       history.pushState(null, null, targetId);
     });
   });
