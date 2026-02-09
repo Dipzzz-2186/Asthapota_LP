@@ -25,7 +25,6 @@ ensure_session();
           <a href="#about"><i class="bi bi-flag"></i> About</a>
           <a href="#program"><i class="bi bi-calendar-event"></i> Program</a>
           <a href="#social"><i class="bi bi-share"></i> Social</a>
-          <a href="#faq"><i class="bi bi-question-circle"></i> FAQ</a>
         </nav>
         <div class="topbar-actions">
           <a class="icon-btn" href="/register.php"><i class="bi bi-person"></i></a>
