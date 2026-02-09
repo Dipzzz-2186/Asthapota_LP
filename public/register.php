@@ -31,40 +31,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title>Register - Temu Padel</title>
   <link rel="stylesheet" href="/assets/css/style.css">
 </head>
-<body>
+<body class="page">
+  <header class="page-header">
+    <div class="container">
+      <div class="topbar">
+        <div class="brand">
+          <div class="brand-badge">TP</div>
+          <div>
+            <div>Temu Padel</div>
+            <small style="color:var(--muted);">Register to unlock packages</small>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <a class="btn ghost" href="/"><i class="bi bi-arrow-left"></i> Back</a>
+          <a class="btn primary" href="/packages.php">Packages <i class="bi bi-bag"></i></a>
+        </div>
+      </div>
+    </div>
+  </header>
+
   <section class="section">
-    <div class="container center">
-      <h2 style="font-family:'Playfair Display', serif; font-style: italic;">Please Register Yourself</h2>
-
-      <?php if ($errors): ?>
-        <div class="alert">
-          <?php foreach ($errors as $e): ?>
-            <div><?= h($e) ?></div>
-          <?php endforeach; ?>
+    <div class="container grid-2">
+      <div class="hero-card fade-up">
+        <div class="pill"><i class="bi bi-person-plus"></i> Registration</div>
+        <h1>Register Yourself</h1>
+        <p>Fill in your details to continue. After registration you can select your preferred packages.</p>
+        <div class="hero-meta">
+          <div class="meta-card">
+            <strong><i class="bi bi-check-circle"></i> Required</strong>
+            Full name, phone number, and email.
+          </div>
+          <div class="meta-card">
+            <strong><i class="bi bi-instagram"></i> Optional</strong>
+            Instagram handle for updates.
+          </div>
+          <div class="meta-card">
+            <strong><i class="bi bi-shield-check"></i> Secure</strong>
+            We keep your data private.
+          </div>
         </div>
-      <?php endif; ?>
+      </div>
+      <div class="form-wrap fade-up delay-1">
+        <div class="section-title">Registration Form</div>
 
-      <form class="form" method="post" action="">
-        <label>
-          Full Name*
-          <input type="text" name="full_name" required>
-        </label>
-        <label>
-          Phone Number*
-          <input type="text" name="phone" required>
-        </label>
-        <label>
-          E-mail*
-          <input type="email" name="email" required>
-        </label>
-        <label>
-          Instagram
-          <input type="text" name="instagram">
-        </label>
-        <div class="center">
-          <button class="btn" type="submit">Next</button>
-        </div>
-      </form>
+        <?php if (!empty($_GET['notice']) && $_GET['notice'] === 'register_required'): ?>
+          <div class="alert">Please register first to continue to package selection.</div>
+        <?php endif; ?>
+
+        <?php if ($errors): ?>
+          <div class="alert">
+            <?php foreach ($errors as $e): ?>
+              <div><?= h($e) ?></div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+
+        <form class="form" method="post" action="">
+          <label>
+            Full Name*
+            <input type="text" name="full_name" required>
+          </label>
+          <label>
+            Phone Number*
+            <input type="text" name="phone" required>
+          </label>
+          <label>
+            E-mail*
+            <input type="email" name="email" required>
+          </label>
+          <label>
+            Instagram
+            <input type="text" name="instagram">
+          </label>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <button class="btn primary" type="submit">Continue <i class="bi bi-arrow-right"></i></button>
+            <a class="btn ghost" href="/">Cancel</a>
+          </div>
+        </form>
+      </div>
     </div>
   </section>
 </body>

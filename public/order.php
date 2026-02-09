@@ -62,50 +62,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title>Order Details - Temu Padel</title>
   <link rel="stylesheet" href="/assets/css/style.css">
 </head>
-<body>
-  <section class="section">
-    <div class="container center">
-      <h2 style="font-family:'Playfair Display', serif; font-style: italic;">Order Details</h2>
+<body class="page">
+  <header class="page-header">
+    <div class="container">
+      <div class="topbar">
+        <div class="brand">
+          <div class="brand-badge">TP</div>
+          <div>
+            <div>Temu Padel</div>
+            <small style="color:var(--muted);">Review your order</small>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <a class="btn ghost" href="/packages.php"><i class="bi bi-arrow-left"></i> Back</a>
+          <a class="btn primary" href="/"><i class="bi bi-house"></i> Home</a>
+        </div>
+      </div>
+    </div>
+  </header>
 
-      <div class="order-summary">
-        <div><strong>Full Name*</strong> : <?= h($order['full_name']) ?></div>
-        <div><strong>Phone Number*</strong> : <?= h($order['phone']) ?></div>
-        <div><strong>E-mail*</strong> : <?= h($order['email']) ?></div>
+  <section class="section">
+    <div class="container grid-2">
+      <div class="order-summary fade-up">
+        <div class="section-title">Order Details</div>
+        <div><strong>Full Name</strong> : <?= h($order['full_name']) ?></div>
+        <div><strong>Phone Number</strong> : <?= h($order['phone']) ?></div>
+        <div><strong>E-mail</strong> : <?= h($order['email']) ?></div>
         <div><strong>Instagram</strong> : <?= h($order['instagram']) ?></div>
-        <br>
-        <div><strong>Order</strong></div>
+        <div style="margin-top:12px;"><strong>Order</strong></div>
         <?php foreach ($items as $it): ?>
           <div><?= (int)$it['qty'] ?> x <?= h($it['name']) ?> @ <?= h(rupiah((int)$it['price'])) ?></div>
         <?php endforeach; ?>
-      </div>
 
-      <div class="total container">
-        <div>TOTAL TO PAY:</div>
-        <div><?= h(rupiah((int)$order['total'])) ?>,-</div>
-      </div>
-
-      <div class="container" style="margin-top:16px;">
-        <div>Payment to BCA Account</div>
-        <div>Account Number : 1234567890</div>
-        <div>Account Name : PT Manifestasi Kehidupan Berlimpah</div>
-      </div>
-
-      <h2 style="font-family:'Playfair Display', serif; font-style: italic; margin-top:30px;">Upload Your Payment Proof</h2>
-
-      <?php if ($errors): ?>
-        <div class="alert">
-          <?php foreach ($errors as $e): ?>
-            <div><?= h($e) ?></div>
-          <?php endforeach; ?>
+        <div class="total">
+          <div>Total to Pay:</div>
+          <div><?= h(rupiah((int)$order['total'])) ?>,-</div>
         </div>
-      <?php endif; ?>
+      </div>
 
-      <form method="post" enctype="multipart/form-data" style="margin-top:16px;">
-        <input type="file" name="payment_proof" accept="image/*" required>
-        <div style="margin-top:16px;">
-          <button class="btn" type="submit">Click to Upload</button>
+      <div class="form-wrap fade-up delay-1">
+        <div class="section-title">Payment Info</div>
+        <div class="card soft" style="margin-bottom:16px;">
+          <div><strong>Payment to BCA Account</strong></div>
+          <div>Account Number: 1234567890</div>
+          <div>Account Name: PT Manifestasi Kehidupan Berlimpah</div>
         </div>
-      </form>
+
+        <div class="section-title">Upload Your Payment Proof</div>
+
+        <?php if ($errors): ?>
+          <div class="alert">
+            <?php foreach ($errors as $e): ?>
+              <div><?= h($e) ?></div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+
+        <form method="post" enctype="multipart/form-data">
+          <div class="upload-box">
+            <input type="file" name="payment_proof" accept="image/*" required>
+          </div>
+          <div style="margin-top:16px;">
+            <button class="btn primary" type="submit">Upload Proof <i class="bi bi-upload"></i></button>
+          </div>
+        </form>
+      </div>
     </div>
   </section>
 </body>

@@ -4,7 +4,7 @@ require_once __DIR__ . '/../app/helpers.php';
 ensure_session();
 
 if (empty($_SESSION['user_id'])) {
-    redirect('/register.php');
+    redirect('/register.php?notice=register_required');
 }
 
 $db = get_db();
@@ -50,10 +50,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title>Select Package - Temu Padel</title>
   <link rel="stylesheet" href="/assets/css/style.css">
 </head>
-<body>
+<body class="page">
+  <header class="page-header">
+    <div class="container">
+      <div class="topbar">
+        <div class="brand">
+          <div class="brand-badge">TP</div>
+          <div>
+            <div>Temu Padel</div>
+            <small style="color:var(--muted);">Choose your package</small>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <a class="btn ghost" href="/register.php"><i class="bi bi-arrow-left"></i> Back</a>
+          <a class="btn primary" href="/register.php">Register <i class="bi bi-person-plus"></i></a>
+        </div>
+      </div>
+    </div>
+  </header>
+
   <section class="section">
-    <div class="container center">
-      <h2 style="font-family:'Playfair Display', serif; font-style: italic;">Select Your Package</h2>
+    <div class="container">
+      <div class="section-title">Select Your Package</div>
 
       <?php if ($errors): ?>
         <div class="alert">
@@ -64,17 +82,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php endif; ?>
 
       <form method="post" action="">
-        <div class="packages">
+        <div class="package-grid">
           <?php foreach ($packages as $p): ?>
-            <div class="package-card">
+            <div class="package-card fade-up">
+              <div class="pill"><i class="bi bi-bag-heart"></i> Package</div>
               <h3><?= h($p['name']) ?></h3>
-              <div>What you get :</div>
+              <div style="color:var(--muted);">What you get:</div>
               <ul>
                 <?php foreach (explode("\n", $p['description']) as $line): ?>
                   <li><?= h($line) ?></li>
                 <?php endforeach; ?>
               </ul>
-              <div class="center" style="font-size:22px;font-weight:700;"><?= h(rupiah((int)$p['price'])) ?>,-</div>
+              <div style="font-size:22px;font-weight:700;"><?= h(rupiah((int)$p['price'])) ?>,-</div>
               <div class="qty">
                 <button type="button" data-action="minus">-</button>
                 <input type="number" name="qty_<?= (int)$p['id'] ?>" min="0" value="0">
@@ -83,8 +102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
           <?php endforeach; ?>
         </div>
-        <div class="center" style="margin-top:24px;">
-          <button class="btn" type="submit">Next</button>
+        <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
+          <button class="btn primary" type="submit">Continue to Order <i class="bi bi-arrow-right"></i></button>
+          <a class="btn ghost" href="/">Back to Home</a>
         </div>
       </form>
     </div>
