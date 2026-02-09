@@ -2,15 +2,19 @@
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
-require_once __DIR__ . '/layout/app.php';
 ensure_session();
 
 $isAdmin = is_admin_logged_in();
 $db = get_db();
 $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
 ?>
-<?php
-$extraHead = <<<'HTML'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Temu Padel</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
   <style>
     /* Marquee Slider Container */
     .sponsor-slider-container {
@@ -125,13 +129,38 @@ $extraHead = <<<'HTML'
       }
     }
   </style>
-HTML;
-render_header([
-  'title' => 'Asthapora',
-  'isAdmin' => $isAdmin,
-  'extraHead' => $extraHead,
-]);
-?>
+</head>
+<body class="page">
+  <header class="page-header">
+    <div class="container">
+      <div class="topbar">
+        <div class="brand">
+          <div class="brand-badge">TP</div>
+          <div>
+            <div>Temu Padel</div>
+            <small style="color:var(--muted);">A Monkeybar x BAPORA Event</small>
+          </div>
+        </div>
+        <nav class="nav">
+          <a href="#about"><i class="bi bi-flag"></i> About</a>
+          <a href="#program"><i class="bi bi-calendar-event"></i> Program</a>
+          <a href="#social"><i class="bi bi-share"></i> Social</a>
+          <a href="#packages"><i class="bi bi-bag"></i> Packages</a>
+        </nav>
+        <div class="topbar-actions">
+          <?php if ($isAdmin): ?>
+            <a class="btn ghost" href="/admin/dashboard">Admin Dashboard</a>
+            <a class="btn primary" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
+          <?php else: ?>
+            <a class="icon-btn" href="/register"><i class="bi bi-person"></i></a>
+            <a class="icon-btn" href="#packages"><i class="bi bi-bag"></i></a>
+            <a class="btn ghost" href="/admin/login">Admin Login</a>
+            <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </header>
 
   <section class="hero-section">
     <div class="container hero-grid">
@@ -434,4 +463,5 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
-<?php render_footer(); ?>
+</body>
+</html>
