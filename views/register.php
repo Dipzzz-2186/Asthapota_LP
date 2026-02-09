@@ -1,11 +1,11 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 ensure_session();
 
 if (!empty($_GET['cancel_otp']) && $_GET['cancel_otp'] === '1') {
     unset($_SESSION['reg_pending']);
-    redirect('/register.php');
+    redirect('/register');
 }
 
 $errors = [];
@@ -75,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $_SESSION['user_id'] = (int)$db->lastInsertId();
             unset($_SESSION['reg_pending']);
-            redirect('/packages.php');
+            redirect('/packages');
         }
     }
 
@@ -116,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="topbar-actions">
           <a class="btn ghost" href="/"><i class="bi bi-arrow-left"></i> Back</a>
-          <a class="btn primary" href="/packages-view.php">Packages <i class="bi bi-bag"></i></a>
+          <a class="btn primary" href="/packages-view">Packages <i class="bi bi-bag"></i></a>
         </div>
       </div>
     </div>
@@ -189,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="modal-card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
         <div class="modal-title">Verifikasi OTP</div>
-        <a class="icon-btn" href="/register.php?cancel_otp=1" aria-label="Close"><i class="bi bi-x"></i></a>
+        <a class="icon-btn" href="/register?cancel_otp=1" aria-label="Close"><i class="bi bi-x"></i></a>
       </div>
       <div class="help-text">Masukkan kode OTP yang dikirim ke email: <?= $pending ? h($pending['email']) : '-' ?></div>
 
@@ -240,3 +240,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </script>
 </body>
 </html>
+

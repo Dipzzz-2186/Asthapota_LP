@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../../app/db.php';
 require_once __DIR__ . '/../../app/helpers.php';
 require_once __DIR__ . '/../../app/auth.php';
@@ -184,7 +184,7 @@ foreach ($orders as $o) {
         </div>
         <div class="topbar-actions">
           <a class="btn ghost" href="/"><i class="bi bi-house"></i> Home</a>
-          <a class="btn primary" href="/admin/logout.php"><i class="bi bi-box-arrow-right"></i> Logout</a>
+          <a class="btn primary" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
         </div>
       </div>
     </div>
@@ -231,7 +231,7 @@ foreach ($orders as $o) {
           </select>
           <button class="btn primary" type="submit">Apply</button>
           <?php if ($selectedPackage > 0): ?>
-            <a class="btn ghost" href="/admin/dashboard.php">Reset</a>
+            <a class="btn ghost" href="/admin/dashboard">Reset</a>
           <?php endif; ?>
         </form>
       </div>
@@ -291,3 +291,4 @@ foreach ($orders as $o) {
   </main>
 </body>
 </html>
+

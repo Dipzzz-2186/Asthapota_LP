@@ -1,15 +1,15 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/config.php';
 ensure_session();
 
 if (empty($_SESSION['user_id'])) {
-    redirect('/register.php?notice=register_required');
+    redirect('/register?notice=register_required');
 }
 
 if (empty($_SESSION['order_id'])) {
-    redirect('/packages.php');
+    redirect('/packages');
 }
 
 $db = get_db();
@@ -21,7 +21,7 @@ $order = $order->fetch(PDO::FETCH_ASSOC);
 
 if (!$order || (int)$order['user_id'] !== (int)$_SESSION['user_id']) {
     unset($_SESSION['order_id']);
-    redirect('/packages.php');
+    redirect('/packages');
 }
 
 $itemsStmt = $db->prepare('SELECT oi.qty, oi.price, p.name FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = ?');
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt = $db->prepare('UPDATE orders SET payment_proof = ?, status = ? WHERE id = ?');
                     $stmt->execute([$name, 'paid', $order_id]);
                     send_invoice_email($order, $items, $order['email']);
-                    redirect('/thankyou.php');
+                    redirect('/thankyou');
                 }
             }
         }
@@ -80,8 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           </div>
         </div>
       <div class="topbar-actions">
-        <a class="btn ghost" href="/packages.php"><i class="bi bi-arrow-left"></i> Back</a>
-        <a class="btn ghost" href="/logout.php"><i class="bi bi-box-arrow-right"></i> Logout</a>
+        <a class="btn ghost" href="/packages"><i class="bi bi-arrow-left"></i> Back</a>
+        <a class="btn ghost" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
         <a class="btn primary" href="/"><i class="bi bi-house"></i> Home</a>
       </div>
     </div>
@@ -138,3 +138,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </section>
 </body>
 </html>
+

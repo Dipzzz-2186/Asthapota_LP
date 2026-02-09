@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../../app/db.php';
 require_once __DIR__ . '/../../app/helpers.php';
 ensure_session();
@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Invalid credentials.';
     } else {
         $_SESSION['admin_id'] = (int)$admin['id'];
-        redirect('/admin/dashboard.php');
+        redirect('/admin/dashboard');
     }
 }
 ?>
@@ -135,3 +135,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </section>
 </body>
 </html>
+

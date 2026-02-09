@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../app/helpers.php';
 ensure_session();
 ?>
@@ -23,7 +23,7 @@ ensure_session();
         </div>
         <div class="topbar-actions">
           <a class="btn ghost" href="/"><i class="bi bi-house"></i> Home</a>
-          <a class="btn primary" href="/packages.php">Packages <i class="bi bi-bag"></i></a>
+          <a class="btn primary" href="/packages">Packages <i class="bi bi-bag"></i></a>
         </div>
       </div>
     </div>
@@ -45,3 +45,4 @@ ensure_session();
   </section>
 </body>
 </html>
+
