@@ -440,7 +440,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
           </div>
         </div>
         <div class="topbar-actions">
-          <a class="btn ghost" href="/"><i class="bi bi-arrow-left"></i> Back</a>
+          <a class="btn ghost" href="/#packages"><i class="bi bi-arrow-left"></i> Back</a>
           <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
         </div>
       </div>
