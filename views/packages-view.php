@@ -103,10 +103,12 @@ render_header([
         Register now to secure your spot and enjoy the best padel experience with fellow enthusiasts.
       </p>
       <div class="cta-buttons">
-        <a class="btn primary" href="/register">
-          <i class="bi bi-person-plus"></i> 
-          Register Now
-        </a>
+        <?php if (!$isAdmin): ?>
+          <a class="btn primary" href="/register">
+            <i class="bi bi-person-plus"></i> 
+            Register Now
+          </a>
+        <?php endif; ?>
         <a class="btn ghost" href="/#packages">
           <i class="bi bi-house"></i> 
           Back to Home
