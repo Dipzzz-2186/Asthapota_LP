@@ -176,5 +176,70 @@ ensure_session();
       </div>
     </div>
   </section>
+  <script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Smooth scroll untuk semua link navbar
+  document.querySelectorAll('.nav a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+      e.preventDefault();
+      
+      const targetId = this.getAttribute('href');
+      if (targetId === '#') return;
+      
+      const targetElement = document.querySelector(targetId);
+      if (!targetElement) return;
+      
+      // Hitung offset untuk navbar
+      const header = document.querySelector('.page-header');
+      const headerHeight = header ? header.offsetHeight : 80;
+      const extraPadding = 20;
+      const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset;
+      const offsetPosition = targetPosition - headerHeight - extraPadding;
+      
+      // Scroll langsung ke posisi dengan animasi cepat
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+      
+      // Update active class
+      document.querySelectorAll('.nav a').forEach(link => {
+        link.classList.remove('active');
+      });
+      this.classList.add('active');
+      
+      // Update URL tanpa reload
+      history.pushState(null, null, targetId);
+    });
+  });
+  
+  // Update active class saat scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav a[href^="#"]');
+  
+  function updateActiveNav() {
+    let current = '';
+    
+    sections.forEach(section => {
+      const sectionTop = section.offsetTop;
+      const sectionHeight = section.clientHeight;
+      
+      if (window.scrollY >= (sectionTop - 150)) {
+        current = section.getAttribute('id');
+      }
+    });
+    
+    navLinks.forEach(link => {
+      link.classList.remove('active');
+      if (link.getAttribute('href') === `#${current}`) {
+        link.classList.add('active');
+      }
+    });
+  }
+  
+  window.addEventListener('scroll', updateActiveNav);
+  updateActiveNav(); // Panggil pertama kali
+});
+</script>
 </body>
 </html>
