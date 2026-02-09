@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Order Details - Temu Padel</title>
+  <title>Order Details - Asthapora</title>
   <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body class="page">
@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="brand">
           <div class="brand-badge">TP</div>
           <div>
-            <div>Temu Padel</div>
+            <div>Asthapora</div>
             <small style="color:var(--muted);">Review your order</small>
           </div>
         </div>
