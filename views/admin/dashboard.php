@@ -330,7 +330,7 @@ foreach ($orders as $o) {
         <div class="brand">
           <div class="brand-badge">TP</div>
           <div>
-            <div>Temu Padel</div>
+            <div>Asthapora</div>
             <small style="color:var(--muted);">Admin Dashboard</small>
           </div>
         </div>

@@ -1,8 +1,11 @@
 ﻿<?php
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
+require_once __DIR__ . '/../app/auth.php';
+require_once __DIR__ . '/layout/app.php';
 ensure_session();
 
+$isAdmin = is_admin_logged_in();
 if (!empty($_GET['cancel_otp']) && $_GET['cancel_otp'] === '1') {
     unset($_SESSION['reg_pending']);
     redirect('/register');
@@ -104,23 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body class="page">
-  <header class="page-header">
-    <div class="container">
-      <div class="topbar">
-        <div class="brand">
-          <div class="brand-badge">TP</div>
-          <div>
-            <div>Temu Padel</div>
-            <small style="color:var(--muted);">Register to unlock packages</small>
-          </div>
-        </div>
-        <div class="topbar-actions">
-          <a class="btn ghost" href="/"><i class="bi bi-arrow-left"></i> Back</a>
-          <a class="btn primary" href="/packages-view">Packages <i class="bi bi-bag"></i></a>
-        </div>
-      </div>
-    </div>
-  </header>
+<?php render_navbar(['isAdmin' => $isAdmin]); ?>
 
   <section class="section">
     <div class="container grid-2">

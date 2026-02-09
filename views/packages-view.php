@@ -2,46 +2,19 @@
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
+require_once __DIR__ . '/layout/app.php';
 ensure_session();
 
 $isAdmin = is_admin_logged_in();
 $db = get_db();
 $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Packages - Temu Padel</title>
-  <link rel="stylesheet" href="/assets/css/style.css">
-</head>
-<body class="page">
-  <header class="page-header">
-    <div class="container">
-      <div class="topbar">
-        <div class="brand">
-          <div class="brand-badge">TP</div>
-          <div>
-            <div>Temu Padel</div>
-            <small style="color:var(--muted);">A Monkeybar x BAPORA Event</small>
-          </div>
-        </div>
-        <div class="topbar-actions">
-          <a class="btn ghost" href="/"><i class="bi bi-house"></i> Home</a>
-          <?php if ($isAdmin): ?>
-            <a class="btn ghost" href="/admin/dashboard">Admin Dashboard</a>
-            <a class="btn primary" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
-          <?php else: ?>
-            <a class="icon-btn" href="/register"><i class="bi bi-person"></i></a>
-            <a class="icon-btn" href="/#packages"><i class="bi bi-bag"></i></a>
-            <a class="btn ghost" href="/admin/login">Admin Login</a>
-            <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
-          <?php endif; ?>
-        </div>
-      </div>
-    </div>
-  </header>
+<?php
+render_header([
+  'title' => 'Packages - Temu Padel',
+  'isAdmin' => $isAdmin,
+]);
+?>
 
   <section class="hero-section">
     <div class="container">
@@ -134,7 +107,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
           <i class="bi bi-person-plus"></i> 
           Register Now
         </a>
-        <a class="btn ghost" href="/">
+        <a class="btn ghost" href="/#packages">
           <i class="bi bi-house"></i> 
           Back to Home
         </a>
@@ -142,5 +115,4 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
     </div>
   </section>
 
-</body>
-</html>
+<?php render_footer(); ?>

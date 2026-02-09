@@ -1,8 +1,11 @@
 ﻿<?php
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
+require_once __DIR__ . '/../app/auth.php';
+require_once __DIR__ . '/layout/app.php';
 ensure_session();
 
+$isAdmin = is_admin_logged_in();
 $can_order = !empty($_SESSION['user_id']);
 if (!$can_order) {
     unset($_SESSION['order_id']);
@@ -507,27 +510,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </style>
 </head>
 <body class="page">
-  <header class="page-header">
-    <div class="container">
-      <div class="topbar">
-        <div class="brand">
-          <div class="brand-badge">TP</div>
-          <div>
-            <div>Temu Padel</div>
-            <small>Choose your package</small>
-          </div>
-        </div>
-        <div class="topbar-actions">
-          <a class="btn ghost" href="/"><i class="bi bi-arrow-left"></i> Back</a>
-          <?php if ($can_order): ?>
-            <a class="btn ghost" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
-          <?php else: ?>
-            <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
-          <?php endif; ?>
-        </div>
-      </div>
-    </div>
-  </header>
+<?php render_navbar(['isAdmin' => $isAdmin]); ?>
 
   <section class="hero-section">
     <div class="container">

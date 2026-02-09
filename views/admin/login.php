@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="brand">
           <div class="brand-badge">TP</div>
           <div>
-            <div>Temu Padel</div>
+            <div>Asthapora</div>
             <small style="color:var(--muted);">Admin Access</small>
           </div>
         </div>

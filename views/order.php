@@ -2,8 +2,11 @@
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/config.php';
+require_once __DIR__ . '/../app/auth.php';
+require_once __DIR__ . '/layout/app.php';
 ensure_session();
 
+$isAdmin = is_admin_logged_in();
 if (empty($_SESSION['user_id'])) {
     redirect('/register?notice=register_required');
 }
@@ -70,24 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body class="page">
-  <header class="page-header">
-    <div class="container">
-      <div class="topbar">
-        <div class="brand">
-          <div class="brand-badge">TP</div>
-          <div>
-            <div>Asthapora</div>
-            <small style="color:var(--muted);">Review your order</small>
-          </div>
-        </div>
-      <div class="topbar-actions">
-        <a class="btn ghost" href="/packages"><i class="bi bi-arrow-left"></i> Back</a>
-        <a class="btn ghost" href="/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
-        <a class="btn primary" href="/"><i class="bi bi-house"></i> Home</a>
-      </div>
-    </div>
-  </div>
-</header>
+<?php render_navbar(['isAdmin' => $isAdmin]); ?>
 
   <section class="section">
     <div class="container grid-2">
