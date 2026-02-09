@@ -21,7 +21,7 @@ if ($selectedPackage > 0) {
     )";
     $params[] = $selectedPackage;
 }
-$sql .= " ORDER BY o.created_at DESC";
+$sql .= " ORDER BY o.created_at ASC";
 
 $stmt = $db->prepare($sql);
 $stmt->execute($params);
