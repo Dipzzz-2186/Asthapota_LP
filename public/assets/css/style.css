@@ -61,9 +61,8 @@ a {
 }
 
 .container {
-  width: 100%;
+  width: min(1320px, 94%);
   margin: 0 auto;
-  padding: 0 24px;
 }
 
 .center {
