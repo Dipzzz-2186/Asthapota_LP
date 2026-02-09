@@ -75,7 +75,7 @@ $pendingOrders = 0;
 $totalRevenue = 0;
 foreach ($orders as $o) {
     $totalRevenue += (int)$o['total'];
-    if ($o['status'] === 'paid') {
+    if (in_array($o['status'], ['paid', 'accepted', 'rejected'], true)) {
         $paidOrders++;
     } else {
         $pendingOrders++;
@@ -590,4 +590,3 @@ foreach ($orders as $o) {
   </script>
 </body>
 </html>
-
