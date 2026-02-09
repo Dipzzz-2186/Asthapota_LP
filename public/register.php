@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="topbar-actions">
           <a class="btn ghost" href="/"><i class="bi bi-arrow-left"></i> Back</a>
-          <a class="btn primary" href="/packages.php">Packages <i class="bi bi-bag"></i></a>
+          <a class="btn primary" href="/packages-view.php">Packages <i class="bi bi-bag"></i></a>
         </div>
       </div>
     </div>

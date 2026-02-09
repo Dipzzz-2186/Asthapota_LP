@@ -29,7 +29,7 @@ ensure_session();
         </nav>
         <div class="topbar-actions">
           <a class="icon-btn" href="/register.php"><i class="bi bi-person"></i></a>
-          <a class="icon-btn" href="/packages.php"><i class="bi bi-bag"></i></a>
+          <a class="icon-btn" href="/packages-view.php"><i class="bi bi-bag"></i></a>
           <a class="btn primary" href="/register.php">Register Now <i class="bi bi-arrow-right"></i></a>
         </div>
       </div>
@@ -44,7 +44,7 @@ ensure_session();
         <p>Experience a vibrant padel gathering with curated packages, friendly matches, and community energy. Register first to unlock the best packages.</p>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
           <a class="btn primary" href="/register.php">Register Here <i class="bi bi-arrow-right"></i></a>
-          <a class="btn ghost" href="/packages.php">View Packages</a>
+          <a class="btn ghost" href="/packages-view.php">View Packages</a>
         </div>
         <div class="hero-meta">
           <div class="meta-card">

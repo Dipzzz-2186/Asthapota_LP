@@ -2,9 +2,9 @@
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 ensure_session();
-
-if (empty($_SESSION['user_id'])) {
-    redirect('/register.php?notice=register_required');
+$can_order = !empty($_SESSION['user_id']);
+if (!$can_order) {
+    unset($_SESSION['order_id']);
 }
 
 $db = get_db();
@@ -12,6 +12,9 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!$can_order) {
+        redirect('/register.php?notice=register_required');
+    }
     $qtys = [];
     $total = 0;
 
@@ -63,7 +66,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="topbar-actions">
           <a class="btn ghost" href="/register.php"><i class="bi bi-arrow-left"></i> Back</a>
-          <a class="btn primary" href="/register.php">Register <i class="bi bi-person-plus"></i></a>
+          <?php if ($can_order): ?>
+            <a class="btn ghost" href="/logout.php">Logout <i class="bi bi-box-arrow-right"></i></a>
+          <?php else: ?>
+            <a class="btn primary" href="/register.php">Register <i class="bi bi-person-plus"></i></a>
+          <?php endif; ?>
         </div>
       </div>
     </div>
@@ -72,6 +79,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <section class="section">
     <div class="container">
       <div class="section-title">Select Your Package</div>
+
+      <?php if (!$can_order): ?>
+        <div class="alert">Please register first to continue to package selection.</div>
+      <?php endif; ?>
 
       <?php if ($errors): ?>
         <div class="alert">
@@ -95,15 +106,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               </ul>
               <div style="font-size:22px;font-weight:700;"><?= h(rupiah((int)$p['price'])) ?>,-</div>
               <div class="qty">
-                <button type="button" data-action="minus">-</button>
-                <input type="number" name="qty_<?= (int)$p['id'] ?>" min="0" value="0">
-                <button type="button" data-action="plus">+</button>
+                <button type="button" data-action="minus" <?= $can_order ? '' : 'disabled' ?>>-</button>
+                <input type="number" name="qty_<?= (int)$p['id'] ?>" min="0" value="0" <?= $can_order ? '' : 'disabled' ?>>
+                <button type="button" data-action="plus" <?= $can_order ? '' : 'disabled' ?>>+</button>
               </div>
             </div>
           <?php endforeach; ?>
         </div>
         <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
-          <button class="btn primary" type="submit">Continue to Order <i class="bi bi-arrow-right"></i></button>
+          <?php if ($can_order): ?>
+            <button class="btn primary" type="submit">Continue to Order <i class="bi bi-arrow-right"></i></button>
+          <?php else: ?>
+            <a class="btn primary" href="/register.php">Register to Order <i class="bi bi-person-plus"></i></a>
+          <?php endif; ?>
           <a class="btn ghost" href="/">Back to Home</a>
         </div>
       </form>

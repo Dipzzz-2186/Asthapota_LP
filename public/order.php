@@ -4,6 +4,10 @@ require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/config.php';
 ensure_session();
 
+if (empty($_SESSION['user_id'])) {
+    redirect('/register.php?notice=register_required');
+}
+
 if (empty($_SESSION['order_id'])) {
     redirect('/packages.php');
 }
@@ -15,7 +19,8 @@ $order = $db->prepare('SELECT o.*, u.full_name, u.phone, u.email, u.instagram FR
 $order->execute([$order_id]);
 $order = $order->fetch(PDO::FETCH_ASSOC);
 
-if (!$order) {
+if (!$order || (int)$order['user_id'] !== (int)$_SESSION['user_id']) {
+    unset($_SESSION['order_id']);
     redirect('/packages.php');
 }
 
@@ -73,13 +78,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <small style="color:var(--muted);">Review your order</small>
           </div>
         </div>
-        <div class="topbar-actions">
-          <a class="btn ghost" href="/packages.php"><i class="bi bi-arrow-left"></i> Back</a>
-          <a class="btn primary" href="/"><i class="bi bi-house"></i> Home</a>
-        </div>
+      <div class="topbar-actions">
+        <a class="btn ghost" href="/packages.php"><i class="bi bi-arrow-left"></i> Back</a>
+        <a class="btn ghost" href="/logout.php"><i class="bi bi-box-arrow-right"></i> Logout</a>
+        <a class="btn primary" href="/"><i class="bi bi-house"></i> Home</a>
       </div>
     </div>
-  </header>
+  </div>
+</header>
 
   <section class="section">
     <div class="container grid-2">
