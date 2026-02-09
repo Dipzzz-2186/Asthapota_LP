@@ -1,8 +1,10 @@
 ﻿<?php
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
+require_once __DIR__ . '/../app/auth.php';
 ensure_session();
 
+$isAdmin = is_admin_logged_in();
 $db = get_db();
 $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
 ?>
@@ -34,8 +36,12 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
         <div class="topbar-actions">
           <a class="icon-btn" href="/register"><i class="bi bi-person"></i></a>
           <a class="icon-btn" href="#packages"><i class="bi bi-bag"></i></a>
+          <?php if ($isAdmin): ?>
+          <a class="btn ghost" href="/admin/dashboard">Admin Dashboard</a>
+          <?php else: ?>
           <a class="btn ghost" href="/admin/login">Admin Login</a>
           <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
+          <?php endif; ?>
         </div>
       </div>
     </div>
