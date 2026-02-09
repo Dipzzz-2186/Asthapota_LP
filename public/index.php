@@ -18,20 +18,17 @@ ensure_session();
       <h1>TEMU PADEL</h1>
       <div class="sub">A Monkeybar x BAPORA Event</div>
       <div class="date-chip">FEBRUARY 28TH, 2026 | 4 PM - 6 PM</div>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="container supported">
-      <div class="center">Supported By</div>
-      <div class="logos">
-        <div class="logo-box">HIPPI</div>
-        <div class="logo-box">FCOM</div>
-        <div class="logo-box">MY PADEL</div>
-        <div class="logo-box">BAPORA</div>
-      </div>
-      <div class="center">
-        <a class="btn" href="/register.php">Click Here To Register</a>
+      <div class="supported" style="margin-top:28px;">
+        <div class="center">Supported By</div>
+        <div class="logos" style="margin-top:12px;">
+          <div class="logo-box">HIPPI</div>
+          <div class="logo-box">FCOM</div>
+          <div class="logo-box">MY PADEL</div>
+          <div class="logo-box">BAPORA</div>
+        </div>
+        <div class="center" style="margin-top:18px;">
+          <a class="btn" href="/register.php">Click Here To Register</a>
+        </div>
       </div>
     </div>
   </section>
