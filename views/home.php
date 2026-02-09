@@ -13,7 +13,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Temu Padel</title>
+  <title>Asthapora</title>
   <link rel="stylesheet" href="/assets/css/style.css">
   <style>
     /* Marquee Slider Container */
@@ -137,7 +137,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
         <div class="brand">
           <div class="brand-badge">TP</div>
           <div>
-            <div>Temu Padel</div>
+            <div>Asthapora</div>
             <small style="color:var(--muted);">A Monkeybar x BAPORA Event</small>
           </div>
         </div>
