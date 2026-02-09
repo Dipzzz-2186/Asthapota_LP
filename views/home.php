@@ -145,6 +145,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
           <a href="#about"><i class="bi bi-flag"></i> About</a>
           <a href="#program"><i class="bi bi-calendar-event"></i> Program</a>
           <a href="#social"><i class="bi bi-share"></i> Social</a>
+          <a href="#news"><i class="bi bi-newspaper"></i> News</a>
           <a href="#packages"><i class="bi bi-bag"></i> Packages</a>
         </nav>
         <div class="topbar-actions">
@@ -323,7 +324,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
     </div>
   </section>
 
-  <section class="section">
+  <section class="section" id="news">
     <div class="container">
       <div class="section-title center">News & Views</div>
       <div class="news-grid">
