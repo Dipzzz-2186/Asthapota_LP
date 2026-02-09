@@ -30,6 +30,7 @@ ensure_session();
         <div class="topbar-actions">
           <a class="icon-btn" href="/register.php"><i class="bi bi-person"></i></a>
           <a class="icon-btn" href="/packages-view.php"><i class="bi bi-bag"></i></a>
+          <a class="btn ghost" href="/admin/login.php">Admin Login</a>
           <a class="btn primary" href="/register.php">Register Now <i class="bi bi-arrow-right"></i></a>
         </div>
       </div>
@@ -172,34 +173,6 @@ ensure_session();
             <strong>Community Stories</strong>
             <span style="color:var(--muted);font-size:13px;">What makes Temu Padel special.</span>
           </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="faq">
-    <div class="container">
-      <div class="section-title center">Frequently Asked Questions</div>
-      <div class="faq">
-        <div class="faq-item">
-          <div>What is the date of the event?</div>
-          <i class="bi bi-plus-circle"></i>
-        </div>
-        <div class="faq-item">
-          <div>What time does the event start?</div>
-          <i class="bi bi-plus-circle"></i>
-        </div>
-        <div class="faq-item">
-          <div>Where is the start line for the event?</div>
-          <i class="bi bi-plus-circle"></i>
-        </div>
-        <div class="faq-item">
-          <div>Is this event open to walkers?</div>
-          <i class="bi bi-plus-circle"></i>
-        </div>
-        <div class="faq-item">
-          <div>Can I volunteer for this event?</div>
-          <i class="bi bi-plus-circle"></i>
         </div>
       </div>
     </div>
