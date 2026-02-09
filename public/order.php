@@ -52,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $stmt = $db->prepare('UPDATE orders SET payment_proof = ?, status = ? WHERE id = ?');
                     $stmt->execute([$name, 'paid', $order_id]);
+                    send_invoice_email($order, $items, $order['email']);
                     redirect('/thankyou.php');
                 }
             }

@@ -201,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
       <?php endif; ?>
 
-      <form class="form" method="post" action="">
+      <form class="form" method="post" action="" id="otpVerifyForm">
         <input type="hidden" name="step" value="verify_otp">
         <label>
           Kode OTP*
@@ -210,8 +210,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="help-text" id="otpTimer" data-exp="<?= $pending ? (int)$pending['otp_expires'] : 0 ?>">Berlaku 10 menit.</div>
         <div class="modal-actions">
           <button class="btn primary" type="submit">Verifikasi <i class="bi bi-check2-circle"></i></button>
-          <button class="btn ghost" type="submit" name="step" value="resend_otp">Kirim Ulang</button>
         </div>
+      </form>
+      <form method="post" action="">
+        <input type="hidden" name="step" value="resend_otp">
+        <button class="btn ghost" type="submit">Kirim Ulang</button>
       </form>
     </div>
   </div>

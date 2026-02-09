@@ -88,7 +88,82 @@ function smtp_send(string $to, string $subject, string $htmlBody): bool {
 }
 
 function send_otp_email(string $email, string $otp): bool {
-    $subject = 'Asthapora OTP Verification';
-    $body = '<p>Halo,</p><p>Kode OTP kamu: <strong>' . htmlspecialchars($otp) . '</strong></p><p>Kode ini berlaku 10 menit.</p>';
+    $subject = 'Asthapora - Kode Verifikasi OTP';
+    $safeOtp = htmlspecialchars($otp, ENT_QUOTES, 'UTF-8');
+    $body = '
+      <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
+        <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
+          <div style="background:#1e5ed8;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">
+            Asthapora
+          </div>
+          <div style="padding:22px;">
+            <p style="margin:0 0 10px;font-size:15px;color:#0c1b36;">Halo,</p>
+            <p style="margin:0 0 16px;font-size:15px;color:#5a6b86;">Gunakan kode OTP berikut untuk melanjutkan pendaftaran:</p>
+            <div style="font-size:26px;letter-spacing:6px;font-weight:700;color:#1e5ed8;background:#eef4ff;border:1px solid #cfe0ff;padding:12px 16px;border-radius:12px;text-align:center;">
+              ' . $safeOtp . '
+            </div>
+            <p style="margin:16px 0 0;font-size:13px;color:#5a6b86;">Kode ini berlaku 10 menit. Jika kamu tidak meminta kode ini, abaikan email ini.</p>
+          </div>
+        </div>
+      </div>
+    ';
     return smtp_send($email, $subject, $body);
+}
+
+function send_invoice_email(array $order, array $items, string $toEmail): bool {
+    $subject = 'Temu Padel - Invoice Order #' . (int)$order['id'];
+
+    $rows = '';
+    foreach ($items as $it) {
+        $qty = (int)$it['qty'];
+        $name = htmlspecialchars($it['name'], ENT_QUOTES, 'UTF-8');
+        $price = rupiah((int)$it['price']);
+        $rows .= '<tr>
+          <td style="padding:8px 0;border-bottom:1px solid #e6ecf8;">' . $name . '</td>
+          <td style="padding:8px 0;border-bottom:1px solid #e6ecf8;text-align:center;">' . $qty . '</td>
+          <td style="padding:8px 0;border-bottom:1px solid #e6ecf8;text-align:right;">' . $price . '</td>
+        </tr>';
+    }
+
+    $body = '
+      <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
+        <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
+          <div style="background:#1e5ed8;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">
+            Temu Padel - Invoice
+          </div>
+          <div style="padding:22px;">
+            <p style="margin:0 0 8px;font-size:15px;color:#0c1b36;">Halo ' . htmlspecialchars($order['full_name'], ENT_QUOTES, 'UTF-8') . ',</p>
+            <p style="margin:0 0 16px;font-size:14px;color:#5a6b86;">Terima kasih sudah melakukan order. Berikut detail pesanan kamu.</p>
+
+            <div style="background:#eef4ff;border:1px solid #cfe0ff;border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+              <div style="font-size:13px;color:#5a6b86;">Order ID</div>
+              <div style="font-size:18px;font-weight:700;color:#0c1b36;">#' . (int)$order['id'] . '</div>
+              <div style="font-size:13px;color:#5a6b86;margin-top:6px;">Status: ' . htmlspecialchars($order['status'], ENT_QUOTES, 'UTF-8') . '</div>
+            </div>
+
+            <table style="width:100%;border-collapse:collapse;font-size:14px;color:#0c1b36;">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:8px 0;border-bottom:1px solid #e6ecf8;">Item</th>
+                  <th style="text-align:center;padding:8px 0;border-bottom:1px solid #e6ecf8;">Qty</th>
+                  <th style="text-align:right;padding:8px 0;border-bottom:1px solid #e6ecf8;">Price</th>
+                </tr>
+              </thead>
+              <tbody>' . $rows . '</tbody>
+            </table>
+
+            <div style="margin-top:16px;display:flex;justify-content:space-between;font-size:16px;font-weight:700;">
+              <span>Total</span>
+              <span>' . rupiah((int)$order['total']) . '</span>
+            </div>
+
+            <div style="margin-top:16px;font-size:13px;color:#5a6b86;">
+              Pembayaran: BCA 1234567890 a.n. PT Manifestasi Kehidupan Berlimpah
+            </div>
+          </div>
+        </div>
+      </div>
+    ';
+
+    return smtp_send($toEmail, $subject, $body);
 }
