@@ -67,6 +67,47 @@ if (!function_exists('render_header')) {
 if (!function_exists('render_footer')) {
     function render_footer(): void {
         ?>
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="footer-logo">TP</div>
+          <div>
+            <div class="footer-title">Temu Padel 2026</div>
+            <div class="footer-subtitle">A Monkeybar x BAPORA Event</div>
+          </div>
+        </div>
+        <div class="footer-links">
+          <div class="footer-heading">Explore</div>
+          <a href="/#about">About</a>
+          <a href="/#program">Program</a>
+          <a href="/#social">Social</a>
+          <a href="/#packages">Packages</a>
+        </div>
+        <div class="footer-links">
+          <div class="footer-heading">Quick Links</div>
+          <a href="/register">Register</a>
+          <a href="/packages-view">Package Detail</a>
+          <a href="/admin/login">Admin Login</a>
+        </div>
+        <div class="footer-contact">
+          <div class="footer-heading">Contact</div>
+          <div class="footer-item"><i class="bi bi-geo-alt"></i> MY PADEL, Jelupang Utama</div>
+          <div class="footer-item"><i class="bi bi-envelope"></i> asthaporasports@gmail.com</div>
+          <div class="footer-item"><i class="bi bi-clock"></i> 4 PM - 6 PM, Feb 28, 2026</div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <div>© 2026 Temu Padel. All rights reserved.</div>
+        <div class="footer-social">
+          <a href="#"><i class="bi bi-instagram"></i></a>
+          <a href="#"><i class="bi bi-facebook"></i></a>
+          <a href="#"><i class="bi bi-twitter"></i></a>
+          <a href="#"><i class="bi bi-youtube"></i></a>
+        </div>
+      </div>
+    </div>
+  </footer>
   <script>
     (function() {
       function isTypingTarget(target) {

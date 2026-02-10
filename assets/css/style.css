@@ -616,6 +616,30 @@ a {
   place-items: center;
 }
 
+.package-price {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  padding-top: 14px;
+  border-top: 1px solid var(--stroke);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.package-price small {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.package-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .hero-section {
   padding: 36px 0 28px;
 }
@@ -788,6 +812,115 @@ a {
   font-size: clamp(32px, 4.5vw, 52px); /* Sedikit lebih besar */
 }
 
+.site-footer {
+  margin-top: 24px;
+  padding: 42px 0;
+  background: rgba(255, 255, 255, 0.92);
+  border-top: 1px solid var(--stroke);
+  box-shadow: var(--shadow);
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1.4fr;
+  gap: 28px;
+  align-items: start;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.footer-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--primary);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-family: 'Fraunces', serif;
+}
+
+.footer-title {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.footer-subtitle {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.footer-heading {
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.footer-links {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.footer-links a {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.footer-links a:hover {
+  color: var(--text);
+}
+
+.footer-contact {
+  display: grid;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.footer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-bottom {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--stroke);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 13px;
+  gap: 12px;
+}
+
+.footer-social {
+  display: flex;
+  gap: 10px;
+}
+
+.footer-social a {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--stroke);
+  color: var(--primary);
+  font-size: 14px;
+}
+
+.footer-social a:hover {
+  background: var(--surface);
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -881,6 +1014,10 @@ a {
   .sponsor-logos {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .footer-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -914,5 +1051,14 @@ a {
   
   .logo-chip.dark img {
     max-height: 55px; /* Sedikit lebih besar */
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .footer-bottom {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

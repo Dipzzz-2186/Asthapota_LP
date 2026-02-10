@@ -90,6 +90,14 @@ render_header([
               <?= h(rupiah((int)$p['price'])) ?>
               <small>,-</small>
             </div>
+            <?php if (!$isAdmin): ?>
+              <div class="package-actions">
+                <a class="btn primary" href="/register">
+                  <i class="bi bi-person-plus"></i>
+                  Register
+                </a>
+              </div>
+            <?php endif; ?>
           </div>
         <?php endforeach; ?>
       </div>

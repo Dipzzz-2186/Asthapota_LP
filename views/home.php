@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
+require_once __DIR__ . '/layout/app.php';
 ensure_session();
 
 $isAdmin = is_admin_logged_in();
@@ -381,6 +382,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       </div>
     </div>
   </section>
+
   <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Smooth scroll untuk semua link internal
@@ -496,5 +498,4 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
-</body>
-</html>
+<?php render_footer(); ?>
