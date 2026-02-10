@@ -621,16 +621,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <p class="cta-text">
         Register now to secure your spot and enjoy the best padel experience with fellow enthusiasts.
       </p>
-      <div class="cta-buttons">
-        <a class="btn primary" href="/register">
-          <i class="bi bi-person-plus"></i>
-          Register Now
-        </a>
-        <a class="btn ghost" href="/">
-          <i class="bi bi-house"></i>
-          Back to Home
-        </a>
-      </div>
     </div>
   </section>
 
