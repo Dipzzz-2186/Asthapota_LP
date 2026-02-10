@@ -145,7 +145,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       <div class="hero-card fade-up">
         <div class="pill"><i class="bi bi-stars"></i> Main Event 2026</div>
         <h1>Temu Padel 2026</h1>
-        <p>Experience a vibrant padel gathering with curated packages, friendly matches, and community energy. Register first to unlock the best packages.</p>
+        <p>Rasakan serunya padel bersama paket pilihan, pertandingan yang ramah, dan energi komunitas. Daftar lebih dulu untuk membuka paket terbaik.</p>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
           <?php if ($isAdmin): ?>
             <button class="btn primary" type="button" disabled>Admin tidak bisa order</button>
