@@ -18,18 +18,17 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
   <style>
     /* Marquee Slider Container */
     .sponsor-slider-container {
-      position: relative;
       overflow: hidden;
       width: 100%;
-      margin: 0 auto;
+      position: relative;
     }
 
     .marquee-content {
       display: flex;
       gap: 24px;
+      white-space: nowrap;
       width: max-content;
-      padding: 10px 0;
-      animation: marquee 120s linear infinite;
+      will-change: transform;
     }
 
     .marquee-content:hover {
@@ -447,23 +446,40 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('scroll', updateActiveNav);
   updateActiveNav(); // Panggil pertama kali
   
-  // Kontrol kecepatan marquee berdasarkan layar
-  const marqueeContent = document.querySelector('.marquee-content');
-  if (marqueeContent) {
-    // Sesuaikan kecepatan berdasarkan ukuran layar
-    function adjustMarqueeSpeed() {
-      const isMobile = window.innerWidth <= 768;
-      const duration = isMobile ? 80 : 120; // Lebih lambat di mobile (80s) vs desktop (120s)
-      
-      marqueeContent.style.animationDuration = `${duration}s`;
+  // Marquee Slider Logic
+  (function () {
+    function startMarquee(selector, speed) {
+      const marquee = document.querySelector(selector);
+      if (!marquee) return;
+
+      const originalContent = marquee.innerHTML;
+
+      // clone terus sampai panjang > 2x layar
+      while (marquee.scrollWidth < window.innerWidth * 2) {
+        marquee.innerHTML += originalContent;
+      }
+
+      let offset = 0;
+      const resetPoint = marquee.scrollWidth / 2;
+
+      function animate() {
+        offset += speed;
+        marquee.style.transform = `translateX(-${offset}px)`;
+
+        if (offset >= resetPoint) {
+          offset = 0;
+        }
+
+        requestAnimationFrame(animate);
+      }
+
+      animate();
     }
-    
-    // Atur kecepatan awal
-    adjustMarqueeSpeed();
-    
-    // Update saat resize
-    window.addEventListener('resize', adjustMarqueeSpeed);
-  }
+
+    window.addEventListener('load', function () {
+      startMarquee('.marquee-content', 0.25);
+    });
+  })();
 });
 </script>
 </body>
