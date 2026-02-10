@@ -124,7 +124,6 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
           <a href="#about"><i class="bi bi-flag"></i> About</a>
           <a href="#program"><i class="bi bi-calendar-event"></i> Program</a>
           <a href="#social"><i class="bi bi-share"></i> Social</a>
-          <a href="#news"><i class="bi bi-newspaper"></i> News</a>
           <a href="#packages"><i class="bi bi-bag"></i> Packages</a>
         </nav>
         <div class="topbar-actions">
@@ -298,35 +297,6 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       <div class="card">
         <div class="news-thumb" style="border-radius:16px;background-image:url('https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1200&q=80');height:220px;"></div>
         <div style="margin-top:14px;color:var(--muted);">Community highlights from our latest gathering.</div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="news">
-    <div class="container">
-      <div class="section-title center">News & Views</div>
-      <div class="news-grid">
-        <div class="news-card">
-          <div class="news-thumb" style="background-image:url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=800&q=80');"></div>
-          <div class="news-body">
-            <strong>2026 Winners</strong>
-            <span style="color:var(--muted);font-size:13px;">Spotlight on our standout pairs.</span>
-          </div>
-        </div>
-        <div class="news-card">
-          <div class="news-thumb" style="background-image:url('https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=800&q=80');"></div>
-          <div class="news-body">
-            <strong>Warmup Clinic</strong>
-            <span style="color:var(--muted);font-size:13px;">Tips to power up your serve.</span>
-          </div>
-        </div>
-        <div class="news-card">
-          <div class="news-thumb" style="background-image:url('https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=800&q=80');"></div>
-          <div class="news-body">
-            <strong>Community Stories</strong>
-            <span style="color:var(--muted);font-size:13px;">What makes Temu Padel special.</span>
-          </div>
-        </div>
       </div>
     </div>
   </section>
