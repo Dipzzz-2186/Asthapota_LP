@@ -79,10 +79,10 @@ if (!function_exists('render_footer')) {
         </div>
         <div class="footer-links">
           <div class="footer-heading">Explore</div>
-          <a href="/#about">About</a>
-          <a href="/#program">Program</a>
-          <a href="/#social">Social</a>
-          <a href="/#packages">Packages</a>
+          <a href="#about">About</a>
+          <a href="#program">Program</a>
+          <a href="#social">Social</a>
+          <a href="#packages">Packages</a>
         </div>
         <div class="footer-links">
           <div class="footer-heading">Quick Links</div>
