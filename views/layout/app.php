@@ -88,7 +88,6 @@ if (!function_exists('render_footer')) {
           <div class="footer-heading">Quick Links</div>
           <a href="/register">Register</a>
           <a href="/packages-view">Package Detail</a>
-          <a href="/admin/login">Admin Login</a>
         </div>
         <div class="footer-contact">
           <div class="footer-heading">Contact</div>
