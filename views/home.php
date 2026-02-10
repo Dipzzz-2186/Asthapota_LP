@@ -47,6 +47,8 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       min-width: 170px;
       transition: all 0.3s ease;
       border: 1px solid transparent;
+      text-decoration: none;
+      color: inherit;
     }
 
     .marquee-content .logo-chip:hover {
@@ -215,60 +217,60 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       <div class="sponsor-slider-container">
         <div class="marquee-content">
           <!-- Set 1 -->
-          <div class="logo-chip">
+          <a class="logo-chip" href="https://www.hippi.or.id/" target="_blank" rel="noopener" aria-label="HIPPI">
             <img src="/assets/img/logo.webp" alt="HIPPI">
-          </div>
-          <div class="logo-chip">
+          </a>
+          <a class="logo-chip" href="https://fcom.co.id/" target="_blank" rel="noopener" aria-label="FCOM">
             <img src="/assets/img/fcom.png" alt="FCOM">
-          </div>
-          <div class="logo-chip dark">
+          </a>
+          <a class="logo-chip dark" href="https://ayo.co.id/" target="_blank" rel="noopener" aria-label="MyPadel">
             <img src="/assets/img/mypadel.png" alt="MyPadel">
-          </div>
-          <div class="logo-chip dark">
+          </a>
+          <a class="logo-chip dark" href="https://www.hippi.or.id/" target="_blank" rel="noopener" aria-label="BAPORA">
             <img src="/assets/img/hippi.png" alt="BAPORA">
-          </div>
+          </a>
           
           <!-- Set 2 (Duplikat) -->
-          <div class="logo-chip">
+          <a class="logo-chip" href="https://www.hippi.or.id/" target="_blank" rel="noopener" aria-label="HIPPI">
             <img src="/assets/img/logo.webp" alt="HIPPI">
-          </div>
-          <div class="logo-chip">
+          </a>
+          <a class="logo-chip" href="https://fcom.co.id/" target="_blank" rel="noopener" aria-label="FCOM">
             <img src="/assets/img/fcom.png" alt="FCOM">
-          </div>
-          <div class="logo-chip dark">
+          </a>
+          <a class="logo-chip dark" href="https://ayo.co.id/" target="_blank" rel="noopener" aria-label="MyPadel">
             <img src="/assets/img/mypadel.png" alt="MyPadel">
-          </div>
-          <div class="logo-chip dark">
+          </a>
+          <a class="logo-chip dark" href="https://www.hippi.or.id/" target="_blank" rel="noopener" aria-label="BAPORA">
             <img src="/assets/img/hippi.png" alt="BAPORA">
-          </div>
+          </a>
           
           <!-- Set 3 (Duplikat untuk smoothness) -->
-          <div class="logo-chip">
+          <a class="logo-chip" href="https://www.hippi.or.id/" target="_blank" rel="noopener" aria-label="HIPPI">
             <img src="/assets/img/logo.webp" alt="HIPPI">
-          </div>
-          <div class="logo-chip">
+          </a>
+          <a class="logo-chip" href="https://fcom.co.id/" target="_blank" rel="noopener" aria-label="FCOM">
             <img src="/assets/img/fcom.png" alt="FCOM">
-          </div>
-          <div class="logo-chip dark">
+          </a>
+          <a class="logo-chip dark" href="https://ayo.co.id/" target="_blank" rel="noopener" aria-label="MyPadel">
             <img src="/assets/img/mypadel.png" alt="MyPadel">
-          </div>
-          <div class="logo-chip dark">
+          </a>
+          <a class="logo-chip dark" href="https://www.hippi.or.id/" target="_blank" rel="noopener" aria-label="BAPORA">
             <img src="/assets/img/hippi.png" alt="BAPORA">
-          </div>
+          </a>
           
           <!-- Set 4 (Duplikat untuk extra smooth) -->
-          <div class="logo-chip">
+          <a class="logo-chip" href="https://www.hippi.or.id/" target="_blank" rel="noopener" aria-label="HIPPI">
             <img src="/assets/img/logo.webp" alt="HIPPI">
-          </div>
-          <div class="logo-chip">
+          </a>
+          <a class="logo-chip" href="https://fcom.co.id/" target="_blank" rel="noopener" aria-label="FCOM">
             <img src="/assets/img/fcom.png" alt="FCOM">
-          </div>
-          <div class="logo-chip dark">
+          </a>
+          <a class="logo-chip dark" href="https://ayo.co.id/" target="_blank" rel="noopener" aria-label="MyPadel">
             <img src="/assets/img/mypadel.png" alt="MyPadel">
-          </div>
-          <div class="logo-chip dark">
+          </a>
+          <a class="logo-chip dark" href="https://www.hippi.or.id/" target="_blank" rel="noopener" aria-label="BAPORA">
             <img src="/assets/img/hippi.png" alt="BAPORA">
-          </div>
+          </a>
         </div>
       </div>
     </div>
