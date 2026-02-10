@@ -329,6 +329,49 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       </div>
     </div>
   </section>
+
+  <section class="section" id="faq">
+    <div class="container">
+      <div class="section-title center">FAQ</div>
+      <div class="faq">
+        <button class="faq-item" type="button">
+          <div>
+            <strong>Di mana lokasi acara?</strong>
+            <div class="faq-answer">MY PADEL, Jelupang Utama.</div>
+          </div>
+          <span class="faq-icon"><i class="bi bi-geo-alt"></i></span>
+        </button>
+        <button class="faq-item" type="button">
+          <div>
+            <strong>Jam berapa acaranya?</strong>
+            <div class="faq-answer">Pukul 16.00 - 18.00 WIB, 28 Februari 2026.</div>
+          </div>
+          <span class="faq-icon"><i class="bi bi-clock"></i></span>
+        </button>
+        <button class="faq-item" type="button">
+          <div>
+            <strong>Bagaimana cara daftar?</strong>
+            <div class="faq-answer">Klik Register Now di halaman ini, isi data, lalu pilih paket.</div>
+          </div>
+          <span class="faq-icon"><i class="bi bi-person-plus"></i></span>
+        </button>
+        <button class="faq-item" type="button">
+          <div>
+            <strong>Apa saja yang harus dibawa?</strong>
+            <div class="faq-answer">Raket padel, sepatu olahraga, dan outfit yang nyaman.</div>
+          </div>
+          <span class="faq-icon"><i class="bi bi-bag"></i></span>
+        </button>
+        <button class="faq-item" type="button">
+          <div>
+            <strong>Apakah kuota terbatas?</strong>
+            <div class="faq-answer">Ya, kuota terbatas. Disarankan daftar lebih awal.</div>
+          </div>
+          <span class="faq-icon"><i class="bi bi-exclamation-circle"></i></span>
+        </button>
+      </div>
+    </div>
+  </section>
   <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Smooth scroll untuk semua link internal
@@ -448,8 +491,15 @@ document.addEventListener('DOMContentLoaded', function() {
       animationId = requestAnimationFrame(() => animateMarquee(marquee));
     }
 
-    window.addEventListener('load', startMarquee);
+  window.addEventListener('load', startMarquee);
   })();
+
+  // FAQ: klik pertanyaan untuk menampilkan jawaban
+  document.querySelectorAll('.faq-item').forEach(item => {
+    item.addEventListener('click', () => {
+      item.classList.toggle('open');
+    });
+  });
 
   // Hidden admin login shortcut: Ctrl + Shift + A
   function isTypingTarget(target) {

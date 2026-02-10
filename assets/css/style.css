@@ -481,6 +481,41 @@ a {
   align-items: center;
   justify-content: space-between;
   font-size: 17px; /* Sedikit lebih besar */
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.faq-item strong {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.faq-answer {
+  color: var(--muted);
+  font-size: 14px;
+  display: none;
+}
+
+.faq-item.open .faq-answer {
+  display: block;
+}
+
+.faq-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--stroke);
+}
+
+.faq-item i {
+  color: var(--primary);
+  font-size: 18px;
 }
 
 .form-wrap {
