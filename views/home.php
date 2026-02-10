@@ -114,7 +114,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
     <div class="container">
       <div class="topbar">
         <div class="brand">
-          <div class="brand-badge">TP</div>
+          <img class="brand-badge" src="/assets/img/lopad.jpg" alt="Lopad logo">
           <div>
             <div>Temu Padel</div>
             <small style="color:var(--muted);">A Monkeybar x BAPORA Event</small>

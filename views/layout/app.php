@@ -12,7 +12,7 @@ if (!function_exists('render_navbar')) {
     <div class="container">
       <div class="topbar">
         <div class="brand">
-          <div class="brand-badge">TP</div>
+          <img class="brand-badge" src="/assets/img/lopad.jpg" alt="Lopad logo">
           <div>
             <div>Asthapora</div>
             <small style="color:var(--muted);"><?= $brandSubtitle ?></small>
@@ -71,7 +71,7 @@ if (!function_exists('render_footer')) {
     <div class="container">
       <div class="footer-grid">
         <div class="footer-brand">
-          <div class="footer-logo">TP</div>
+          <img class="footer-logo" src="/assets/img/lopad.jpg" alt="Lopad logo">
           <div>
             <div class="footer-title">Temu Padel 2026</div>
             <div class="footer-subtitle">A Monkeybar x BAPORA Event</div>

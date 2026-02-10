@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="container">
       <div class="topbar">
         <div class="brand">
-          <div class="brand-badge">TP</div>
+          <img class="brand-badge" src="/assets/img/lopad.jpg" alt="Lopad logo">
           <div>
             <div>Asthapora</div>
             <small style="color:var(--muted);">Admin Access</small>
