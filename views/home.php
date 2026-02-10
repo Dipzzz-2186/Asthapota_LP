@@ -2,7 +2,6 @@
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
-require_once __DIR__ . '/layout/app.php';
 ensure_session();
 
 $isAdmin = is_admin_logged_in();
@@ -30,10 +29,6 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       white-space: nowrap;
       width: max-content;
       will-change: transform;
-    }
-
-    .marquee-content:hover {
-      animation-play-state: paused;
     }
 
     .marquee-content .logo-chip {
@@ -73,16 +68,6 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       max-height: 65px;
     }
 
-    /* Marquee Animation - SLOW */
-    @keyframes marquee {
-      0% {
-        transform: translateX(0);
-      }
-      100% {
-        transform: translateX(-100%);
-      }
-    }
-
     /* Gradient overlay untuk efek fading di pinggir */
     .sponsor-slider-container::before,
     .sponsor-slider-container::after {
@@ -119,15 +104,6 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       
       .marquee-content {
         gap: 16px;
-      }
-      
-      @keyframes marquee {
-        0% {
-          transform: translateX(0);
-        }
-        100% {
-          transform: translateX(-100%);
-        }
       }
     }
   </style>
@@ -382,7 +358,6 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
       </div>
     </div>
   </section>
-
   <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Smooth scroll untuk semua link internal
@@ -447,39 +422,62 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('scroll', updateActiveNav);
   updateActiveNav(); // Panggil pertama kali
   
-  // Marquee Slider Logic
+  // Marquee Slider Logic dengan pause on hover
   (function () {
-    function startMarquee(selector, speed) {
-      const marquee = document.querySelector(selector);
+    let isHovering = false;
+    let animationId = null;
+    let offset = 0;
+    const speed = 0.25;
+
+    function startMarquee() {
+      const marquee = document.querySelector('.marquee-content');
       if (!marquee) return;
 
       const originalContent = marquee.innerHTML;
 
-      // clone terus sampai panjang > 2x layar
+      // clone konten sampai cukup panjang untuk efek seamless
       while (marquee.scrollWidth < window.innerWidth * 2) {
         marquee.innerHTML += originalContent;
       }
 
-      let offset = 0;
-      const resetPoint = marquee.scrollWidth / 2;
+      // Tambah event listener untuk semua logo
+      const logos = marquee.querySelectorAll('.logo-chip');
+      logos.forEach(logo => {
+        logo.addEventListener('mouseenter', () => {
+          isHovering = true;
+          if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+          }
+        });
+        
+        logo.addEventListener('mouseleave', () => {
+          isHovering = false;
+          if (!animationId) {
+            animateMarquee(marquee);
+          }
+        });
+      });
 
-      function animate() {
-        offset += speed;
-        marquee.style.transform = `translateX(-${offset}px)`;
-
-        if (offset >= resetPoint) {
-          offset = 0;
-        }
-
-        requestAnimationFrame(animate);
-      }
-
-      animate();
+      // Mulai animasi
+      animateMarquee(marquee);
     }
 
-    window.addEventListener('load', function () {
-      startMarquee('.marquee-content', 0.25);
-    });
+    function animateMarquee(marquee) {
+      if (isHovering) return; // Berhenti jika ada logo yang di-hover
+      
+      offset += speed;
+      const resetPoint = marquee.scrollWidth / 2;
+      
+      if (offset >= resetPoint) {
+        offset = 0;
+      }
+      
+      marquee.style.transform = `translateX(-${offset}px)`;
+      animationId = requestAnimationFrame(() => animateMarquee(marquee));
+    }
+
+    window.addEventListener('load', startMarquee);
   })();
 
   // Hidden admin login shortcut: Ctrl + Alt + L
@@ -498,4 +496,5 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
-<?php render_footer(); ?>
+</body>
+</html>
