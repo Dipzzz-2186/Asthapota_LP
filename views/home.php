@@ -451,7 +451,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('load', startMarquee);
   })();
 
-  // Hidden admin login shortcut: Ctrl + Alt + L
+  // Hidden admin login shortcut: Ctrl + Shift + A
   function isTypingTarget(target) {
     if (!target) return false;
     const tag = (target.tagName || '').toLowerCase();
@@ -460,7 +460,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   document.addEventListener('keydown', function(e) {
     if (isTypingTarget(e.target)) return;
-    if (e.ctrlKey && e.altKey && !e.shiftKey && (e.key === 'l' || e.key === 'L')) {
+    if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'a' || e.key === 'A')) {
       e.preventDefault();
       window.location.href = '/admin/login';
     }

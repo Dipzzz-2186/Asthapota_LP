@@ -118,7 +118,7 @@ if (!function_exists('render_footer')) {
 
       document.addEventListener('keydown', function(e) {
         if (isTypingTarget(e.target)) return;
-        if (e.ctrlKey && e.altKey && !e.shiftKey && (e.key === 'l' || e.key === 'L')) {
+        if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'a' || e.key === 'A')) {
           e.preventDefault();
           window.location.href = '/admin/login';
         }
