@@ -31,6 +31,11 @@ $itemsStmt = $db->prepare('SELECT oi.qty, oi.price, p.name FROM order_items oi J
 $itemsStmt->execute([$order_id]);
 $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
 
+$instagramLabel = '';
+if (!empty($order['instagram'])) {
+    $instagramLabel = '@' . ltrim($order['instagram'], '@');
+}
+
 $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_FILES['payment_proof']) || $_FILES['payment_proof']['error'] !== UPLOAD_ERR_OK) {
@@ -82,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div><strong>Full Name</strong> : <?= h($order['full_name']) ?></div>
         <div><strong>Phone Number</strong> : <?= h($order['phone']) ?></div>
         <div><strong>E-mail</strong> : <?= h($order['email']) ?></div>
-        <div><strong>Instagram</strong> : <?= h($order['instagram']) ?></div>
+        <div><strong>Instagram</strong> : <?= $instagramLabel ? h($instagramLabel) : '-' ?></div>
         <div style="margin-top:12px;"><strong>Order</strong></div>
         <?php foreach ($items as $it): ?>
           <div><?= (int)$it['qty'] ?> x <?= h($it['name']) ?> @ <?= h(rupiah((int)$it['price'])) ?></div>

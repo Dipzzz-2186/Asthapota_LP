@@ -442,7 +442,11 @@ foreach ($orders as $o) {
                 <td>
                   <?= h($o['phone']) ?><br>
                   <?= h($o['email']) ?><br>
-                  <?= h($o['instagram']) ?>
+                  <?php
+                    $ig = trim((string)($o['instagram'] ?? ''));
+                    $ig = $ig !== '' ? '@' . ltrim($ig, '@') : '-';
+                  ?>
+                  <?= h($ig) ?>
                 </td>
                 <td><?= h($o['items'] ?? '-') ?></td>
                 <td><?= h(rupiah((int)$o['total'])) ?></td>

@@ -510,6 +510,37 @@ a {
   font-family: inherit;
 }
 
+.form .input-prefix {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--stroke);
+  border-radius: 13px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.form .input-prefix span {
+  padding: 0 14px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 600;
+  border-right: 1px solid var(--stroke);
+}
+
+.form .input-prefix input {
+  border: 0;
+  padding: 15px 17px;
+  font-size: 16px;
+  font-family: inherit;
+  background: transparent;
+  width: 100%;
+}
+
+.form .input-prefix:focus-within {
+  border-color: rgba(30, 94, 216, 0.45);
+  box-shadow: 0 0 0 3px rgba(30, 94, 216, 0.12);
+}
+
 .alert {
   background: #ffe8e8;
   border: 1px solid #ffd0d0;

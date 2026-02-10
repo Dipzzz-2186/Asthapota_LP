@@ -33,7 +33,6 @@ if (!function_exists('render_navbar')) {
           <?php else: ?>
             <a class="icon-btn" href="/register"><i class="bi bi-person"></i></a>
             <a class="icon-btn" href="/packages-view"><i class="bi bi-bag"></i></a>
-            <a class="btn ghost" href="/admin/login">Admin Login</a>
             <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
           <?php endif; ?>
         </div>
@@ -68,6 +67,23 @@ if (!function_exists('render_header')) {
 if (!function_exists('render_footer')) {
     function render_footer(): void {
         ?>
+  <script>
+    (function() {
+      function isTypingTarget(target) {
+        if (!target) return false;
+        var tag = (target.tagName || '').toLowerCase();
+        return tag === 'input' || tag === 'textarea' || target.isContentEditable;
+      }
+
+      document.addEventListener('keydown', function(e) {
+        if (isTypingTarget(e.target)) return;
+        if (e.ctrlKey && e.altKey && !e.shiftKey && (e.key === 'l' || e.key === 'L')) {
+          e.preventDefault();
+          window.location.href = '/admin/login';
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
 <?php

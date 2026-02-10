@@ -22,6 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim($_POST['phone'] ?? '');
         $email = trim($_POST['email'] ?? '');
         $instagram = trim($_POST['instagram'] ?? '');
+        $instagram = ltrim($instagram, '@');
 
         if ($full_name === '') $errors[] = 'Full name is required.';
         if ($phone === '') $errors[] = 'Phone number is required.';
@@ -145,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           </div>
         <?php endif; ?>
 
-        <form class="form" method="post" action="">
+        <form class="form" method="post" action="" id="registerForm">
           <input type="hidden" name="step" value="send_otp">
           <label>
             Full Name*
@@ -161,7 +162,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           </label>
           <label>
             Instagram
-            <input type="text" name="instagram">
+            <div class="input-prefix">
+              <span>@</span>
+              <input type="text" name="instagram" id="instagramInput" placeholder="username" autocomplete="off">
+            </div>
           </label>
           <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <button class="btn primary" type="submit">Continue <i class="bi bi-arrow-right"></i></button>
@@ -223,6 +227,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       };
       tick();
       setInterval(tick, 1000);
+    })();
+  </script>
+  <script>
+    (function() {
+      var form = document.getElementById('registerForm');
+      var input = document.getElementById('instagramInput');
+      if (!form || !input) return;
+
+      function normalize() {
+        var val = (input.value || '').trim();
+        input.value = val.replace(/^@+/, '');
+      }
+
+      input.addEventListener('blur', normalize);
+      form.addEventListener('submit', normalize);
     })();
   </script>
 </body>

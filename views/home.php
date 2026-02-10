@@ -156,7 +156,6 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
           <?php else: ?>
             <a class="icon-btn" href="/register"><i class="bi bi-person"></i></a>
             <a class="icon-btn" href="#packages"><i class="bi bi-bag"></i></a>
-            <a class="btn ghost" href="/admin/login">Admin Login</a>
             <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
           <?php endif; ?>
         </div>
@@ -480,6 +479,21 @@ document.addEventListener('DOMContentLoaded', function() {
       startMarquee('.marquee-content', 0.25);
     });
   })();
+
+  // Hidden admin login shortcut: Ctrl + Alt + L
+  function isTypingTarget(target) {
+    if (!target) return false;
+    const tag = (target.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || target.isContentEditable;
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (isTypingTarget(e.target)) return;
+    if (e.ctrlKey && e.altKey && !e.shiftKey && (e.key === 'l' || e.key === 'L')) {
+      e.preventDefault();
+      window.location.href = '/admin/login';
+    }
+  });
 });
 </script>
 </body>
