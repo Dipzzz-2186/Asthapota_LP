@@ -1,4 +1,5 @@
 ﻿<?php
+require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
 ensure_session();
@@ -6,6 +7,17 @@ ensure_session();
 if (empty($_SESSION['user_id'])) {
     redirect('/register?notice=register_required');
 }
+$orderId = (int)($_GET['order'] ?? 0);
+if ($orderId <= 0) {
+    redirect('/packages');
+}
+$db = get_db();
+$stmt = $db->prepare('SELECT id FROM orders WHERE id = ? AND user_id = ?');
+$stmt->execute([$orderId, (int)$_SESSION['user_id']]);
+if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
+    redirect('/packages');
+}
+unset($_SESSION['order_draft'], $_SESSION['order_id']);
 ?>
 <!doctype html>
 <html lang="en">

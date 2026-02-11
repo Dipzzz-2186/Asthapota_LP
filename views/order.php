@@ -9,29 +9,53 @@ if (empty($_SESSION['user_id'])) {
     redirect('/register?notice=register_required');
 }
 
-if (empty($_SESSION['order_id'])) {
+$draft = $_SESSION['order_draft'] ?? null;
+if (
+    !$draft
+    || !is_array($draft)
+    || (int)($draft['user_id'] ?? 0) !== (int)$_SESSION['user_id']
+    || empty($draft['items'])
+) {
     redirect('/packages');
 }
 
 $db = get_db();
-$order_id = (int)$_SESSION['order_id'];
+$userStmt = $db->prepare('SELECT id, full_name, phone, email, instagram FROM users WHERE id = ?');
+$userStmt->execute([(int)$_SESSION['user_id']]);
+$user = $userStmt->fetch(PDO::FETCH_ASSOC);
 
-$order = $db->prepare('SELECT o.*, u.full_name, u.phone, u.email, u.instagram FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
-$order->execute([$order_id]);
-$order = $order->fetch(PDO::FETCH_ASSOC);
+if (!$user) {
+    unset($_SESSION['user_id'], $_SESSION['order_draft'], $_SESSION['order_id']);
+    redirect('/register');
+}
 
-if (!$order || (int)$order['user_id'] !== (int)$_SESSION['user_id']) {
-    unset($_SESSION['order_id']);
+$items = [];
+$total = 0;
+foreach ((array)$draft['items'] as $it) {
+    $packageId = (int)($it['package_id'] ?? 0);
+    $qty = max(0, (int)($it['qty'] ?? 0));
+    $price = max(0, (int)($it['price'] ?? 0));
+    $name = trim((string)($it['name'] ?? ''));
+    if ($packageId <= 0 || $qty <= 0 || $price <= 0 || $name === '') {
+        continue;
+    }
+    $items[] = [
+        'package_id' => $packageId,
+        'qty' => $qty,
+        'price' => $price,
+        'name' => $name,
+    ];
+    $total += $qty * $price;
+}
+
+if (!$items || $total <= 0) {
+    unset($_SESSION['order_draft']);
     redirect('/packages');
 }
 
-$itemsStmt = $db->prepare('SELECT oi.qty, oi.price, p.name FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = ?');
-$itemsStmt->execute([$order_id]);
-$items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
-
 $instagramLabel = '';
-if (!empty($order['instagram'])) {
-    $instagramLabel = '@' . ltrim($order['instagram'], '@');
+if (!empty($user['instagram'])) {
+    $instagramLabel = '@' . ltrim((string)$user['instagram'], '@');
 }
 
 $errors = [];
@@ -47,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!in_array($ext, ['jpg', 'jpeg', 'png'])) {
                 $errors[] = 'Only JPG or PNG allowed.';
             } else {
-                $name = 'proof_' . $order_id . '_' . time() . '.' . $ext;
+                $name = 'proof_u' . (int)$_SESSION['user_id'] . '_' . time() . '_' . mt_rand(1000, 9999) . '.' . $ext;
                 $uploadDir = $CONFIG['upload_dir'];
                 if (!is_dir($uploadDir)) {
                     mkdir($uploadDir, 0775, true);
@@ -56,11 +80,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!move_uploaded_file($file['tmp_name'], $target)) {
                     $errors[] = 'Failed to upload file.';
                 } else {
-                    $stmt = $db->prepare('UPDATE orders SET payment_proof = ?, status = ? WHERE id = ?');
-                    $stmt->execute([$name, 'paid', $order_id]);
-                    $order['status'] = 'paid';
-                    send_invoice_email($order, $items, $order['email']);
-                    redirect('/thankyou');
+                    $orderId = 0;
+                    try {
+                        $db->beginTransaction();
+                        $stmt = $db->prepare('INSERT INTO orders (user_id, total, status, payment_proof, created_at) VALUES (?, ?, ?, ?, ?)');
+                        $stmt->execute([(int)$_SESSION['user_id'], (int)$total, 'paid', $name, date('c')]);
+                        $orderId = (int)$db->lastInsertId();
+
+                        $itemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
+                        foreach ($items as $it) {
+                            $itemStmt->execute([$orderId, $it['package_id'], $it['qty'], $it['price']]);
+                        }
+
+                        $db->commit();
+                    } catch (Throwable $e) {
+                        if ($db->inTransaction()) {
+                            $db->rollBack();
+                        }
+                        if (is_file($target)) {
+                            @unlink($target);
+                        }
+                        $errors[] = 'Failed to save your order. Please try again.';
+                    }
+
+                    if ($orderId > 0) {
+                        unset($_SESSION['order_draft']);
+                        send_invoice_email([
+                            'id' => $orderId,
+                            'full_name' => $user['full_name'],
+                            'status' => 'paid',
+                            'total' => $total,
+                        ], $items, (string)$user['email']);
+                        redirect('/thankyou?order=' . $orderId);
+                    }
                 }
             }
         }
@@ -319,9 +371,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <section class="order-panel order-summary fade-up">
         <div class="section-title"><i class="bi bi-receipt-cutoff"></i> Order Details</div>
         <div class="order-meta">
-          <div><i class="bi bi-person-badge"></i> <strong>Full Name</strong> : <?= h($order['full_name']) ?></div>
-          <div><i class="bi bi-telephone"></i> <strong>Phone Number</strong> : <?= h($order['phone']) ?></div>
-          <div><i class="bi bi-envelope"></i> <strong>E-mail</strong> : <?= h($order['email']) ?></div>
+          <div><i class="bi bi-person-badge"></i> <strong>Full Name</strong> : <?= h($user['full_name']) ?></div>
+          <div><i class="bi bi-telephone"></i> <strong>Phone Number</strong> : <?= h($user['phone']) ?></div>
+          <div><i class="bi bi-envelope"></i> <strong>E-mail</strong> : <?= h($user['email']) ?></div>
           <div><i class="bi bi-instagram"></i> <strong>Instagram</strong> : <?= $instagramLabel ? h($instagramLabel) : '-' ?></div>
         </div>
         <div style="margin-top:16px;"><i class="bi bi-box-seam"></i> <strong>Order</strong></div>
@@ -333,7 +385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="total">
           <div><i class="bi bi-wallet2"></i> Total to Pay:</div>
-          <div><?= h(rupiah((int)$order['total'])) ?>,-</div>
+          <div><?= h(rupiah((int)$total)) ?>,-</div>
         </div>
       </section>
 

@@ -7,6 +7,7 @@ ensure_session();
 $can_order = !empty($_SESSION['user_id']);
 if (!$can_order) {
     unset($_SESSION['order_id']);
+    unset($_SESSION['order_draft']);
 }
 
 $db = get_db();
@@ -33,17 +34,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$qtys) {
         $errors[] = 'Please select at least one package.';
     } else {
-        $stmt = $db->prepare('INSERT INTO orders (user_id, total, status, created_at) VALUES (?, ?, ?, ?)');
-        $stmt->execute([$_SESSION['user_id'], $total, 'pending', date('c')]);
-        $order_id = (int)$db->lastInsertId();
-
-        $itemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
+        $draftItems = [];
         foreach ($qtys as $pid => $qty) {
             $pkg = array_values(array_filter($packages, fn($p) => (int)$p['id'] === (int)$pid))[0];
-            $itemStmt->execute([$order_id, $pid, $qty, $pkg['price']]);
+            $draftItems[] = [
+                'package_id' => (int)$pid,
+                'name' => (string)$pkg['name'],
+                'qty' => (int)$qty,
+                'price' => (int)$pkg['price'],
+            ];
         }
 
-        $_SESSION['order_id'] = $order_id;
+        $_SESSION['order_draft'] = [
+            'user_id' => (int)$_SESSION['user_id'],
+            'total' => (int)$total,
+            'items' => $draftItems,
+            'created_at' => time(),
+        ];
+        unset($_SESSION['order_id']);
         redirect('/order');
     }
 }

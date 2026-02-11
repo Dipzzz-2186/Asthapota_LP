@@ -1,6 +1,7 @@
 ﻿<?php
 require_once __DIR__ . '/../app/auth.php';
 ensure_session();
+unset($_SESSION['order_draft']);
 
 $isAdmin = is_admin_logged_in();
 ?>
