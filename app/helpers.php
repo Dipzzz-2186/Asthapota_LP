@@ -176,6 +176,9 @@ function send_order_status_email(array $order, string $toEmail): bool {
         'paid' => 'Payment Received',
         default => ucfirst((string)$statusRaw),
     };
+    $statusNote = $statusRaw === 'accepted'
+        ? '<p style="margin:14px 0 0;font-size:14px;color:#1f3d72;font-weight:600;">Kami tunggu kedatangannya.</p>'
+        : '';
 
     $subject = 'Asthapora - Order #' . (int)$order['id'] . ' ' . $statusLabel;
     $body = '
@@ -192,6 +195,7 @@ function send_order_status_email(array $order, string $toEmail): bool {
               <div style="font-size:18px;font-weight:700;color:#0c1b36;">#' . (int)$order['id'] . '</div>
               <div style="font-size:13px;color:#5a6b86;margin-top:6px;">Status: ' . htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') . '</div>
             </div>
+            ' . $statusNote . '
             <p style="margin:14px 0 0;font-size:13px;color:#5a6b86;">Terima kasih sudah berpartisipasi di Asthapora.</p>
           </div>
         </div>
