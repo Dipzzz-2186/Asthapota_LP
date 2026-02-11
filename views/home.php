@@ -781,6 +781,54 @@ $isAdmin = is_admin_logged_in();
       box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.92), 0 0 0 7px rgba(137, 201, 255, 0.95), 0 10px 24px rgba(9, 28, 57, 0.42);
     }
 
+    .back-top {
+      position: fixed;
+      right: clamp(14px, 2vw, 24px);
+      bottom: clamp(14px, 2.4vw, 26px);
+      width: 50px;
+      height: 50px;
+      border: 1.6px solid rgba(255, 255, 255, 0.76);
+      border-radius: 999px;
+      background: rgba(11, 45, 97, 0.46);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 21px;
+      cursor: pointer;
+      z-index: 47;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(14px) scale(0.95);
+      box-shadow: 0 8px 18px rgba(4, 16, 36, 0.33);
+      backdrop-filter: blur(4px);
+      transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s, background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .back-top.is-visible {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0) scale(1);
+      transition-delay: 0s;
+    }
+
+    .back-top:hover {
+      background: rgba(11, 45, 97, 0.62);
+      border-color: rgba(255, 255, 255, 0.95);
+      transform: translateY(-2px) scale(1.04);
+    }
+
+    .back-top:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    .back-top:focus-visible {
+      outline: none;
+      border-color: #fff;
+      box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.92), 0 0 0 6px rgba(137, 201, 255, 0.92), 0 8px 18px rgba(4, 16, 36, 0.33);
+      animation: focus-ring-pulse 760ms ease-out 1;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .sponsor-track { animation: none; }
       .hero-join,
@@ -795,7 +843,8 @@ $isAdmin = is_admin_logged_in();
       }
       .hero-join:focus-visible,
       .cta:focus-visible,
-      .sponsor:focus-visible {
+      .sponsor:focus-visible,
+      .back-top:focus-visible {
         animation: none;
       }
       .countdown-wrap::before,
@@ -895,6 +944,9 @@ $isAdmin = is_admin_logged_in();
   <div class="scroll-progress" aria-hidden="true">
     <span class="scroll-progress-bar" id="scrollProgressBar"></span>
   </div>
+  <button type="button" class="back-top" id="backTopBtn" aria-label="Back to top">
+    <i class="bi bi-arrow-up"></i>
+  </button>
 
   <main class="landing">
     <section class="panel hero">
@@ -968,6 +1020,7 @@ $isAdmin = is_admin_logged_in();
       var body = document.body;
       var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       var scrollProgressBar = document.getElementById('scrollProgressBar');
+      var backTopBtn = document.getElementById('backTopBtn');
       var progressTicking = false;
 
       function updateScrollProgress() {
@@ -977,6 +1030,10 @@ $isAdmin = is_admin_logged_in();
         var maxScroll = Math.max(1, doc.scrollHeight - window.innerHeight);
         var progress = Math.max(0, Math.min(1, scrollTop / maxScroll));
         scrollProgressBar.style.transform = 'scaleX(' + progress.toFixed(4) + ')';
+
+        if (backTopBtn) {
+          backTopBtn.classList.toggle('is-visible', scrollTop > 320);
+        }
       }
 
       function requestScrollProgressUpdate() {
@@ -991,6 +1048,12 @@ $isAdmin = is_admin_logged_in();
       window.addEventListener('scroll', requestScrollProgressUpdate, { passive: true });
       window.addEventListener('resize', requestScrollProgressUpdate);
       requestScrollProgressUpdate();
+
+      if (backTopBtn) {
+        backTopBtn.addEventListener('click', function () {
+          window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+        });
+      }
 
       if (body && !reduceMotion) {
         requestAnimationFrame(function () {
