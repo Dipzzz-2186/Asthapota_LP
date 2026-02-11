@@ -107,6 +107,29 @@ $isAdmin = is_admin_logged_in();
       transition: opacity 0.28s ease, transform 0.28s ease, filter 0.28s ease;
     }
 
+    .scroll-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      z-index: 46;
+      pointer-events: none;
+      background: rgba(255, 255, 255, 0.14);
+      backdrop-filter: blur(2px);
+    }
+
+    .scroll-progress-bar {
+      display: block;
+      width: 100%;
+      height: 100%;
+      transform-origin: left center;
+      transform: scaleX(0);
+      background: linear-gradient(90deg, #8fcbff 0%, #ffffff 56%, #ffd892 100%);
+      box-shadow: 0 0 12px rgba(143, 203, 255, 0.45);
+      transition: transform 0.14s linear;
+    }
+
     .landing {
       min-height: 100svh;
       background: transparent;
@@ -785,6 +808,9 @@ $isAdmin = is_admin_logged_in();
       .count-value.flip {
         animation: none;
       }
+      .scroll-progress-bar {
+        transition: none;
+      }
       html, body { scroll-snap-type: none; }
       body::before,
       body::after {
@@ -866,6 +892,10 @@ $isAdmin = is_admin_logged_in();
   </style>
 </head>
 <body>
+  <div class="scroll-progress" aria-hidden="true">
+    <span class="scroll-progress-bar" id="scrollProgressBar"></span>
+  </div>
+
   <main class="landing">
     <section class="panel hero">
       <img class="hero-logo" data-seq style="--seq-delay: 80ms;" src="/assets/img/lopad.jpg" alt="Astaphora logo">
@@ -932,10 +962,36 @@ $isAdmin = is_admin_logged_in();
       window.scrollTo(0, 0);
       window.addEventListener('pageshow', function () {
         window.scrollTo(0, 0);
+        requestScrollProgressUpdate();
       });
 
       var body = document.body;
       var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var scrollProgressBar = document.getElementById('scrollProgressBar');
+      var progressTicking = false;
+
+      function updateScrollProgress() {
+        if (!scrollProgressBar) return;
+        var doc = document.documentElement;
+        var scrollTop = window.pageYOffset || doc.scrollTop || 0;
+        var maxScroll = Math.max(1, doc.scrollHeight - window.innerHeight);
+        var progress = Math.max(0, Math.min(1, scrollTop / maxScroll));
+        scrollProgressBar.style.transform = 'scaleX(' + progress.toFixed(4) + ')';
+      }
+
+      function requestScrollProgressUpdate() {
+        if (progressTicking) return;
+        progressTicking = true;
+        requestAnimationFrame(function () {
+          progressTicking = false;
+          updateScrollProgress();
+        });
+      }
+
+      window.addEventListener('scroll', requestScrollProgressUpdate, { passive: true });
+      window.addEventListener('resize', requestScrollProgressUpdate);
+      requestScrollProgressUpdate();
+
       if (body && !reduceMotion) {
         requestAnimationFrame(function () {
           body.classList.add('page-ready');
