@@ -741,6 +741,21 @@ a {
   gap: 32px;
 }
 
+#social .grid-2 {
+  align-items: stretch;
+}
+
+#social .grid-2 > .card {
+  display: flex;
+  flex-direction: column;
+}
+
+#social .grid-2 > .card:last-child .news-thumb {
+  flex: 1;
+  min-height: 320px;
+  aspect-ratio: auto;
+}
+
 .card {
   background: var(--surface);
   border-radius: var(--radius-lg);
@@ -922,9 +937,21 @@ a {
 }
 
 .news-thumb {
-  height: 160px; /* Sedikit lebih besar */
+  aspect-ratio: 16 / 10;
+  height: auto;
   background-size: cover;
   background-position: center;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.news-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 
 .news-thumb::after {
