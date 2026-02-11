@@ -406,7 +406,7 @@ $isAdmin = is_admin_logged_in();
         <p class="count-status" id="countdownStatus"></p>
       </div>
 
-      <button type="button" class="hero-join" id="ikutYukBtn">Yuk Join</button>
+      <button type="button" class="hero-join" id="ikutYukBtn">Join Us</button>
     </section>
 
     <section class="panel support" id="registerPanel">
