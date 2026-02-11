@@ -368,7 +368,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="actions">
           <button class="btn primary" type="submit">Continue</button>
-          <a class="btn ghost" href="/">Back to Home</a>
+          <a class="btn ghost" href="/packages">Back to Packages</a>
         </div>
       </form>
     </section>
