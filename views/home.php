@@ -529,6 +529,23 @@ $isAdmin = is_admin_logged_in();
       }
     }
 
+    @keyframes cta-flow {
+      0%, 100% { --cta-flow: 0%; }
+      50% { --cta-flow: 100%; }
+    }
+
+    @keyframes cta-sheen {
+      0%, 42% { transform: translateX(-130%) skewX(-18deg); opacity: 0; }
+      52% { opacity: 1; }
+      76%, 100% { transform: translateX(130%) skewX(-18deg); opacity: 0; }
+    }
+
+    @keyframes cta-icon-pop {
+      0%, 100% { transform: translateY(0) scale(1); }
+      45% { transform: translateY(-1px) scale(1.09); }
+      70% { transform: translateY(1px) scale(1.03); }
+    }
+
     @keyframes intro-glow {
       0% {
         opacity: 0;
@@ -558,6 +575,7 @@ $isAdmin = is_admin_logged_in();
     }
 
     .cta {
+      --cta-flow: 0%;
       margin-top: 10px;
       display: inline-flex;
       align-items: center;
@@ -577,12 +595,45 @@ $isAdmin = is_admin_logged_in();
       border-radius: 999px;
       border: 4px solid #07162d;
       box-shadow: 10px 10px 0 var(--shadow);
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+      background: linear-gradient(115deg, #f7f8fc 0%, #f2f4fb 46%, #ffffff 52%, #edf2fd 78%, #f7f8fc 100%);
+      background-size: 210% 210%;
+      background-position: var(--cta-flow) 50%;
+      animation: cta-flow 6.2s ease-in-out infinite;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background-position 0.3s ease;
+    }
+
+    .cta::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(112deg, rgba(255, 255, 255, 0) 28%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0) 72%);
+      transform: translateX(-130%) skewX(-18deg);
+      animation: cta-sheen 3.8s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .cta > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .cta i {
+      transition: transform 0.2s ease;
     }
 
     .cta:hover {
-      transform: translate(2px, 2px);
-      box-shadow: 7px 7px 0 var(--shadow);
+      transform: translate(3px, 3px) scale(1.01);
+      box-shadow: 6px 6px 0 var(--shadow);
+      --cta-flow: 90%;
+    }
+
+    .cta:hover i {
+      animation: cta-icon-pop 0.8s ease-in-out infinite;
     }
 
     .cta:active {
@@ -595,7 +646,10 @@ $isAdmin = is_admin_logged_in();
       .hero-join,
       .hero-join::before,
       .hero-join::after,
-      .hero-join:hover i {
+      .hero-join:hover i,
+      .cta,
+      .cta::before,
+      .cta:hover i {
         animation: none;
       }
       html, body { scroll-snap-type: none; }
