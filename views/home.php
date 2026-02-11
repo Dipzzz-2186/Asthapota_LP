@@ -39,8 +39,8 @@ $isAdmin = is_admin_logged_in();
     html, body {
       margin: 0;
       min-height: 100%;
-      height: 100%;
-      overflow: hidden;
+      scroll-behavior: smooth;
+      scroll-snap-type: y mandatory;
       overscroll-behavior: none;
     }
 
@@ -49,7 +49,9 @@ $isAdmin = is_admin_logged_in();
       font-family: var(--font-body);
       font-weight: 500;
       letter-spacing: 0.2px;
-      background: url('/assets/img/wallpaper.avif') center top / cover no-repeat fixed;
+      min-height: 100svh;
+      background: url('/assets/img/wallpaper.avif') center top / cover no-repeat;
+      background-attachment: scroll;
       position: relative;
       overflow-x: hidden;
       opacity: 0;
@@ -105,14 +107,8 @@ $isAdmin = is_admin_logged_in();
     }
 
     .landing {
-      height: 100svh;
-      overflow-y: auto;
-      overscroll-behavior-y: contain;
-      -webkit-overflow-scrolling: touch;
-      scroll-behavior: smooth;
-      scroll-snap-type: y mandatory;
-      background: url('/assets/img/wallpaper.avif') center top / cover no-repeat;
-      background-attachment: scroll;
+      min-height: 100svh;
+      background: transparent;
     }
 
     .panel {
@@ -494,7 +490,7 @@ $isAdmin = is_admin_logged_in();
 
     @media (prefers-reduced-motion: reduce) {
       .sponsor-track { animation: none; }
-      .landing { scroll-snap-type: none; }
+      html, body { scroll-snap-type: none; }
       body::before,
       body::after {
         display: none;
@@ -635,6 +631,14 @@ $isAdmin = is_admin_logged_in();
 
   <script>
     (function () {
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+      }
+      window.scrollTo(0, 0);
+      window.addEventListener('pageshow', function () {
+        window.scrollTo(0, 0);
+      });
+
       var body = document.body;
       var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (body && !reduceMotion) {
