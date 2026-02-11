@@ -72,14 +72,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Order Details - Asthapora</title>
+  <title>Order Details - Temu Padel 2026</title>
   <link rel="stylesheet" href="/assets/css/style.css">
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
+    @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
+
+    :root {
+      --font-body: "Manrope", "Segoe UI", Tahoma, sans-serif;
+      --font-display: "Anton", "Arial Narrow", Impact, sans-serif;
+      --font-accent: "Playfair Display", Georgia, serif;
+    }
+
     body {
       margin: 0;
       min-height: 100%;
       color: #eef4ff;
-      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-family: var(--font-body);
+      font-weight: 500;
+      letter-spacing: 0.2px;
       background: url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
       overflow-x: hidden;
       opacity: 0;
@@ -122,6 +133,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       border-radius: 20px;
       backdrop-filter: blur(7px);
       box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+      transition: transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .order-full:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+      border-color: rgba(255, 255, 255, 0.56);
     }
 
     .order-panel {
@@ -130,12 +148,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       border-radius: 16px;
       padding: clamp(20px, 2.4vw, 34px);
       backdrop-filter: blur(3px);
+      transition: transform 0.18s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .order-panel:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.62);
+      box-shadow: 0 14px 26px rgba(0, 0, 0, 0.24);
     }
 
     .section-title {
       margin-bottom: 16px;
       color: #fff;
-      font-size: clamp(24px, 2.8vw, 36px);
+      font-family: var(--font-accent);
+      font-size: clamp(28px, 3.1vw, 40px);
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
     }
 
     .order-meta {
@@ -162,6 +192,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       border-top: 1px solid rgba(255, 255, 255, 0.25);
       font-weight: 800;
       font-size: clamp(24px, 2.6vw, 34px);
+      font-family: var(--font-display);
+      letter-spacing: 0.8px;
       color: #fff;
     }
 
@@ -171,6 +203,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       border-radius: 14px;
       padding: 16px;
       color: #eef4ff;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .payment-card:hover {
+      border-color: rgba(255, 255, 255, 0.55);
+      background: rgba(255, 255, 255, 0.2);
     }
 
     .upload-box {
@@ -178,6 +216,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       border-radius: 12px;
       background: rgba(255, 255, 255, 0.12);
       padding: 16px;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .upload-box:hover {
+      border-color: rgba(255, 255, 255, 0.7);
+      background: rgba(255, 255, 255, 0.18);
     }
 
     .upload-box input[type="file"] {
@@ -194,6 +238,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       color: #0b2d61;
       font-weight: 700;
       cursor: pointer;
+      transition: transform 0.15s ease, background 0.2s ease;
+    }
+
+    .upload-box input[type="file"]::file-selector-button:hover {
+      transform: translateY(-1px);
+      background: #dbe9ff;
     }
 
     .btn.primary {
@@ -208,7 +258,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     .btn.primary:hover {
       background: #dbe9ff;
-      transform: translateY(-1px);
+      transform: translateY(-2px);
       box-shadow: none;
     }
 
@@ -240,35 +290,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <main class="order-shell">
     <div class="order-full">
       <section class="order-panel order-summary fade-up">
-        <div class="section-title">Order Details</div>
+        <div class="section-title"><i class="bi bi-receipt-cutoff"></i> Order Details</div>
         <div class="order-meta">
-          <div><strong>Full Name</strong> : <?= h($order['full_name']) ?></div>
-          <div><strong>Phone Number</strong> : <?= h($order['phone']) ?></div>
-          <div><strong>E-mail</strong> : <?= h($order['email']) ?></div>
-          <div><strong>Instagram</strong> : <?= $instagramLabel ? h($instagramLabel) : '-' ?></div>
+          <div><i class="bi bi-person-badge"></i> <strong>Full Name</strong> : <?= h($order['full_name']) ?></div>
+          <div><i class="bi bi-telephone"></i> <strong>Phone Number</strong> : <?= h($order['phone']) ?></div>
+          <div><i class="bi bi-envelope"></i> <strong>E-mail</strong> : <?= h($order['email']) ?></div>
+          <div><i class="bi bi-instagram"></i> <strong>Instagram</strong> : <?= $instagramLabel ? h($instagramLabel) : '-' ?></div>
         </div>
-        <div style="margin-top:16px;"><strong>Order</strong></div>
+        <div style="margin-top:16px;"><i class="bi bi-box-seam"></i> <strong>Order</strong></div>
         <div class="order-list">
         <?php foreach ($items as $it): ?>
-          <div><?= (int)$it['qty'] ?> x <?= h($it['name']) ?> @ <?= h(rupiah((int)$it['price'])) ?></div>
+          <div><i class="bi bi-check2-circle"></i> <?= (int)$it['qty'] ?> x <?= h($it['name']) ?> @ <?= h(rupiah((int)$it['price'])) ?></div>
         <?php endforeach; ?>
         </div>
 
         <div class="total">
-          <div>Total to Pay:</div>
+          <div><i class="bi bi-wallet2"></i> Total to Pay:</div>
           <div><?= h(rupiah((int)$order['total'])) ?>,-</div>
         </div>
       </section>
 
       <section class="order-panel form-wrap fade-up delay-1">
-        <div class="section-title">Payment Info</div>
+        <div class="section-title"><i class="bi bi-credit-card-2-front"></i> Payment Info</div>
         <div class="payment-card" style="margin-bottom:16px;">
-          <div><strong>Payment to BCA Account</strong></div>
-          <div>Account Number: 1234567890</div>
-          <div>Account Name: PT Manifestasi Kehidupan Berlimpah</div>
+          <div><i class="bi bi-bank"></i> <strong>Payment to BCA Account</strong></div>
+          <div><i class="bi bi-123"></i> Account Number: 1234567890</div>
+          <div><i class="bi bi-building"></i> Account Name: PT Manifestasi Kehidupan Berlimpah</div>
         </div>
 
-        <div class="section-title">Upload Your Payment Proof</div>
+        <div class="section-title"><i class="bi bi-cloud-arrow-up"></i> Upload Your Payment Proof</div>
 
         <?php if ($errors): ?>
           <div class="alert">
@@ -283,7 +333,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <input type="file" name="payment_proof" accept="image/*" required>
           </div>
           <div style="margin-top:16px;">
-            <button class="btn primary" type="submit">Upload Proof <i class="bi bi-upload"></i></button>
+            <button class="btn primary" type="submit"><i class="bi bi-upload"></i> Upload Proof</button>
           </div>
         </form>
       </section>

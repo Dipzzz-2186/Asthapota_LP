@@ -143,11 +143,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Register - Temu Padel 2026</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
+    @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
+
     :root {
       --blue: #1658ad;
       --white: #f6f7fb;
       --soft: rgba(10, 30, 66, 0.56);
       --line: rgba(255, 255, 255, 0.34);
+      --font-body: "Manrope", "Segoe UI", Tahoma, sans-serif;
+      --font-display: "Anton", "Arial Narrow", Impact, sans-serif;
+      --font-accent: "Playfair Display", Georgia, serif;
     }
 
     * { box-sizing: border-box; }
@@ -160,7 +166,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     body {
       color: var(--white);
-      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-family: var(--font-body);
+      font-weight: 500;
+      letter-spacing: 0.2px;
       background: url('/assets/img/wallpaper1.jpg') center/cover no-repeat fixed;
       overflow-x: hidden;
       opacity: 0;
@@ -201,11 +209,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       backdrop-filter: blur(7px);
       padding: clamp(24px, 3.1vw, 42px);
       box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+      transition: transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    #registerPanel:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 18px 38px rgba(0, 0, 0, 0.36);
+      border-color: rgba(255, 255, 255, 0.58);
     }
 
     h1 {
       margin: 0 0 16px;
-      font-size: clamp(26px, 3vw, 38px);
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4vw, 54px);
+      line-height: 0.95;
+      font-weight: 400;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
     }
 
     .alert {
@@ -227,6 +251,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       gap: 6px;
       font-size: 14px;
       font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .label-text {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
     input {
@@ -238,6 +269,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       font-size: 15px;
       background: rgba(255, 255, 255, 0.92);
       color: #1f2d40;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: rgba(22, 88, 173, 0.75);
+      box-shadow: 0 0 0 3px rgba(22, 88, 173, 0.22);
+      background: #fff;
     }
 
     .input-prefix {
@@ -276,6 +315,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 8px;
+      transition: transform 0.15s ease, filter 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.04);
     }
 
     .btn.primary {
@@ -287,6 +333,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       background: rgba(255, 255, 255, 0.16);
       color: #fff;
       border: 1px solid rgba(255, 255, 255, 0.45);
+    }
+
+    .btn.ghost:hover {
+      background: rgba(255, 255, 255, 0.24);
     }
 
     .modal {
@@ -315,8 +365,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     .modal-title {
-      font-size: 22px;
+      font-family: var(--font-accent);
+      font-size: 26px;
       font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .help-text {
@@ -331,6 +385,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       border-radius: 999px;
       padding: 6px 11px;
       font-weight: 700;
+      transition: transform 0.15s ease, background 0.18s ease, border-color 0.18s ease;
+    }
+
+    .icon-btn:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.6);
     }
 
     @media (max-width: 640px) {
@@ -355,7 +416,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
   <main class="landing">
     <section id="registerPanel">
-      <h1>Register Yourself</h1>
+      <h1><i class="bi bi-person-vcard"></i> Register Yourself</h1>
 
       <?php if (!empty($_GET['notice']) && $_GET['notice'] === 'register_required'): ?>
         <div class="alert">Please register first to continue to package selection.</div>
@@ -373,42 +434,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="hidden" name="step" value="send_otp">
 
         <label>
-          Full Name*
+          <span class="label-text"><i class="bi bi-person-badge"></i> Full Name*</span>
           <input type="text" name="full_name" required>
         </label>
 
         <label>
-          Phone Number*
+          <span class="label-text"><i class="bi bi-telephone"></i> Phone Number*</span>
           <input type="text" name="phone" required>
         </label>
 
         <label>
-          E-mail*
+          <span class="label-text"><i class="bi bi-envelope"></i> E-mail*</span>
           <input type="email" name="email" required>
         </label>
 
         <label>
-          Instagram
+          <span class="label-text"><i class="bi bi-instagram"></i> Instagram</span>
           <div class="input-prefix">
-            <span>@</span>
+            <span><i class="bi bi-at"></i></span>
             <input type="text" name="instagram" id="instagramInput" placeholder="username" autocomplete="off">
           </div>
         </label>
 
         <div class="actions">
-          <button class="btn primary" type="submit">Continue</button>
-          <a class="btn ghost" href="/packages">Back to Packages</a>
+          <button class="btn primary" type="submit"><i class="bi bi-send-check"></i> Continue</button>
+          <a class="btn ghost" href="/packages"><i class="bi bi-box-seam"></i> Back to Packages</a>
         </div>
       </form>
     </section>
   </main>
 
   <div class="modal <?= $pending ? 'show' : '' ?>" id="otpModal">
-    <div class="modal-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <div class="modal-title">OTP Verification</div>
-        <a class="icon-btn" href="/register?cancel_otp=1" aria-label="Close">Close</a>
-      </div>
+      <div class="modal-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div class="modal-title"><i class="bi bi-shield-lock"></i> OTP Verification</div>
+          <a class="icon-btn" href="/register?cancel_otp=1" aria-label="Close"><i class="bi bi-x-lg"></i> Close</a>
+        </div>
       <div class="help-text">Enter OTP sent to email: <?= $pending ? h($pending['email']) : '-' ?></div>
 
       <?php if ($otp_errors): ?>
@@ -419,19 +480,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
       <?php endif; ?>
 
-      <form class="form" method="post" action="" id="otpVerifyForm">
-        <input type="hidden" name="step" value="verify_otp">
-        <label>
-          OTP Code*
+        <form class="form" method="post" action="" id="otpVerifyForm">
+          <input type="hidden" name="step" value="verify_otp">
+          <label>
+          <span class="label-text"><i class="bi bi-key"></i> OTP Code*</span>
           <input type="text" name="otp" inputmode="numeric" required>
-        </label>
+          </label>
         <div class="help-text" id="otpTimer" data-exp="<?= $pending ? (int)$pending['otp_expires'] : 0 ?>">Valid for 10 minutes.</div>
-        <button class="btn primary" type="submit">Verify</button>
+        <button class="btn primary" type="submit"><i class="bi bi-check2-circle"></i> Verify</button>
       </form>
 
       <form method="post" action="">
         <input type="hidden" name="step" value="resend_otp">
-        <button class="btn ghost" type="submit">Resend OTP</button>
+        <button class="btn ghost" type="submit"><i class="bi bi-arrow-repeat"></i> Resend OTP</button>
       </form>
     </div>
   </div>

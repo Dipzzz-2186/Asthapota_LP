@@ -55,11 +55,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Packages - Temu Padel 2026</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
+    @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
+
     :root {
       --blue: #1658ad;
       --white: #f6f7fb;
       --soft: rgba(10, 30, 66, 0.55);
       --line: rgba(255, 255, 255, 0.34);
+      --font-body: "Manrope", "Segoe UI", Tahoma, sans-serif;
+      --font-display: "Anton", "Arial Narrow", Impact, sans-serif;
+      --font-accent: "Playfair Display", Georgia, serif;
     }
 
     * { box-sizing: border-box; }
@@ -72,7 +78,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     body {
       color: var(--white);
-      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-family: var(--font-body);
+      font-weight: 500;
+      letter-spacing: 0.2px;
       background: url('/assets/img/wallpaper3.jpg') center/cover no-repeat fixed;
       overflow-x: hidden;
       opacity: 0;
@@ -116,7 +124,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     h1 {
       margin: 0 0 16px;
-      font-size: clamp(26px, 3vw, 38px);
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4vw, 54px);
+      line-height: 0.95;
+      font-weight: 400;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
     }
 
     .alert {
@@ -142,24 +159,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       display: grid;
       gap: 12px;
       backdrop-filter: blur(2px);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .package-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 30px rgba(0, 0, 0, 0.26);
+      border-color: rgba(255, 255, 255, 0.65);
     }
 
     .package-card h3 {
       margin: 0;
-      font-size: 26px;
+      font-family: var(--font-accent);
+      font-size: clamp(24px, 2.2vw, 30px);
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .package-card ul {
       margin: 0;
-      padding-left: 18px;
+      padding-left: 0;
+      list-style: none;
       display: grid;
-      gap: 5px;
-      font-size: 14px;
+      gap: 7px;
+      font-size: 15px;
+    }
+
+    .package-card li {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 8px;
+      line-height: 1.4;
+      opacity: 0.96;
+    }
+
+    .package-card li i {
+      color: #d5e5ff;
+      margin-top: 2px;
     }
 
     .price {
-      font-size: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-display);
+      font-size: clamp(26px, 2.4vw, 36px);
       font-weight: 800;
+      letter-spacing: 0.8px;
     }
 
     .qty {
@@ -196,6 +245,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       background: rgba(11, 45, 97, 0.82);
       color: #fff;
       cursor: pointer;
+      transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .qty button:hover {
+      transform: translateY(-1px);
+      background: rgba(18, 66, 137, 0.9);
+      border-color: rgba(255, 255, 255, 0.55);
     }
 
     .actions {
@@ -216,6 +272,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 8px;
+      transition: transform 0.15s ease, filter 0.2s ease, background 0.2s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.04);
     }
 
     .btn.primary {
@@ -227,6 +290,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       background: rgba(255, 255, 255, 0.16);
       color: #fff;
       border: 1px solid rgba(255, 255, 255, 0.45);
+    }
+
+    .btn.ghost:hover {
+      background: rgba(255, 255, 255, 0.24);
     }
 
     .auth-modal {
@@ -256,8 +323,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     .auth-modal-title {
       margin: 0;
-      font-size: 24px;
+      font-family: var(--font-accent);
+      font-size: 28px;
       font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .auth-modal-text {
@@ -295,7 +366,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
   <main class="landing">
     <section id="packagePanel">
-      <h1>Select Your Package</h1>
+      <h1><i class="bi bi-box2-heart"></i> Select Your Package</h1>
 
       <?php if ($errors): ?>
         <div class="alert">
@@ -309,20 +380,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="package-grid">
           <?php foreach ($packages as $p): ?>
             <article class="package-card">
-              <h3><?= h($p['name']) ?></h3>
+              <h3><i class="bi bi-stars"></i> <?= h($p['name']) ?></h3>
               <ul>
                 <?php
                 $features = array_filter(explode("\n", $p['description']));
                 foreach ($features as $line):
                 ?>
-                  <li><?= h(trim($line)) ?></li>
+                  <li><i class="bi bi-check2-circle"></i> <?= h(trim($line)) ?></li>
                 <?php endforeach; ?>
               </ul>
-              <div class="price"><?= h(rupiah((int)$p['price'])) ?>,-</div>
+              <div class="price"><i class="bi bi-cash-coin"></i> <?= h(rupiah((int)$p['price'])) ?>,-</div>
               <div class="qty">
-                <button type="button" data-action="minus">-</button>
+                <button type="button" data-action="minus" aria-label="Decrease quantity"><i class="bi bi-dash-lg"></i></button>
                 <input type="number" name="qty_<?= (int)$p['id'] ?>" min="0" value="0" <?= $can_order ? '' : 'disabled' ?>>
-                <button type="button" data-action="plus">+</button>
+                <button type="button" data-action="plus" aria-label="Increase quantity"><i class="bi bi-plus-lg"></i></button>
               </div>
             </article>
           <?php endforeach; ?>
@@ -330,12 +401,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="actions">
           <?php if ($can_order): ?>
-            <button class="btn primary" type="submit">Continue to Order</button>
+            <button class="btn primary" type="submit"><i class="bi bi-arrow-right-circle"></i> Continue to Order</button>
           <?php endif; ?>
           <?php if (!$can_order): ?>
-            <a class="btn primary" href="/register">Register Now</a>
+            <a class="btn primary" href="/register"><i class="bi bi-person-plus"></i> Register Now</a>
           <?php endif; ?>
-          <a class="btn ghost" href="/">Back to Home</a>
+          <a class="btn ghost" href="/"><i class="bi bi-house-door"></i> Back to Home</a>
         </div>
       </form>
     </section>
@@ -344,11 +415,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <?php if (!$can_order): ?>
     <div class="auth-modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
       <div class="auth-modal-card">
-        <h2 class="auth-modal-title" id="authModalTitle">Register Required</h2>
+        <h2 class="auth-modal-title" id="authModalTitle"><i class="bi bi-shield-lock"></i> Register Required</h2>
         <p class="auth-modal-text">Please register first before selecting packages.</p>
         <div class="auth-modal-actions">
-          <a class="btn primary" href="/register">Register Now</a>
-          <button class="btn ghost" type="button" id="closeAuthModal">Close</button>
+          <a class="btn primary" href="/register"><i class="bi bi-person-plus"></i> Register Now</a>
+          <button class="btn ghost" type="button" id="closeAuthModal"><i class="bi bi-x-lg"></i> Close</button>
         </div>
       </div>
     </div>
@@ -399,7 +470,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       document.querySelectorAll('.qty').forEach(function(group){
         var input = group.querySelector('input');
         group.addEventListener('click', function(e){
-          var action = e.target.dataset.action;
+          var trigger = e.target.closest('[data-action]');
+          var action = trigger ? trigger.dataset.action : '';
           if (action !== 'plus' && action !== 'minus') return;
 
           if (!canOrder) {
