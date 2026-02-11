@@ -167,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     .landing {
       min-height: 100vh;
-      width: min(980px, 92vw);
+      width: min(1180px, 94vw);
       margin: 0 auto;
       padding: 42px 0 56px;
       display: flex;
@@ -176,12 +176,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     #registerPanel {
-      width: min(640px, 100%);
-      background: rgba(255, 255, 255, 0.16);
-      border: 1px solid rgba(255, 255, 255, 0.42);
+      width: min(860px, 100%);
+      background: rgba(23, 45, 79, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.40);
       border-radius: 20px;
-      backdrop-filter: blur(5px);
-      padding: clamp(20px, 2.6vw, 34px);
+      backdrop-filter: blur(7px);
+      padding: clamp(24px, 3.1vw, 42px);
       box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
     }
 
