@@ -73,6 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     html, body {
       margin: 0;
       min-height: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
       scroll-behavior: smooth;
     }
 
@@ -104,10 +107,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     .landing {
-      min-height: 100vh;
+      min-height: 100svh;
+      height: 100svh;
       width: min(1260px, 95vw);
       margin: 0 auto;
-      padding: 42px 0 56px;
+      padding: 16px 0;
       display: flex;
       align-items: center;
     }
@@ -120,6 +124,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       backdrop-filter: blur(7px);
       padding: clamp(24px, 3.1vw, 42px);
       box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+      max-height: calc(100svh - 32px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     h1 {

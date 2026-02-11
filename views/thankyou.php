@@ -24,9 +24,16 @@ if (empty($_SESSION['user_id'])) {
       --font-accent: "Playfair Display", Georgia, serif;
     }
 
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
     body {
       margin: 0;
-      min-height: 100%;
+      min-height: 100svh;
       color: #eef4ff;
       font-family: var(--font-body);
       font-weight: 500;
@@ -54,10 +61,10 @@ if (empty($_SESSION['user_id'])) {
     }
 
     .thankyou-shell {
-      min-height: 100vh;
+      min-height: 100svh;
       width: min(1260px, 95vw);
       margin: 0 auto;
-      padding: 42px 0 56px;
+      padding: 16px 0;
       display: grid;
       place-items: center;
     }
