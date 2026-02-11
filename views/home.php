@@ -225,6 +225,37 @@ $isAdmin = is_admin_logged_in();
       display: grid;
       gap: 10px;
       justify-items: center;
+      position: relative;
+      isolation: isolate;
+    }
+
+    .countdown-wrap::before,
+    .countdown-wrap::after {
+      content: "";
+      position: absolute;
+      inset: -14px -16px;
+      border-radius: 18px;
+      pointer-events: none;
+      opacity: 0;
+      transform: scale(0.92);
+      z-index: -1;
+    }
+
+    .countdown-wrap::before {
+      border: 1.5px solid rgba(255, 255, 255, 0.78);
+    }
+
+    .countdown-wrap::after {
+      background: radial-gradient(circle at 50% 50%, rgba(255, 245, 196, 0.5), rgba(255, 255, 255, 0) 64%);
+      filter: blur(6px);
+    }
+
+    .countdown-wrap.start-burst::before {
+      animation: event-start-ring 780ms cubic-bezier(.12,.64,.16,1) forwards;
+    }
+
+    .countdown-wrap.start-burst::after {
+      animation: event-start-glow 900ms ease-out forwards;
     }
 
     .countdown-label {
@@ -546,6 +577,34 @@ $isAdmin = is_admin_logged_in();
       70% { transform: translateY(1px) scale(1.03); }
     }
 
+    @keyframes event-start-ring {
+      0% {
+        opacity: 0;
+        transform: scale(0.88);
+      }
+      20% {
+        opacity: 0.95;
+      }
+      100% {
+        opacity: 0;
+        transform: scale(1.12);
+      }
+    }
+
+    @keyframes event-start-glow {
+      0% {
+        opacity: 0;
+        transform: scale(0.94);
+      }
+      22% {
+        opacity: 0.85;
+      }
+      100% {
+        opacity: 0;
+        transform: scale(1.18);
+      }
+    }
+
     @keyframes intro-glow {
       0% {
         opacity: 0;
@@ -651,6 +710,13 @@ $isAdmin = is_admin_logged_in();
       .cta::before,
       .cta:hover i {
         animation: none;
+      }
+      .countdown-wrap::before,
+      .countdown-wrap::after,
+      .countdown-wrap.start-burst::before,
+      .countdown-wrap.start-burst::after {
+        animation: none;
+        opacity: 0;
       }
       html, body { scroll-snap-type: none; }
       body::before,
@@ -908,6 +974,8 @@ $isAdmin = is_admin_logged_in();
       var labelEl = document.getElementById('countdownLabel');
       var countdownEl = document.getElementById('eventCountdown');
       var statusEl = document.getElementById('countdownStatus');
+      var countdownWrapEl = document.querySelector('.countdown-wrap');
+      var phase = '';
 
       if (!daysEl || !hoursEl || !minutesEl || !secondsEl || !statusEl || !labelEl || !countdownEl) return;
 
@@ -932,6 +1000,12 @@ $isAdmin = is_admin_logged_in();
         var now = Date.now();
 
         if (now >= targetStart && now < targetEnd) {
+          if (phase !== 'running' && countdownWrapEl && !reduceMotion) {
+            countdownWrapEl.classList.remove('start-burst');
+            void countdownWrapEl.offsetWidth;
+            countdownWrapEl.classList.add('start-burst');
+          }
+          phase = 'running';
           setCountdown(0);
           labelEl.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Event Start';
           countdownEl.classList.add('is-hidden');
@@ -941,6 +1015,7 @@ $isAdmin = is_admin_logged_in();
         }
 
         if (now >= targetEnd) {
+          phase = 'ended';
           setCountdown(0);
           labelEl.innerHTML = '<i class="bi bi-check2-circle"></i> Event Finished';
           countdownEl.classList.add('is-hidden');
@@ -949,6 +1024,7 @@ $isAdmin = is_admin_logged_in();
           return;
         }
 
+        phase = 'before';
         labelEl.innerHTML = '<i class="bi bi-hourglass-split"></i> Countdown To Event Start';
         countdownEl.classList.remove('is-hidden');
         statusEl.classList.remove('live');
