@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../../app/helpers.php';
 
 if (!function_exists('render_navbar')) {
@@ -24,6 +24,7 @@ if (!function_exists('render_navbar')) {
           <a href="/#about"><i class="bi bi-flag"></i> About</a>
           <a href="/#social"><i class="bi bi-share"></i> Social</a>
           <a href="/#packages"><i class="bi bi-bag"></i> Packages</a>
+          <a href="/#faq"><i class="bi bi-question-circle"></i> FAQ</a>
         </nav>
         <?php endif; ?>
         <div class="topbar-actions">
@@ -83,6 +84,7 @@ if (!function_exists('render_footer')) {
           <a href="#program">Program</a>
           <a href="#social">Social</a>
           <a href="#packages">Packages</a>
+          <a href="#faq">FAQ</a>
         </div>
         <div class="footer-links">
           <div class="footer-heading">Quick Links</div>
@@ -97,7 +99,7 @@ if (!function_exists('render_footer')) {
         </div>
       </div>
       <div class="footer-bottom">
-        <div>© 2026 Temu Padel. All rights reserved.</div>
+        <div>Â© 2026 Temu Padel. All rights reserved.</div>
         <div class="footer-social">
           <a href="#"><i class="bi bi-instagram"></i></a>
           <a href="#"><i class="bi bi-facebook"></i></a>
@@ -129,3 +131,6 @@ if (!function_exists('render_footer')) {
 <?php
     }
 }
+
+
+
