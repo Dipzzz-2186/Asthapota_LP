@@ -952,88 +952,167 @@ a {
 /* ========== PACKAGES ========== */
 .package-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  align-items: stretch;
 }
 
 .package-card {
   background: var(--surface);
   border-radius: var(--radius-lg);
-  padding: 32px;
-  border: 2px solid var(--stroke);
+  padding: 26px 22px 24px;
+  border: 1px solid var(--stroke);
   display: grid;
-  gap: 20px;
+  gap: 14px;
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
 }
 
-.package-card::before {
-  content: '';
+.package-card.is-featured {
+  border-color: #5f3cf3;
+  box-shadow: 0 16px 35px rgba(95, 60, 243, 0.16);
+}
+
+.package-popular {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
-  background: var(--primary);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.3s ease;
+  background: #5f3cf3;
+  color: #fff;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 7px 10px;
+}
+
+.package-card.is-featured {
+  padding-top: 58px;
+}
+
+.package-discount {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #c9f400;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
 }
 
 .package-card:hover {
-  transform: translateY(-8px);
-  border-color: var(--primary);
+  transform: translateY(-4px);
   box-shadow: var(--shadow-lg);
-}
-
-.package-card:hover::before {
-  transform: scaleX(1);
 }
 
 .package-card h3 {
   margin: 0;
-  font-size: 24px;
+  font-size: 33px;
   font-weight: 700;
   font-family: 'Poppins', sans-serif;
+  line-height: 1.15;
 }
 
-.package-card ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.package-subtitle {
+  margin: -4px 0 2px;
+  color: var(--text-light);
+  font-size: 16px;
+  min-height: 48px;
+}
+
+.package-price-wrap {
   display: grid;
-  gap: 12px;
+  gap: 2px;
 }
 
-.package-card ul li {
+.package-price-old {
+  color: #6b7280;
+  text-decoration: line-through;
+  font-size: 16px;
+}
+
+.package-price-main {
+  font-family: 'Poppins', sans-serif;
+  font-size: 46px;
+  line-height: 1;
+  font-weight: 700;
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  transition: all 0.3s ease;
+  align-items: flex-end;
+  gap: 6px;
 }
 
-.package-card ul li:hover {
-  background: var(--surface);
-  transform: translateX(4px);
+.package-price-main span {
+  font-size: 28px;
+  font-weight: 500;
 }
 
-.package-card ul li::before {
-  content: '\F26B';
-  font-family: 'bootstrap-icons';
-  color: var(--primary);
+.package-price-main small {
+  font-size: 28px;
+  color: #111827;
+  font-weight: 500;
+}
+
+.package-bonus {
+  color: #4f46e5;
   font-weight: 700;
   font-size: 18px;
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  background: var(--surface);
-  border-radius: 50%;
+}
+
+.package-includes {
+  margin: 8px 0 0;
+  padding: 14px;
+  list-style: none;
   display: grid;
-  place-items: center;
+  gap: 10px;
+  border-radius: var(--radius-sm);
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+}
+
+.package-includes li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+  font-size: 15px;
+  color: #111827;
+}
+
+.package-includes li::before {
+  content: '\F26B';
+  font-family: 'bootstrap-icons';
+  color: #9ca3af;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.package-actions {
+  margin-top: 2px;
+}
+
+.package-btn {
+  width: 100%;
+  min-height: 54px;
+  font-size: 26px;
+  font-weight: 700;
+  border-radius: 10px;
+}
+
+.package-note {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.45;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 12px;
 }
 
 .hero-badge {
@@ -2126,6 +2205,24 @@ table.admin-table tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
+  .package-card h3 {
+    font-size: 28px;
+  }
+
+  .package-price-main {
+    font-size: 40px;
+  }
+
+  .package-price-main span,
+  .package-price-main small {
+    font-size: 22px;
+  }
+
+  .package-btn {
+    font-size: 22px;
+    min-height: 50px;
+  }
+
   .info-cards {
     grid-template-columns: 1fr;
   }
@@ -2200,6 +2297,27 @@ table.admin-table tbody tr:hover {
 
   .package-card {
     padding: 24px;
+  }
+
+  .package-card.is-featured {
+    padding-top: 52px;
+  }
+
+  .package-card h3 {
+    font-size: 24px;
+  }
+
+  .package-price-main {
+    font-size: 34px;
+  }
+
+  .package-price-main span,
+  .package-price-main small {
+    font-size: 18px;
+  }
+
+  .package-btn {
+    font-size: 18px;
   }
 }
 
