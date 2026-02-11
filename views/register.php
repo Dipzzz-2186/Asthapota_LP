@@ -163,6 +163,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       font-family: "Segoe UI", Tahoma, sans-serif;
       background: url('/assets/img/wallpaper1.jpg') center/cover no-repeat fixed;
       overflow-x: hidden;
+      opacity: 0;
+      transform: translateY(14px) scale(0.99);
+      filter: blur(8px);
+      transition: opacity 0.55s ease, transform 0.55s ease, filter 0.55s ease;
+    }
+
+    body.page-ready {
+      opacity: 1;
+      transform: none;
+      filter: none;
+    }
+
+    body.page-leaving {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.99);
+      filter: blur(8px);
+      pointer-events: none;
+      transition: opacity 0.28s ease, transform 0.28s ease, filter 0.28s ease;
     }
 
     .landing {
@@ -321,6 +339,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .actions .btn,
       .modal-card .btn { width: 100%; }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+      body,
+      body.page-ready,
+      body.page-leaving {
+        opacity: 1;
+        transform: none;
+        filter: none;
+        transition: none;
+      }
+    }
   </style>
 </head>
 <body>
@@ -409,6 +438,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <script>
     (function () {
+      var body = document.body;
+      var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (body && !reduceMotion) {
+        requestAnimationFrame(function () {
+          body.classList.add('page-ready');
+        });
+      } else if (body) {
+        body.classList.add('page-ready');
+      }
+
+      function canAnimateLink(a) {
+        if (!a) return false;
+        var href = a.getAttribute('href') || '';
+        if (!href || href.charAt(0) === '#') return false;
+        if (href.indexOf('javascript:') === 0 || href.indexOf('mailto:') === 0 || href.indexOf('tel:') === 0) return false;
+        if (a.target && a.target !== '_self') return false;
+        try {
+          var next = new URL(a.href, window.location.href);
+          return next.origin === window.location.origin;
+        } catch (err) {
+          return false;
+        }
+      }
+
+      document.querySelectorAll('a[href]').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          if (reduceMotion || !body || !canAnimateLink(a) || e.defaultPrevented) return;
+          e.preventDefault();
+          if (body.classList.contains('page-leaving')) return;
+          body.classList.add('page-leaving');
+          window.setTimeout(function () {
+            window.location.href = a.href;
+          }, 260);
+        });
+      });
+
       var timer = document.getElementById('otpTimer');
       if (timer) {
         var exp = parseInt(timer.dataset.exp || '0', 10) * 1000;
