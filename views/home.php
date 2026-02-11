@@ -304,6 +304,10 @@ $isAdmin = is_admin_logged_in();
     }
 
     .hero-join {
+      --mx: 50%;
+      --my: 50%;
+      --tilt-x: 0deg;
+      --tilt-y: 0deg;
       margin-top: 8px;
       display: inline-flex;
       align-items: center;
@@ -320,16 +324,78 @@ $isAdmin = is_admin_logged_in();
       letter-spacing: 1px;
       text-transform: uppercase;
       cursor: pointer;
-      transition: transform 0.15s ease, background 0.2s ease;
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+      box-shadow: 0 0 0 rgba(141, 199, 255, 0.35);
+      animation: join-pulse 2.8s ease-in-out infinite;
+      transform: perspective(720px) translateY(0) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+      transition: transform 0.16s ease, background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .hero-join::before {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border-radius: inherit;
+      background: linear-gradient(110deg, rgba(255, 255, 255, 0) 24%, rgba(255, 255, 255, 0.42) 48%, rgba(255, 255, 255, 0) 74%);
+      transform: translateX(-130%) skewX(-16deg);
+      animation: join-sheen 3.6s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .hero-join::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      background: radial-gradient(160px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 62%);
+      transition: opacity 0.2s ease;
+    }
+
+    .hero-join > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-join i {
+      transition: transform 0.2s ease;
     }
 
     .hero-join:hover {
-      transform: translateY(-2px);
+      transform: perspective(720px) translateY(-3px) scale(1.02) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
       background: rgba(11, 45, 97, 0.55);
+      border-color: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 10px 24px rgba(9, 28, 57, 0.42);
+    }
+
+    .hero-join:hover::after {
+      opacity: 1;
+    }
+
+    .hero-join:hover i {
+      animation: join-icon-bob 0.9s ease-in-out infinite;
     }
 
     .hero-join:active {
-      transform: translateY(0);
+      transform: perspective(720px) translateY(-1px) scale(0.995) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+    }
+
+    .join-ripple {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.55;
+      transform: translate(-50%, -50%) scale(0);
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.34) 52%, rgba(255, 255, 255, 0) 100%);
+      animation: join-ripple 620ms ease-out forwards;
     }
 
     .support h2 {
@@ -436,6 +502,33 @@ $isAdmin = is_admin_logged_in();
       to { transform: translateX(-50%); }
     }
 
+    @keyframes join-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(141, 199, 255, 0.12); }
+      50% { box-shadow: 0 0 0 9px rgba(141, 199, 255, 0.03); }
+    }
+
+    @keyframes join-sheen {
+      0%, 42% { transform: translateX(-130%) skewX(-16deg); opacity: 0; }
+      52% { opacity: 1; }
+      72%, 100% { transform: translateX(130%) skewX(-16deg); opacity: 0; }
+    }
+
+    @keyframes join-icon-bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(2px); }
+    }
+
+    @keyframes join-ripple {
+      from {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0.58;
+      }
+      to {
+        transform: translate(-50%, -50%) scale(14);
+        opacity: 0;
+      }
+    }
+
     @keyframes intro-glow {
       0% {
         opacity: 0;
@@ -499,6 +592,12 @@ $isAdmin = is_admin_logged_in();
 
     @media (prefers-reduced-motion: reduce) {
       .sponsor-track { animation: none; }
+      .hero-join,
+      .hero-join::before,
+      .hero-join::after,
+      .hero-join:hover i {
+        animation: none;
+      }
       html, body { scroll-snap-type: none; }
       body::before,
       body::after {
@@ -705,7 +804,42 @@ $isAdmin = is_admin_logged_in();
       var registerPanel = document.getElementById('registerPanel');
 
       if (ikutBtn && registerPanel) {
+        if (!reduceMotion && window.matchMedia('(pointer:fine)').matches) {
+          ikutBtn.addEventListener('pointermove', function (event) {
+            var rect = ikutBtn.getBoundingClientRect();
+            var x = event.clientX - rect.left;
+            var y = event.clientY - rect.top;
+            var px = Math.max(0, Math.min(100, (x / rect.width) * 100));
+            var py = Math.max(0, Math.min(100, (y / rect.height) * 100));
+            var tiltX = ((py - 50) / 50) * -3.5;
+            var tiltY = ((px - 50) / 50) * 3.5;
+
+            ikutBtn.style.setProperty('--mx', px.toFixed(2) + '%');
+            ikutBtn.style.setProperty('--my', py.toFixed(2) + '%');
+            ikutBtn.style.setProperty('--tilt-x', tiltX.toFixed(2) + 'deg');
+            ikutBtn.style.setProperty('--tilt-y', tiltY.toFixed(2) + 'deg');
+          });
+
+          ikutBtn.addEventListener('pointerleave', function () {
+            ikutBtn.style.setProperty('--mx', '50%');
+            ikutBtn.style.setProperty('--my', '50%');
+            ikutBtn.style.setProperty('--tilt-x', '0deg');
+            ikutBtn.style.setProperty('--tilt-y', '0deg');
+          });
+        }
+
         ikutBtn.addEventListener('click', function () {
+          if (!reduceMotion) {
+            var rect = ikutBtn.getBoundingClientRect();
+            var ripple = document.createElement('span');
+            ripple.className = 'join-ripple';
+            ripple.style.left = (rect.width / 2) + 'px';
+            ripple.style.top = (rect.height / 2) + 'px';
+            ikutBtn.appendChild(ripple);
+            ripple.addEventListener('animationend', function () {
+              ripple.remove();
+            });
+          }
           registerPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       }
