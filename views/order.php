@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       font-family: var(--font-body);
       font-weight: 500;
       letter-spacing: 0.2px;
-      background: url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
+      background: url('/assets/img/wallpaper2.jpg') center/cover no-repeat fixed;
       overflow-x: hidden;
       opacity: 0;
       transform: translateY(14px) scale(0.99);
