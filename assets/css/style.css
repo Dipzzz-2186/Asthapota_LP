@@ -1729,6 +1729,9 @@ table.admin-table tbody tr:hover {
   box-shadow: var(--shadow);
   max-width: min(92vw, 900px);
   width: 100%;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -1784,12 +1787,18 @@ table.admin-table tbody tr:hover {
   align-items: center;
   justify-content: center;
   background: #0f172a;
+  height: clamp(240px, 62vh, 700px);
+  min-height: 220px;
   overflow: hidden;
 }
 
 .proof-body img {
-  max-width: 100%;
-  max-height: 70vh;
+  display: block;
+  width: 100%;
+  height: 100% !important;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
   border-radius: 10px;
   background: #fff;
   transform-origin: center center;
