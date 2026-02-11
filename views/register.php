@@ -2,10 +2,8 @@
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
-require_once __DIR__ . '/layout/app.php';
 ensure_session();
 
-$isAdmin = is_admin_logged_in();
 if (!empty($_GET['cancel_otp']) && $_GET['cancel_otp'] === '1') {
     unset($_SESSION['reg_pending']);
     redirect('/register');
@@ -98,87 +96,252 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
-render_header([
-    'title' => 'Register - Asthapora',
-    'isAdmin' => $isAdmin,
-]);
 ?>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Register - Temu Padel 2026</title>
+  <style>
+    :root {
+      --blue: #1658ad;
+      --white: #f6f7fb;
+      --soft: rgba(10, 30, 66, 0.56);
+      --line: rgba(255, 255, 255, 0.34);
+    }
 
-  <section class="hero-section">
-    <div class="container hero-grid">
-      <div class="hero-card fade-up">
-        <div class="pill"><i class="bi bi-person-plus"></i> Registration</div>
-        <h1>Register Yourself</h1>
-        <p>Fill in your details to continue. After registration you can select your preferred packages.</p>
-        <div class="hero-meta">
-          <div class="meta-card">
-            <strong><i class="bi bi-check-circle"></i> Required</strong>
-            Full name, phone number, and email.
-          </div>
-          <div class="meta-card">
-            <strong><i class="bi bi-instagram"></i> Optional</strong>
-            Instagram handle for updates.
-          </div>
-          <div class="meta-card">
-            <strong><i class="bi bi-shield-check"></i> Secure</strong>
-            We keep your data private.
-          </div>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      color: var(--white);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: url('/assets/img/wallpaper1.jpg') center/cover no-repeat fixed;
+      overflow-x: hidden;
+    }
+
+    .landing {
+      min-height: 100vh;
+      width: min(980px, 92vw);
+      margin: 0 auto;
+      padding: 42px 0 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #registerPanel {
+      width: min(640px, 100%);
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.42);
+      border-radius: 20px;
+      backdrop-filter: blur(5px);
+      padding: clamp(20px, 2.6vw, 34px);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      font-size: clamp(26px, 3vw, 38px);
+    }
+
+    .alert {
+      margin: 0 0 14px;
+      background: rgba(255, 120, 120, 0.18);
+      border: 1px solid rgba(255, 180, 180, 0.55);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+
+    .form {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    input {
+      width: 100%;
+      height: 44px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      padding: 0 12px;
+      font-size: 15px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #1f2d40;
+    }
+
+    .input-prefix {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .input-prefix span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      font-weight: 700;
+    }
+
+    .actions {
+      margin-top: 6px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      text-decoration: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 18px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn.primary {
+      background: #fff;
+      color: var(--blue);
+    }
+
+    .btn.ghost {
+      background: rgba(255, 255, 255, 0.16);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.45);
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.62);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 30;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .modal-card {
+      width: min(460px, 100%);
+      background: rgba(7, 22, 45, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 14px;
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .modal-title {
+      font-size: 22px;
+      font-weight: 800;
+    }
+
+    .help-text {
+      font-size: 13px;
+      opacity: 0.9;
+    }
+
+    .icon-btn {
+      text-decoration: none;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.42);
+      border-radius: 999px;
+      padding: 6px 11px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 640px) {
+      .landing { width: 94vw; }
+      #registerPanel { padding: 18px; }
+      .actions .btn,
+      .modal-card .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="landing">
+    <section id="registerPanel">
+      <h1>Register Yourself</h1>
+
+      <?php if (!empty($_GET['notice']) && $_GET['notice'] === 'register_required'): ?>
+        <div class="alert">Please register first to continue to package selection.</div>
+      <?php endif; ?>
+
+      <?php if ($errors): ?>
+        <div class="alert">
+          <?php foreach ($errors as $e): ?>
+            <div><?= h($e) ?></div>
+          <?php endforeach; ?>
         </div>
-      </div>
+      <?php endif; ?>
 
-      <div class="form-wrap fade-up delay-1">
-        <div class="section-title">Registration Form</div>
+      <form class="form" method="post" action="" id="registerForm">
+        <input type="hidden" name="step" value="send_otp">
 
-        <?php if (!empty($_GET['notice']) && $_GET['notice'] === 'register_required'): ?>
-          <div class="alert">Please register first to continue to package selection.</div>
-        <?php endif; ?>
+        <label>
+          Full Name*
+          <input type="text" name="full_name" required>
+        </label>
 
-        <?php if ($errors): ?>
-          <div class="alert">
-            <?php foreach ($errors as $e): ?>
-              <div><?= h($e) ?></div>
-            <?php endforeach; ?>
+        <label>
+          Phone Number*
+          <input type="text" name="phone" required>
+        </label>
+
+        <label>
+          E-mail*
+          <input type="email" name="email" required>
+        </label>
+
+        <label>
+          Instagram
+          <div class="input-prefix">
+            <span>@</span>
+            <input type="text" name="instagram" id="instagramInput" placeholder="username" autocomplete="off">
           </div>
-        <?php endif; ?>
+        </label>
 
-        <form class="form" method="post" action="" id="registerForm">
-          <input type="hidden" name="step" value="send_otp">
-          <label>
-            Full Name*
-            <input type="text" name="full_name" required>
-          </label>
-          <label>
-            Phone Number*
-            <input type="text" name="phone" required>
-          </label>
-          <label>
-            E-mail*
-            <input type="email" name="email" required>
-          </label>
-          <label>
-            Instagram
-            <div class="input-prefix">
-              <span>@</span>
-              <input type="text" name="instagram" id="instagramInput" placeholder="username" autocomplete="off">
-            </div>
-          </label>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;">
-            <button class="btn primary" type="submit">Continue <i class="bi bi-arrow-right"></i></button>
-            <a class="btn ghost" href="/">Cancel</a>
-          </div>
-        </form>
-      </div>
-    </div>
-  </section>
+        <div class="actions">
+          <button class="btn primary" type="submit">Continue</button>
+          <a class="btn ghost" href="/">Back to Home</a>
+        </div>
+      </form>
+    </section>
+  </main>
 
   <div class="modal <?= $pending ? 'show' : '' ?>" id="otpModal">
     <div class="modal-card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <div class="modal-title">Verifikasi OTP</div>
-        <a class="icon-btn" href="/register?cancel_otp=1" aria-label="Close"><i class="bi bi-x"></i></a>
+        <div class="modal-title">OTP Verification</div>
+        <a class="icon-btn" href="/register?cancel_otp=1" aria-label="Close">Close</a>
       </div>
-      <div class="help-text">Masukkan kode OTP yang dikirim ke email: <?= $pending ? h($pending['email']) : '-' ?></div>
+      <div class="help-text">Enter OTP sent to email: <?= $pending ? h($pending['email']) : '-' ?></div>
 
       <?php if ($otp_errors): ?>
         <div class="alert">
@@ -191,55 +354,52 @@ render_header([
       <form class="form" method="post" action="" id="otpVerifyForm">
         <input type="hidden" name="step" value="verify_otp">
         <label>
-          Kode OTP*
+          OTP Code*
           <input type="text" name="otp" inputmode="numeric" required>
         </label>
-        <div class="help-text" id="otpTimer" data-exp="<?= $pending ? (int)$pending['otp_expires'] : 0 ?>">Berlaku 10 menit.</div>
-        <div class="modal-actions">
-          <button class="btn primary" type="submit">Verifikasi <i class="bi bi-check2-circle"></i></button>
-        </div>
+        <div class="help-text" id="otpTimer" data-exp="<?= $pending ? (int)$pending['otp_expires'] : 0 ?>">Valid for 10 minutes.</div>
+        <button class="btn primary" type="submit">Verify</button>
       </form>
 
       <form method="post" action="">
         <input type="hidden" name="step" value="resend_otp">
-        <button class="btn ghost" type="submit">Kirim Ulang</button>
+        <button class="btn ghost" type="submit">Resend OTP</button>
       </form>
     </div>
   </div>
 
   <script>
-    (function(){
-      var modal = document.getElementById('otpModal');
-      if (!modal) return;
+    (function () {
       var timer = document.getElementById('otpTimer');
-      if (!timer) return;
-      var exp = parseInt(timer.dataset.exp || '0', 10) * 1000;
-      if (!exp) return;
-      var tick = function(){
-        var now = Date.now();
-        var diff = Math.max(0, exp - now);
-        var mins = Math.floor(diff / 60000);
-        var secs = Math.floor((diff % 60000) / 1000);
-        timer.textContent = diff > 0 ? ('Sisa waktu: ' + mins + 'm ' + (secs < 10 ? '0' : '') + secs + 's') : 'OTP expired. Silakan kirim ulang.';
-      };
-      tick();
-      setInterval(tick, 1000);
-    })();
-  </script>
-  <script>
-    (function() {
-      var form = document.getElementById('registerForm');
-      var input = document.getElementById('instagramInput');
-      if (!form || !input) return;
-
-      function normalize() {
-        var val = (input.value || '').trim();
-        input.value = val.replace(/^@+/, '');
+      if (timer) {
+        var exp = parseInt(timer.dataset.exp || '0', 10) * 1000;
+        if (exp) {
+          var tick = function () {
+            var now = Date.now();
+            var diff = Math.max(0, exp - now);
+            var mins = Math.floor(diff / 60000);
+            var secs = Math.floor((diff % 60000) / 1000);
+            timer.textContent = diff > 0
+              ? ('Time left: ' + mins + 'm ' + (secs < 10 ? '0' : '') + secs + 's')
+              : 'OTP expired. Please resend OTP.';
+          };
+          tick();
+          setInterval(tick, 1000);
+        }
       }
 
-      input.addEventListener('blur', normalize);
-      form.addEventListener('submit', normalize);
+      var form = document.getElementById('registerForm');
+      var input = document.getElementById('instagramInput');
+      if (form && input) {
+        var normalize = function () {
+          var val = (input.value || '').trim();
+          input.value = val.replace(/^@+/, '');
+        };
+
+        input.addEventListener('blur', normalize);
+        form.addEventListener('submit', normalize);
+      }
     })();
   </script>
-
-<?php render_footer(); ?>
+</body>
+</html>

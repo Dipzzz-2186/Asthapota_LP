@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../app/auth.php';
 ensure_session();
 
@@ -387,7 +387,7 @@ $isAdmin = is_admin_logged_in();
       <?php if ($isAdmin): ?>
         <a class="cta" href="/admin/dashboard">Go To Admin Dashboard</a>
       <?php else: ?>
-        <a class="cta" href="/register">Click Here To Register</a>
+        <a class="cta" href="/packages">Click Here To See Packages</a>
       <?php endif; ?>
     </section>
   </main>
