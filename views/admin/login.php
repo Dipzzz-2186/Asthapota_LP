@@ -1,6 +1,7 @@
 ﻿<?php
 require_once __DIR__ . '/../../app/db.php';
 require_once __DIR__ . '/../../app/helpers.php';
+require_once __DIR__ . '/../layout/app.php';
 ensure_session();
 
 $errors = [];
@@ -20,35 +21,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/admin/dashboard');
     }
 }
+render_header([
+    'title' => 'Admin Login',
+    'isAdmin' => true,
+    'showNav' => false,
+    'showAdminLogout' => false,
+    'brandSubtitle' => 'Admin Access',
+]);
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin Login</title>
-  <link rel="stylesheet" href="/assets/css/style.css">
-</head>
-<body class="page">
-  <header class="page-header">
-    <div class="container">
-      <div class="topbar">
-        <div class="brand">
-          <img class="brand-badge" src="/assets/img/lopad.jpg" alt="Lopad logo">
-          <div>
-            <div>Asthapora</div>
-            <small style="color:var(--muted);">Admin Access</small>
-          </div>
-        </div>
-        <div class="topbar-actions">
-          <a class="btn ghost" href="/"><i class="bi bi-arrow-left"></i> Back</a>
-        </div>
-      </div>
-    </div>
-  </header>
 
   <section class="section admin-hero">
-    <div class="container admin-wrap">
+    <div class="container admin-wrap admin-container-wide">
       <div class="admin-card fade-up">
         <div class="pill"><i class="bi bi-shield-lock"></i> Admin Portal</div>
         <h1 class="admin-title">Sign in to continue</h1>
@@ -81,10 +64,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <input type="password" name="password" required>
           </label>
           <button class="btn primary" type="submit">Login</button>
+          <a class="btn ghost" href="/"><i class="bi bi-arrow-left"></i> Back to Home</a>
         </form>
       </div>
     </div>
   </section>
-</body>
-</html>
+<?php render_footer(['isAdmin' => true]); ?>
 

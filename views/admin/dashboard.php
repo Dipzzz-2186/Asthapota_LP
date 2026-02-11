@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../app/db.php';
 require_once __DIR__ . '/../../app/helpers.php';
 require_once __DIR__ . '/../../app/auth.php';
+require_once __DIR__ . '/../layout/app.php';
 require_admin();
 
 $db = get_db();
@@ -79,36 +80,16 @@ foreach ($orders as $o) {
         $pendingOrders++;
     }
 }
+render_header([
+    'title' => 'Admin Dashboard - Asthapora',
+    'isAdmin' => true,
+    'showNav' => false,
+    'brandSubtitle' => 'Dashboard Control Center',
+]);
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin Dashboard - Asthapora</title>
-  <link rel="stylesheet" href="/assets/css/style.css">
-</head>
-<body class="page">
-  <header class="page-header">
-    <div class="container">
-      <div class="topbar">
-        <div class="brand">
-          <img class="brand-badge" src="/assets/img/lopad.jpg" alt="Lopad logo">
-          <div>
-            <div>Asthapora</div>
-            <small style="color:var(--muted);">Admin Dashboard</small>
-          </div>
-        </div>
-        <div class="topbar-actions">
-          <a class="btn ghost" href="/"><i class="bi bi-house"></i> Home</a>
-          <a class="btn primary" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
-        </div>
-      </div>
-    </div>
-  </header>
 
   <main class="admin-shell">
-    <div class="container">
+    <div class="container admin-container-wide">
       <!-- Header Section -->
       <div class="admin-header spaced">
         <div>
@@ -179,14 +160,13 @@ foreach ($orders as $o) {
               <th><i class="bi bi-cash"></i> Total</th>
               <th><i class="bi bi-activity"></i> Status</th>
               <th><i class="bi bi-image"></i> Proof</th>
-              // (KHOLIS)
               <th><i class="bi bi-gear"></i> Action</th>  
               <th><i class="bi bi-calendar"></i> Created</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!$orders): ?>
-              <tr><td colspan="8" class="table-empty">
+              <tr><td colspan="9" class="table-empty">
                 <div class="empty-state">
                   <i class="bi bi-inbox"></i>
                   No orders yet
@@ -231,7 +211,6 @@ foreach ($orders as $o) {
                     <span class="muted">-</span>
                   <?php endif; ?>
                 </td>
-                // (KHOLIS)
                 <td>
                   <?php
                   // Buttons enabled only for paid orders with proof
@@ -576,5 +555,4 @@ foreach ($orders as $o) {
       });
     })();
   </script>
-</body>
-</html>
+<?php render_footer(['isAdmin' => true]); ?>

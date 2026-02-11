@@ -5,9 +5,30 @@ if (!function_exists('render_navbar')) {
     function render_navbar(array $opts = []): void {
         $isAdmin = $opts['isAdmin'] ?? false;
         $showNav = $opts['showNav'] ?? true;
+        $showAdminLogout = $opts['showAdminLogout'] ?? true;
         $brandSubtitle = $opts['brandSubtitle'] ?? 'A Monkeybar x BAPORA Event';
         $brandSubtitle = htmlspecialchars($brandSubtitle, ENT_QUOTES, 'UTF-8');
         ?>
+  <?php if ($isAdmin): ?>
+  <header class="page-header admin-header-shell">
+    <div class="container admin-container-wide">
+      <div class="topbar admin-topbar">
+        <div class="brand">
+          <img class="brand-badge" src="/assets/img/lopad.jpg" alt="Lopad logo">
+          <div>
+            <div>Asthapora Admin</div>
+            <small style="color:var(--muted);"><?= $brandSubtitle ?></small>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <?php if ($showAdminLogout): ?>
+          <a class="btn primary" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </header>
+  <?php else: ?>
   <header class="page-header">
     <div class="container">
       <div class="topbar">
@@ -40,6 +61,7 @@ if (!function_exists('render_navbar')) {
       </div>
     </div>
   </header>
+  <?php endif; ?>
 <?php
     }
 }
@@ -48,6 +70,8 @@ if (!function_exists('render_header')) {
     function render_header(array $opts = []): void {
         $title = $opts['title'] ?? 'Asthapora';
         $extraHead = $opts['extraHead'] ?? '';
+        $isAdmin = $opts['isAdmin'] ?? false;
+        $bodyClass = $isAdmin ? 'page admin-page' : 'page';
         $safeTitle = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
         ?>
 <!doctype html>
@@ -59,14 +83,39 @@ if (!function_exists('render_header')) {
   <link rel="stylesheet" href="/assets/css/style.css">
   <?= $extraHead ?>
 </head>
-<body class="page">
+<body class="<?= htmlspecialchars($bodyClass, ENT_QUOTES, 'UTF-8') ?>">
 <?php render_navbar($opts); ?>
 <?php
     }
 }
 
 if (!function_exists('render_footer')) {
-    function render_footer(): void {
+    function render_footer(array $opts = []): void {
+        $isAdmin = $opts['isAdmin'] ?? false;
+        if ($isAdmin) {
+            ?>
+  <script>
+    (function() {
+      function isTypingTarget(target) {
+        if (!target) return false;
+        var tag = (target.tagName || '').toLowerCase();
+        return tag === 'input' || tag === 'textarea' || target.isContentEditable;
+      }
+
+      document.addEventListener('keydown', function(e) {
+        if (isTypingTarget(e.target)) return;
+        if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'a' || e.key === 'A')) {
+          e.preventDefault();
+          window.location.href = '/admin/login';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
+<?php
+            return;
+        }
         ?>
   <footer class="site-footer">
     <div class="container">
