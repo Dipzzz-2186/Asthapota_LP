@@ -156,7 +156,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       --font-accent: "Playfair Display", Georgia, serif;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    *::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
+    }
 
     html, body {
       margin: 0;

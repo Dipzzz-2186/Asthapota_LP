@@ -24,12 +24,24 @@ $isAdmin = is_admin_logged_in();
       --font-accent: "Playfair Display", Georgia, serif;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    *::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
+    }
 
     html, body {
       margin: 0;
       min-height: 100%;
-      scroll-behavior: smooth;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
     }
 
     body {
@@ -37,18 +49,74 @@ $isAdmin = is_admin_logged_in();
       font-family: var(--font-body);
       font-weight: 500;
       letter-spacing: 0.2px;
-      background: #0b2d61;
+      background: url('/assets/img/wallpaper.avif') center top / cover no-repeat fixed;
+      position: relative;
       overflow-x: hidden;
+      opacity: 0;
+      transform: translateY(14px) scale(0.99);
+      filter: blur(8px);
+      transition: opacity 0.55s ease, transform 0.55s ease, filter 0.55s ease;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: -12vh -8vw;
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+      transform: scale(1.03);
+    }
+
+    body::before {
+      background:
+        radial-gradient(58% 54% at 50% 42%, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0) 72%),
+        radial-gradient(36% 34% at 18% 82%, rgba(23, 126, 255, 0.22), rgba(23, 126, 255, 0) 70%),
+        radial-gradient(34% 32% at 82% 18%, rgba(255, 193, 77, 0.2), rgba(255, 193, 77, 0) 72%);
+      filter: blur(10px);
+    }
+
+    body::after {
+      background: linear-gradient(110deg, rgba(255, 255, 255, 0) 20%, rgba(255, 255, 255, 0.45) 48%, rgba(255, 255, 255, 0) 72%);
+      transform: translateX(-45%) skewX(-16deg);
+    }
+
+    body.page-ready::before {
+      animation: intro-glow 1.05s ease-out both;
+    }
+
+    body.page-ready::after {
+      animation: intro-sweep 1.1s ease-out 0.08s both;
+    }
+
+    body.page-ready {
+      opacity: 1;
+      transform: none;
+      filter: none;
+    }
+
+    body.page-leaving {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.99);
+      filter: blur(8px);
+      pointer-events: none;
+      transition: opacity 0.28s ease, transform 0.28s ease, filter 0.28s ease;
     }
 
     .landing {
+      height: 100svh;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
       scroll-snap-type: y mandatory;
       background: url('/assets/img/wallpaper.avif') center top / cover no-repeat;
       background-attachment: scroll;
     }
 
     .panel {
-      min-height: 100vh;
+      min-height: 100svh;
       width: min(1100px, 92vw);
       margin: 0 auto;
       display: flex;
@@ -60,6 +128,28 @@ $isAdmin = is_admin_logged_in();
       scroll-snap-align: start;
       padding: 48px 0;
     }
+
+    .hero > * {
+      opacity: 0;
+      transform: translateY(26px) scale(0.98);
+      filter: blur(5px);
+      transition: opacity 0.62s cubic-bezier(.2,.7,.2,1), transform 0.62s cubic-bezier(.2,.7,.2,1), filter 0.62s ease;
+      will-change: opacity, transform, filter;
+    }
+
+    body.page-ready .hero > * {
+      opacity: 1;
+      transform: none;
+      filter: none;
+    }
+
+    body.page-ready .hero > :nth-child(1) { transition-delay: 90ms; }
+    body.page-ready .hero > :nth-child(2) { transition-delay: 180ms; }
+    body.page-ready .hero > :nth-child(3) { transition-delay: 270ms; }
+    body.page-ready .hero > :nth-child(4) { transition-delay: 360ms; }
+    body.page-ready .hero > :nth-child(5) { transition-delay: 450ms; }
+    body.page-ready .hero > :nth-child(6) { transition-delay: 540ms; }
+    body.page-ready .hero > :nth-child(7) { transition-delay: 630ms; }
 
     .hero-logo {
       width: 74px;
@@ -341,6 +431,34 @@ $isAdmin = is_admin_logged_in();
       to { transform: translateX(-50%); }
     }
 
+    @keyframes intro-glow {
+      0% {
+        opacity: 0;
+        transform: scale(1.06);
+      }
+      22% {
+        opacity: 0.92;
+      }
+      100% {
+        opacity: 0;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes intro-sweep {
+      0% {
+        opacity: 0;
+        transform: translateX(-56%) skewX(-16deg);
+      }
+      14% {
+        opacity: 0.52;
+      }
+      100% {
+        opacity: 0;
+        transform: translateX(58%) skewX(-16deg);
+      }
+    }
+
     .cta {
       margin-top: 10px;
       display: inline-flex;
@@ -377,6 +495,24 @@ $isAdmin = is_admin_logged_in();
     @media (prefers-reduced-motion: reduce) {
       .sponsor-track { animation: none; }
       .landing { scroll-snap-type: none; }
+      body::before,
+      body::after {
+        display: none;
+      }
+      .hero > * {
+        opacity: 1;
+        transform: none;
+        filter: none;
+        transition: none;
+      }
+      body,
+      body.page-ready,
+      body.page-leaving {
+        opacity: 1;
+        transform: none;
+        filter: none;
+        transition: none;
+      }
     }
 
     @media (max-width: 860px) {
@@ -499,6 +635,42 @@ $isAdmin = is_admin_logged_in();
 
   <script>
     (function () {
+      var body = document.body;
+      var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (body && !reduceMotion) {
+        requestAnimationFrame(function () {
+          body.classList.add('page-ready');
+        });
+      } else if (body) {
+        body.classList.add('page-ready');
+      }
+
+      function canAnimateLink(a) {
+        if (!a) return false;
+        var href = a.getAttribute('href') || '';
+        if (!href || href.charAt(0) === '#') return false;
+        if (href.indexOf('javascript:') === 0 || href.indexOf('mailto:') === 0 || href.indexOf('tel:') === 0) return false;
+        if (a.target && a.target !== '_self') return false;
+        try {
+          var next = new URL(a.href, window.location.href);
+          return next.origin === window.location.origin;
+        } catch (err) {
+          return false;
+        }
+      }
+
+      document.querySelectorAll('a[href]').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          if (reduceMotion || !body || !canAnimateLink(a) || e.defaultPrevented) return;
+          e.preventDefault();
+          if (body.classList.contains('page-leaving')) return;
+          body.classList.add('page-leaving');
+          window.setTimeout(function () {
+            window.location.href = a.href;
+          }, 260);
+        });
+      });
+
       var ikutBtn = document.getElementById('ikutYukBtn');
       var registerPanel = document.getElementById('registerPanel');
 
