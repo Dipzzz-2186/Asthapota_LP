@@ -589,23 +589,6 @@ $isAdmin = is_admin_logged_in();
       }
     }
 
-    @keyframes cta-flow {
-      0%, 100% { --cta-flow: 0%; }
-      50% { --cta-flow: 100%; }
-    }
-
-    @keyframes cta-sheen {
-      0%, 42% { transform: translateX(-130%) skewX(-18deg); opacity: 0; }
-      52% { opacity: 1; }
-      76%, 100% { transform: translateX(130%) skewX(-18deg); opacity: 0; }
-    }
-
-    @keyframes cta-icon-pop {
-      0%, 100% { transform: translateY(0) scale(1); }
-      45% { transform: translateY(-1px) scale(1.09); }
-      70% { transform: translateY(1px) scale(1.03); }
-    }
-
     @keyframes focus-ring-pulse {
       0% {
         box-shadow: 0 0 0 0 rgba(137, 201, 255, 0);
@@ -675,7 +658,10 @@ $isAdmin = is_admin_logged_in();
     }
 
     .cta {
-      --cta-flow: 0%;
+      --mx: 50%;
+      --my: 50%;
+      --tilt-x: 0deg;
+      --tilt-y: 0deg;
       margin-top: 10px;
       display: inline-flex;
       align-items: center;
@@ -693,16 +679,16 @@ $isAdmin = is_admin_logged_in();
       letter-spacing: 1.4px;
       text-transform: uppercase;
       border-radius: 999px;
-      border: 4px solid #07162d;
-      box-shadow: 10px 10px 0 var(--shadow);
+      border: 2px solid rgba(255, 255, 255, 0.72);
+      background: rgba(11, 45, 97, 0.35);
+      color: #fff;
+      box-shadow: 0 0 0 rgba(141, 199, 255, 0.35);
       position: relative;
       overflow: hidden;
       isolation: isolate;
-      background: linear-gradient(115deg, #f7f8fc 0%, #f2f4fb 46%, #ffffff 52%, #edf2fd 78%, #f7f8fc 100%);
-      background-size: 210% 210%;
-      background-position: var(--cta-flow) 50%;
-      animation: cta-flow 6.2s ease-in-out infinite;
-      transition: transform 0.18s ease, box-shadow 0.18s ease, background-position 0.3s ease;
+      animation: join-pulse 2.8s ease-in-out infinite;
+      transform: perspective(720px) translateY(0) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+      transition: transform 0.16s ease, background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
 
     .cta::before {
@@ -710,11 +696,23 @@ $isAdmin = is_admin_logged_in();
       position: absolute;
       inset: 0;
       border-radius: inherit;
-      background: linear-gradient(112deg, rgba(255, 255, 255, 0) 28%, rgba(255, 255, 255, 0.62) 50%, rgba(255, 255, 255, 0) 72%);
-      transform: translateX(-130%) skewX(-18deg);
-      animation: cta-sheen 3.8s ease-in-out infinite;
+      background: linear-gradient(110deg, rgba(255, 255, 255, 0) 24%, rgba(255, 255, 255, 0.42) 48%, rgba(255, 255, 255, 0) 74%);
+      transform: translateX(-130%) skewX(-16deg);
+      animation: join-sheen 3.6s ease-in-out infinite;
       pointer-events: none;
       z-index: 0;
+    }
+
+    .cta::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      background: radial-gradient(160px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 62%);
+      transition: opacity 0.2s ease;
     }
 
     .cta > * {
@@ -727,18 +725,22 @@ $isAdmin = is_admin_logged_in();
     }
 
     .cta:hover {
-      transform: translate(3px, 3px) scale(1.01);
-      box-shadow: 6px 6px 0 var(--shadow);
-      --cta-flow: 90%;
+      transform: perspective(720px) translateY(-3px) scale(1.02) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+      background: rgba(11, 45, 97, 0.55);
+      border-color: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 10px 24px rgba(9, 28, 57, 0.42);
+    }
+
+    .cta:hover::after {
+      opacity: 1;
     }
 
     .cta:hover i {
-      animation: cta-icon-pop 0.8s ease-in-out infinite;
+      animation: join-icon-bob 0.9s ease-in-out infinite;
     }
 
     .cta:active {
-      transform: translate(4px, 4px);
-      box-shadow: 5px 5px 0 var(--shadow);
+      transform: perspective(720px) translateY(-1px) scale(0.995) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
     }
 
     .hero-join:focus-visible,
@@ -753,7 +755,7 @@ $isAdmin = is_admin_logged_in();
     }
 
     .cta:focus-visible {
-      box-shadow: 10px 10px 0 var(--shadow), 0 0 0 2px rgba(9, 26, 53, 0.92), 0 0 0 7px rgba(137, 201, 255, 0.95);
+      box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.92), 0 0 0 7px rgba(137, 201, 255, 0.95), 0 10px 24px rgba(9, 28, 57, 0.42);
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -764,6 +766,7 @@ $isAdmin = is_admin_logged_in();
       .hero-join:hover i,
       .cta,
       .cta::before,
+      .cta::after,
       .cta:hover i {
         animation: none;
       }
@@ -986,6 +989,7 @@ $isAdmin = is_admin_logged_in();
 
       var ikutBtn = document.getElementById('ikutYukBtn');
       var registerPanel = document.getElementById('registerPanel');
+      var ctaBtn = document.querySelector('.cta');
 
       if (ikutBtn && registerPanel) {
         if (!reduceMotion && window.matchMedia('(pointer:fine)').matches) {
@@ -1025,6 +1029,46 @@ $isAdmin = is_admin_logged_in();
             });
           }
           registerPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
+
+      if (ctaBtn) {
+        if (!reduceMotion && window.matchMedia('(pointer:fine)').matches) {
+          ctaBtn.addEventListener('pointermove', function (event) {
+            var rect = ctaBtn.getBoundingClientRect();
+            var x = event.clientX - rect.left;
+            var y = event.clientY - rect.top;
+            var px = Math.max(0, Math.min(100, (x / rect.width) * 100));
+            var py = Math.max(0, Math.min(100, (y / rect.height) * 100));
+            var tiltX = ((py - 50) / 50) * -3.5;
+            var tiltY = ((px - 50) / 50) * 3.5;
+
+            ctaBtn.style.setProperty('--mx', px.toFixed(2) + '%');
+            ctaBtn.style.setProperty('--my', py.toFixed(2) + '%');
+            ctaBtn.style.setProperty('--tilt-x', tiltX.toFixed(2) + 'deg');
+            ctaBtn.style.setProperty('--tilt-y', tiltY.toFixed(2) + 'deg');
+          });
+
+          ctaBtn.addEventListener('pointerleave', function () {
+            ctaBtn.style.setProperty('--mx', '50%');
+            ctaBtn.style.setProperty('--my', '50%');
+            ctaBtn.style.setProperty('--tilt-x', '0deg');
+            ctaBtn.style.setProperty('--tilt-y', '0deg');
+          });
+        }
+
+        ctaBtn.addEventListener('click', function () {
+          if (!reduceMotion) {
+            var rect = ctaBtn.getBoundingClientRect();
+            var ripple = document.createElement('span');
+            ripple.className = 'join-ripple';
+            ripple.style.left = (rect.width / 2) + 'px';
+            ripple.style.top = (rect.height / 2) + 'px';
+            ctaBtn.appendChild(ripple);
+            ripple.addEventListener('animationend', function () {
+              ripple.remove();
+            });
+          }
         });
       }
 
