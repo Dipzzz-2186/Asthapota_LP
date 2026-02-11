@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="brand">
           <img class="brand-badge" src="/assets/img/lopad.jpg" alt="Lopad logo">
           <div>
-            <div>Temu Padel</div>
+            <div>Asthapora</div>
             <small style="color:var(--muted);">Admin Access</small>
           </div>
         </div>

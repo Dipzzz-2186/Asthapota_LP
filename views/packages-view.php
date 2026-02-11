@@ -11,7 +11,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
 ?>
 <?php
 render_header([
-  'title' => 'Packages - Temu Padel',
+  'title' => 'Packages - Asthapora',
   'isAdmin' => $isAdmin,
 ]);
 ?>

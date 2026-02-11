@@ -99,7 +99,7 @@ if (!function_exists('render_footer')) {
         </div>
       </div>
       <div class="footer-bottom">
-        <div>Â© 2026 Temu Padel. All rights reserved.</div>
+        <div>©2026 Asthapora. All rights reserved.</div>
         <div class="footer-social">
           <a href="#"><i class="bi bi-instagram"></i></a>
           <a href="#"><i class="bi bi-facebook"></i></a>
