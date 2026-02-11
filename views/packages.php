@@ -366,7 +366,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
   <main class="landing">
     <section id="packagePanel">
-      <h1><i class="bi bi-box2-heart"></i> Select Your Package</h1>
+      <h1><i class="bi bi-box-seam"></i> Select Your Package</h1>
 
       <?php if ($errors): ?>
         <div class="alert">

@@ -12,6 +12,7 @@ $isAdmin = is_admin_logged_in();
   <title>Temu Padel 2026</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
+    @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
 
     :root {
       --blue: #1658ad;
@@ -66,6 +67,12 @@ $isAdmin = is_admin_logged_in();
       border-radius: 14px;
       object-fit: cover;
       box-shadow: 0 8px 25px var(--soft-shadow);
+      transition: transform 0.18s ease, box-shadow 0.2s ease;
+    }
+
+    .hero-logo:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
     }
 
     .welcome {
@@ -100,7 +107,9 @@ $isAdmin = is_admin_logged_in();
 
     .date-box {
       margin-top: 18px;
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
       background: #fff;
       color: var(--blue);
       padding: 14px 28px;
@@ -111,6 +120,16 @@ $isAdmin = is_admin_logged_in();
       letter-spacing: 1.7px;
       text-transform: uppercase;
       box-shadow: 0 8px 24px var(--soft-shadow);
+      transition: transform 0.16s ease, box-shadow 0.2s ease;
+    }
+
+    .date-box:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+    }
+
+    .date-box i {
+      font-size: 0.72em;
     }
 
     .date-box sup {
@@ -150,6 +169,13 @@ $isAdmin = is_admin_logged_in();
       border-radius: 12px;
       padding: 10px 8px;
       backdrop-filter: blur(3px);
+      transition: transform 0.16s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .count-item:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.65);
+      background: rgba(255, 255, 255, 0.24);
     }
 
     .count-value {
@@ -184,6 +210,7 @@ $isAdmin = is_admin_logged_in();
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 8px;
       padding: 12px 26px;
       border-radius: 999px;
       border: 2px solid rgba(255, 255, 255, 0.72);
@@ -214,6 +241,9 @@ $isAdmin = is_admin_logged_in();
       font-weight: 700;
       letter-spacing: 0.5px;
       text-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
     }
 
     .sponsor-strip {
@@ -263,6 +293,13 @@ $isAdmin = is_admin_logged_in();
       align-items: center;
       justify-content: center;
       padding: 8px 12px;
+      border-radius: 12px;
+      transition: transform 0.16s ease, background 0.2s ease;
+    }
+
+    .sponsor:hover {
+      transform: translateY(-3px);
+      background: rgba(255, 255, 255, 0.08);
     }
 
     .sponsor img {
@@ -273,6 +310,12 @@ $isAdmin = is_admin_logged_in();
       filter: brightness(0) saturate(100%) invert(100%);
       user-select: none;
       pointer-events: none;
+      transition: transform 0.16s ease, filter 0.2s ease;
+    }
+
+    .sponsor:hover img {
+      transform: scale(1.03);
+      filter: brightness(0) saturate(100%) invert(100%) drop-shadow(0 5px 10px rgba(0, 0, 0, 0.24));
     }
 
     @keyframes sponsor-scroll {
@@ -285,6 +328,7 @@ $isAdmin = is_admin_logged_in();
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 10px;
       min-width: min(560px, 90vw);
       padding: 16px 34px;
       text-decoration: none;
@@ -382,11 +426,11 @@ $isAdmin = is_admin_logged_in();
       <img class="hero-logo" src="/assets/img/lopad.jpg" alt="Astaphora logo">
       <p class="welcome">Welcome</p>
       <h1 class="title">TEMU PADEL</h1>
-      <p class="subtitle">A Monkeybar x BAPORA Event</p>
-      <div class="date-box">FEBRUARY 28<sup>TH</sup>, 2026 | 4 PM - 6 PM</div>
+      <p class="subtitle"><i class="bi bi-stars"></i> A Monkeybar x BAPORA Event</p>
+      <div class="date-box"><i class="bi bi-calendar-event"></i> FEBRUARY 28<sup>TH</sup>, 2026 | 4 PM - 6 PM</div>
 
       <div class="countdown-wrap" aria-live="polite">
-        <p class="countdown-label">Countdown To Event Start</p>
+        <p class="countdown-label"><i class="bi bi-hourglass-split"></i> Countdown To Event Start</p>
         <div class="countdown" id="eventCountdown">
           <div class="count-item">
             <div class="count-value" data-unit="days">00</div>
@@ -408,11 +452,11 @@ $isAdmin = is_admin_logged_in();
         <p class="count-status" id="countdownStatus"></p>
       </div>
 
-      <button type="button" class="hero-join" id="ikutYukBtn">Join Us</button>
+      <button type="button" class="hero-join" id="ikutYukBtn"><i class="bi bi-arrow-down-circle"></i> Join Us</button>
     </section>
 
     <section class="panel support" id="registerPanel">
-      <h2>Supported By</h2>
+      <h2><i class="bi bi-patch-check"></i> Supported By</h2>
       <div class="sponsor-strip" aria-label="Supported by logos marquee">
         <div class="sponsor-track">
           <div class="sponsor"><img src="/assets/img/hippi.png" alt="HIPPI"></div>
@@ -428,9 +472,9 @@ $isAdmin = is_admin_logged_in();
       </div>
 
       <?php if ($isAdmin): ?>
-        <a class="cta" href="/admin/dashboard">Go To Admin Dashboard</a>
+        <a class="cta" href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Go To Admin Dashboard</a>
       <?php else: ?>
-        <a class="cta" href="/packages">Click Here To See Packages</a>
+        <a class="cta" href="/packages"><i class="bi bi-box-seam"></i> Click Here To See Packages</a>
       <?php endif; ?>
     </section>
   </main>
