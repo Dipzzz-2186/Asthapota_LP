@@ -299,6 +299,12 @@ $isAdmin = is_admin_logged_in();
       font-weight: 400;
       line-height: 1;
       letter-spacing: 1.1px;
+      transform-origin: 50% 50%;
+      backface-visibility: hidden;
+    }
+
+    .count-value.flip {
+      animation: countdown-flip 340ms cubic-bezier(.2,.7,.2,1);
     }
 
     .count-unit {
@@ -560,6 +566,21 @@ $isAdmin = is_admin_logged_in();
       }
     }
 
+    @keyframes countdown-flip {
+      0% {
+        opacity: 0.26;
+        transform: translateY(-10px) scale(0.92) rotateX(-48deg);
+      }
+      62% {
+        opacity: 1;
+        transform: translateY(2px) scale(1.04) rotateX(6deg);
+      }
+      100% {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
     @keyframes cta-flow {
       0%, 100% { --cta-flow: 0%; }
       50% { --cta-flow: 100%; }
@@ -717,6 +738,9 @@ $isAdmin = is_admin_logged_in();
       .countdown-wrap.start-burst::after {
         animation: none;
         opacity: 0;
+      }
+      .count-value.flip {
+        animation: none;
       }
       html, body { scroll-snap-type: none; }
       body::before,
@@ -983,6 +1007,18 @@ $isAdmin = is_admin_logged_in();
         return String(value).padStart(2, '0');
       }
 
+      function setValueAnimated(el, value) {
+        var nextValue = pad(value);
+        if (el.textContent === nextValue) return;
+
+        el.textContent = nextValue;
+        if (reduceMotion) return;
+
+        el.classList.remove('flip');
+        void el.offsetWidth;
+        el.classList.add('flip');
+      }
+
       function setCountdown(ms) {
         var totalSeconds = Math.max(0, Math.floor(ms / 1000));
         var days = Math.floor(totalSeconds / 86400);
@@ -990,10 +1026,10 @@ $isAdmin = is_admin_logged_in();
         var minutes = Math.floor((totalSeconds % 3600) / 60);
         var seconds = totalSeconds % 60;
 
-        daysEl.textContent = pad(days);
-        hoursEl.textContent = pad(hours);
-        minutesEl.textContent = pad(minutes);
-        secondsEl.textContent = pad(seconds);
+        setValueAnimated(daysEl, days);
+        setValueAnimated(hoursEl, hours);
+        setValueAnimated(minutesEl, minutes);
+        setValueAnimated(secondsEl, seconds);
       }
 
       function tick() {
