@@ -170,17 +170,25 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
         </div>
       </div>
       <div class="hero-media fade-up delay-1">
-        <div class="media-main">
-          <div class="pill" style="background:rgba(255,255,255,0.2);color:#fff;"><i class="bi bi-play-circle"></i> Pause Slide</div>
+        <div class="media-main" id="heroSliderMain">
+          <div class="pill" style="background:rgba(255,255,255,0.2);color:#fff;"><i class="bi bi-images"></i> Event Gallery</div>
           <div>
-            <h3>Dublin-Style Race Vibe</h3>
-            <span>Dynamic, friendly competition and curated social moments.</span>
+            <h3 id="heroSliderTitle">Temu Padel Moments</h3>
+            <span id="heroSliderCaption">Geser foto dengan tombol panah untuk lihat suasana event.</span>
           </div>
         </div>
-        <div class="media-dots">
-          <span class="active"></span>
-          <span></span>
-          <span></span>
+        <div class="media-slider-controls">
+          <button class="media-arrow" type="button" id="heroPrev" aria-label="Slide sebelumnya">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+          <div class="media-dots" id="heroDots">
+            <span class="active"></span>
+            <span></span>
+            <span></span>
+          </div>
+          <button class="media-arrow" type="button" id="heroNext" aria-label="Slide selanjutnya">
+            <i class="bi bi-chevron-right"></i>
+          </button>
         </div>
       </div>
     </div>
@@ -295,7 +303,9 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
         </div>
       </div>
       <div class="card">
-        <div class="news-thumb" style="border-radius:16px;background-image:url('https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1200&q=80');height:220px;"></div>
+        <div class="news-thumb news-thumb-photo">
+          <img src="/assets/img/orpadel1.jpg" alt="Community highlights photo">
+        </div>
         <div style="margin-top:14px;color:var(--muted);">Community highlights from our latest gathering.</div>
       </div>
     </div>
@@ -515,6 +525,67 @@ document.addEventListener('DOMContentLoaded', function() {
       window.location.href = '/admin/login';
     }
   });
+
+  // Hero image slider (manual: tombol kiri/kanan + dots)
+  (function () {
+    const slides = [
+      {
+        image: '/assets/img/orpadel1.jpg',
+        title: 'Temu Padel Moments',
+        caption: 'Geser foto dengan tombol panah untuk lihat suasana event.'
+      },
+      {
+        image: '/assets/img/orpadel2.jpg',
+        title: 'Friendly Match Energy',
+        caption: 'Kompetisi santai, networking, dan pengalaman komunitas yang seru.'
+      },
+      {
+        image: '/assets/img/orpadel3.jpg',
+        title: 'Community & Social Vibes',
+        caption: 'Setiap slide menangkap momen terbaik dari rangkaian acara.'
+      }
+    ];
+
+    const mediaMain = document.getElementById('heroSliderMain');
+    const title = document.getElementById('heroSliderTitle');
+    const caption = document.getElementById('heroSliderCaption');
+    const prevBtn = document.getElementById('heroPrev');
+    const nextBtn = document.getElementById('heroNext');
+    const dots = document.querySelectorAll('#heroDots span');
+
+    if (!mediaMain || !title || !caption || !prevBtn || !nextBtn || dots.length !== slides.length) {
+      return;
+    }
+
+    let currentIndex = 0;
+
+    function renderSlide(index) {
+      const slide = slides[index];
+      mediaMain.style.backgroundImage = `linear-gradient(130deg, rgba(33, 40, 84, 0.58), rgba(33, 40, 84, 0.05)), url('${slide.image}')`;
+      mediaMain.style.backgroundSize = 'cover';
+      mediaMain.style.backgroundPosition = 'center';
+      title.textContent = slide.title;
+      caption.textContent = slide.caption;
+
+      dots.forEach((dot, i) => {
+        dot.classList.toggle('active', i === index);
+      });
+    }
+
+    function goToSlide(index) {
+      currentIndex = (index + slides.length) % slides.length;
+      renderSlide(currentIndex);
+    }
+
+    prevBtn.addEventListener('click', () => goToSlide(currentIndex - 1));
+    nextBtn.addEventListener('click', () => goToSlide(currentIndex + 1));
+
+    dots.forEach((dot, index) => {
+      dot.addEventListener('click', () => goToSlide(index));
+    });
+
+    renderSlide(currentIndex);
+  })();
 });
 </script>
 <?php render_footer(); ?>

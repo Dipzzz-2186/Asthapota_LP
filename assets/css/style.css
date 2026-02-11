@@ -290,6 +290,32 @@ a {
   justify-content: center;
 }
 
+.media-slider-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.media-arrow {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: var(--surface-2);
+  color: var(--primary);
+  display: inline-grid;
+  place-items: center;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.media-arrow:hover {
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+
 .media-dots span {
   width: 9px; /* Sedikit lebih besar */
   height: 9px; /* Sedikit lebih besar */
@@ -449,8 +475,21 @@ a {
 
 .news-thumb {
   height: 160px; /* Sedikit lebih besar */
-  background-size: cover;
+  background-size: contain;
   background-position: center;
+  background-repeat: no-repeat;
+}
+
+.news-thumb.news-thumb-photo {
+  height: auto;
+  background: none;
+}
+
+.news-thumb.news-thumb-photo img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 16px;
 }
 
 .news-body {
@@ -1090,6 +1129,16 @@ a {
   
   .logo-chip.dark img {
     max-height: 55px; /* Sedikit lebih besar */
+  }
+
+  .media-slider-controls {
+    gap: 10px;
+  }
+
+  .media-arrow {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
   }
 
   .footer-grid {
