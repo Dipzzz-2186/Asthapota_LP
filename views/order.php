@@ -76,30 +76,166 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Order Details - Asthapora</title>
   <link rel="stylesheet" href="/assets/css/style.css">
-</head>
-<body class="page">
-<?php render_navbar(['isAdmin' => $isAdmin]); ?>
+  <style>
+    body.page.order-page {
+      background: linear-gradient(rgba(8, 16, 36, 0.72), rgba(8, 16, 36, 0.72)), url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
+      color: #eef4ff;
+    }
 
-  <section class="section">
-    <div class="container grid-2">
-      <div class="order-summary fade-up">
+    .order-page::before,
+    .order-page::after {
+      display: none;
+    }
+
+    .order-page .page-header {
+      background: rgba(8, 16, 36, 0.8);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .order-page .brand,
+    .order-page .nav a,
+    .order-page .topbar-actions a {
+      color: #eef4ff;
+    }
+
+    .order-page .nav a:hover,
+    .order-page .nav a.active {
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+    }
+
+    .order-full {
+      min-height: calc(100vh - 92px);
+      padding: clamp(20px, 3vw, 40px);
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 22px;
+    }
+
+    .order-panel {
+      background: rgba(8, 16, 36, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 22px;
+      padding: clamp(20px, 2.4vw, 34px);
+      backdrop-filter: blur(8px);
+    }
+
+    .order-page .section-title {
+      margin-bottom: 16px;
+      color: #fff;
+      font-size: clamp(24px, 2.8vw, 36px);
+    }
+
+    .order-meta {
+      display: grid;
+      gap: 10px;
+      color: #d6e3ff;
+      line-height: 1.55;
+    }
+
+    .order-list {
+      margin-top: 14px;
+      display: grid;
+      gap: 8px;
+      color: #f7faff;
+    }
+
+    .total {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.25);
+      font-weight: 800;
+      font-size: clamp(24px, 2.6vw, 34px);
+      color: #fff;
+    }
+
+    .order-page .card.soft {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #eef4ff;
+    }
+
+    .order-page .upload-box {
+      border: 2px dashed rgba(255, 255, 255, 0.45);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 16px;
+    }
+
+    .order-page .upload-box input[type="file"] {
+      width: 100%;
+      color: #fff;
+    }
+
+    .order-page .upload-box input[type="file"]::file-selector-button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-right: 10px;
+      background: #fff;
+      color: #0b2d61;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .order-page .btn.primary {
+      background: #ffffff;
+      color: #0b2d61;
+      box-shadow: none;
+    }
+
+    .order-page .btn.primary::before {
+      display: none;
+    }
+
+    .order-page .btn.primary:hover {
+      background: #dbe9ff;
+      transform: translateY(-1px);
+      box-shadow: none;
+    }
+
+    .order-page .alert {
+      background: rgba(255, 99, 99, 0.2);
+      border-color: rgba(255, 140, 140, 0.45);
+      color: #ffe7e7;
+    }
+
+    @media (max-width: 960px) {
+      .order-full {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body class="page order-page">
+
+  <main class="order-full">
+      <section class="order-panel order-summary fade-up">
         <div class="section-title">Order Details</div>
-        <div><strong>Full Name</strong> : <?= h($order['full_name']) ?></div>
-        <div><strong>Phone Number</strong> : <?= h($order['phone']) ?></div>
-        <div><strong>E-mail</strong> : <?= h($order['email']) ?></div>
-        <div><strong>Instagram</strong> : <?= $instagramLabel ? h($instagramLabel) : '-' ?></div>
-        <div style="margin-top:12px;"><strong>Order</strong></div>
+        <div class="order-meta">
+          <div><strong>Full Name</strong> : <?= h($order['full_name']) ?></div>
+          <div><strong>Phone Number</strong> : <?= h($order['phone']) ?></div>
+          <div><strong>E-mail</strong> : <?= h($order['email']) ?></div>
+          <div><strong>Instagram</strong> : <?= $instagramLabel ? h($instagramLabel) : '-' ?></div>
+        </div>
+        <div style="margin-top:16px;"><strong>Order</strong></div>
+        <div class="order-list">
         <?php foreach ($items as $it): ?>
           <div><?= (int)$it['qty'] ?> x <?= h($it['name']) ?> @ <?= h(rupiah((int)$it['price'])) ?></div>
         <?php endforeach; ?>
+        </div>
 
         <div class="total">
           <div>Total to Pay:</div>
           <div><?= h(rupiah((int)$order['total'])) ?>,-</div>
         </div>
-      </div>
+      </section>
 
-      <div class="form-wrap fade-up delay-1">
+      <section class="order-panel form-wrap fade-up delay-1">
         <div class="section-title">Payment Info</div>
         <div class="card soft" style="margin-bottom:16px;">
           <div><strong>Payment to BCA Account</strong></div>
@@ -125,9 +261,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button class="btn primary" type="submit">Upload Proof <i class="bi bi-upload"></i></button>
           </div>
         </form>
-      </div>
-    </div>
-  </section>
+      </section>
+  </main>
 </body>
 </html>
 
