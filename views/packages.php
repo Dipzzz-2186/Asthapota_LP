@@ -255,10 +255,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
     }
 
-    .qty button:hover {
+    .qty button:hover:not(:disabled) {
       transform: translateY(-1px);
       background: rgba(18, 66, 137, 0.9);
       border-color: rgba(255, 255, 255, 0.55);
+    }
+
+    .qty button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
     }
 
     .actions {
@@ -476,10 +482,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       document.querySelectorAll('.qty').forEach(function(group){
         var input = group.querySelector('input');
+        var minusBtn = group.querySelector('[data-action="minus"]');
+
+        function getSafeValue() {
+          return Math.max(0, parseInt(input && input.value ? input.value : '0', 10) || 0);
+        }
+
+        function syncMinusState() {
+          if (!input || !minusBtn) return;
+          var value = getSafeValue();
+          input.value = value;
+          minusBtn.disabled = value <= 0;
+        }
+
+        syncMinusState();
+
+        if (input) {
+          input.addEventListener('input', syncMinusState);
+          input.addEventListener('change', syncMinusState);
+        }
+
         group.addEventListener('click', function(e){
           var trigger = e.target.closest('[data-action]');
           var action = trigger ? trigger.dataset.action : '';
           if (action !== 'plus' && action !== 'minus') return;
+          if (trigger && trigger.disabled) return;
 
           if (!canOrder) {
             if (authModal) authModal.classList.add('show');
@@ -494,6 +521,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             var v = Math.max(0, parseInt(input.value || '0', 10) - 1);
             input.value = v;
           }
+          syncMinusState();
         });
       });
 
