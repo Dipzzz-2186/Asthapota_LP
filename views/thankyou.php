@@ -1,10 +1,7 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
-require_once __DIR__ . '/layout/app.php';
 ensure_session();
-
-$isAdmin = is_admin_logged_in();
 ?>
 <!doctype html>
 <html lang="en">
@@ -14,50 +11,35 @@ $isAdmin = is_admin_logged_in();
   <title>Thank You - Asthapora</title>
   <link rel="stylesheet" href="/assets/css/style.css">
   <style>
-    body.page.thankyou-page {
-      background: linear-gradient(rgba(7, 15, 34, 0.74), rgba(7, 15, 34, 0.74)), url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
+    body {
+      margin: 0;
+      min-height: 100%;
       color: #eef4ff;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
+      overflow-x: hidden;
     }
 
-    .thankyou-page::before,
-    .thankyou-page::after {
-      display: none;
-    }
-
-    .thankyou-page .page-header {
-      background: rgba(7, 15, 34, 0.82);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .thankyou-page .brand,
-    .thankyou-page .nav a,
-    .thankyou-page .topbar-actions a {
-      color: #eef4ff;
-    }
-
-    .thankyou-page .nav a:hover,
-    .thankyou-page .nav a.active {
-      background: rgba(255, 255, 255, 0.14);
-      color: #fff;
-    }
-
-    .thankyou-full {
-      min-height: calc(100vh - 92px);
+    .thankyou-shell {
+      min-height: 100vh;
+      width: min(1260px, 95vw);
+      margin: 0 auto;
+      padding: 42px 0 56px;
       display: grid;
       place-items: center;
-      padding: clamp(20px, 4vw, 48px);
     }
 
     .thankyou-card {
       width: min(760px, 100%);
-      background: rgba(8, 16, 36, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(23, 45, 79, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.4);
       border-radius: 24px;
       padding: clamp(24px, 3.2vw, 40px);
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(7px);
       display: grid;
       gap: 16px;
       text-align: center;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
     }
 
     .thankyou-title {
@@ -73,21 +55,21 @@ $isAdmin = is_admin_logged_in();
       font-size: 17px;
     }
 
-    .thankyou-page .pill {
+    .pill {
       margin: 0 auto;
-      background: rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.16);
       color: #fff;
-      border-color: rgba(255, 255, 255, 0.24);
+      border-color: rgba(255, 255, 255, 0.34);
       animation: none;
     }
 
-    .thankyou-page .pill i {
+    .pill i {
       animation: none;
     }
 
     .venue-card {
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.24);
+      background: rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.3);
       border-radius: 16px;
       padding: 18px;
       color: #eef4ff;
@@ -101,9 +83,8 @@ $isAdmin = is_admin_logged_in();
     }
   </style>
 </head>
-<body class="page thankyou-page">
-
-  <main class="thankyou-full">
+<body>
+  <main class="thankyou-shell">
     <section class="thankyou-card fade-up">
       <div class="pill"><i class="bi bi-check-circle"></i> Registration Complete</div>
       <div class="thankyou-title">Thank You for Registering</div>
@@ -119,4 +100,3 @@ $isAdmin = is_admin_logged_in();
   </main>
 </body>
 </html>
-

@@ -3,10 +3,8 @@ require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/config.php';
 require_once __DIR__ . '/../app/auth.php';
-require_once __DIR__ . '/layout/app.php';
 ensure_session();
 
-$isAdmin = is_admin_logged_in();
 if (empty($_SESSION['user_id'])) {
     redirect('/register?notice=register_required');
 }
@@ -77,50 +75,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title>Order Details - Asthapora</title>
   <link rel="stylesheet" href="/assets/css/style.css">
   <style>
-    body.page.order-page {
-      background: linear-gradient(rgba(8, 16, 36, 0.72), rgba(8, 16, 36, 0.72)), url('/assets/img/wallpaper3.jpg') center/cover no-repeat fixed;
+    body {
+      margin: 0;
+      min-height: 100%;
       color: #eef4ff;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
+      overflow-x: hidden;
     }
 
-    .order-page::before,
-    .order-page::after {
-      display: none;
-    }
-
-    .order-page .page-header {
-      background: rgba(8, 16, 36, 0.8);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .order-page .brand,
-    .order-page .nav a,
-    .order-page .topbar-actions a {
-      color: #eef4ff;
-    }
-
-    .order-page .nav a:hover,
-    .order-page .nav a.active {
-      background: rgba(255, 255, 255, 0.14);
-      color: #fff;
+    .order-shell {
+      min-height: 100vh;
+      width: min(1260px, 95vw);
+      margin: 0 auto;
+      padding: 42px 0 56px;
+      display: flex;
+      align-items: center;
     }
 
     .order-full {
-      min-height: calc(100vh - 92px);
-      padding: clamp(20px, 3vw, 40px);
+      width: 100%;
+      padding: clamp(24px, 3.1vw, 42px);
       display: grid;
       grid-template-columns: 1.1fr 0.9fr;
       gap: 22px;
+      background: rgba(23, 45, 79, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 20px;
+      backdrop-filter: blur(7px);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
     }
 
     .order-panel {
-      background: rgba(8, 16, 36, 0.78);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 22px;
+      background: rgba(25, 52, 91, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.42);
+      border-radius: 16px;
       padding: clamp(20px, 2.4vw, 34px);
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(3px);
     }
 
-    .order-page .section-title {
+    .section-title {
       margin-bottom: 16px;
       color: #fff;
       font-size: clamp(24px, 2.8vw, 36px);
@@ -153,25 +147,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       color: #fff;
     }
 
-    .order-page .card.soft {
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.25);
+    .payment-card {
+      background: rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 14px;
+      padding: 16px;
       color: #eef4ff;
     }
 
-    .order-page .upload-box {
+    .upload-box {
       border: 2px dashed rgba(255, 255, 255, 0.45);
       border-radius: 12px;
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.12);
       padding: 16px;
     }
 
-    .order-page .upload-box input[type="file"] {
+    .upload-box input[type="file"] {
       width: 100%;
       color: #fff;
     }
 
-    .order-page .upload-box input[type="file"]::file-selector-button {
+    .upload-box input[type="file"]::file-selector-button {
       border: 0;
       border-radius: 8px;
       padding: 10px 14px;
@@ -182,23 +178,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       cursor: pointer;
     }
 
-    .order-page .btn.primary {
+    .btn.primary {
       background: #ffffff;
       color: #0b2d61;
       box-shadow: none;
     }
 
-    .order-page .btn.primary::before {
+    .btn.primary::before {
       display: none;
     }
 
-    .order-page .btn.primary:hover {
+    .btn.primary:hover {
       background: #dbe9ff;
       transform: translateY(-1px);
       box-shadow: none;
     }
 
-    .order-page .alert {
+    .alert {
       background: rgba(255, 99, 99, 0.2);
       border-color: rgba(255, 140, 140, 0.45);
       color: #ffe7e7;
@@ -211,9 +207,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   </style>
 </head>
-<body class="page order-page">
-
-  <main class="order-full">
+<body>
+  <main class="order-shell">
+    <div class="order-full">
       <section class="order-panel order-summary fade-up">
         <div class="section-title">Order Details</div>
         <div class="order-meta">
@@ -237,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <section class="order-panel form-wrap fade-up delay-1">
         <div class="section-title">Payment Info</div>
-        <div class="card soft" style="margin-bottom:16px;">
+        <div class="payment-card" style="margin-bottom:16px;">
           <div><strong>Payment to BCA Account</strong></div>
           <div>Account Number: 1234567890</div>
           <div>Account Name: PT Manifestasi Kehidupan Berlimpah</div>
@@ -262,8 +258,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           </div>
         </form>
       </section>
+    </div>
   </main>
 </body>
 </html>
-
-

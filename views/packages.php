@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     .landing {
       min-height: 100vh;
-      width: min(1120px, 92vw);
+      width: min(1260px, 95vw);
       margin: 0 auto;
       padding: 42px 0 56px;
       display: flex;
@@ -88,11 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     #packagePanel {
       width: 100%;
-      background: rgba(255, 255, 255, 0.18);
-      border: 1px solid rgba(255, 255, 255, 0.48);
+      background: rgba(23, 45, 79, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.40);
       border-radius: 20px;
-      backdrop-filter: blur(5px);
-      padding: clamp(20px, 2.6vw, 34px);
+      backdrop-filter: blur(7px);
+      padding: clamp(24px, 3.1vw, 42px);
       box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
     }
 
@@ -112,23 +112,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     .package-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 18px;
     }
 
     .package-card {
-      background: rgba(255, 255, 255, 0.24);
-      border: 1px solid rgba(255, 255, 255, 0.58);
-      border-radius: 14px;
-      padding: 16px;
+      background: rgba(25, 52, 91, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.42);
+      border-radius: 16px;
+      padding: 20px;
       display: grid;
-      gap: 10px;
+      gap: 12px;
       backdrop-filter: blur(2px);
     }
 
     .package-card h3 {
       margin: 0;
-      font-size: 22px;
+      font-size: 26px;
     }
 
     .package-card ul {
@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     .price {
-      font-size: 24px;
+      font-size: 30px;
       font-weight: 800;
     }
 
@@ -183,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .actions {
       margin-top: 18px;
       display: flex;
-      gap: 10px;
+      gap: 12px;
       flex-wrap: wrap;
     }
 
