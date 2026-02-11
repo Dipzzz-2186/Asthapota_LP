@@ -7,6 +7,13 @@ require_admin();
 
 $db = get_db();
 $flash = ['success' => '', 'error' => ''];
+$selectedPackage = isset($_GET['package']) ? (int)$_GET['package'] : 0;
+
+ensure_session();
+if (!empty($_SESSION['dashboard_flash']) && is_array($_SESSION['dashboard_flash'])) {
+    $flash = array_merge($flash, $_SESSION['dashboard_flash']);
+    unset($_SESSION['dashboard_flash']);
+}
 
 // Accept/Reject order (admin action) (KHOLIS)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -44,10 +51,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 : 'Order status updated, but email failed to send.';
         }
     }
+
+    $_SESSION['dashboard_flash'] = $flash;
+    $redirectPath = '/admin/dashboard';
+    if ($selectedPackage > 0) {
+        $redirectPath .= '?package=' . $selectedPackage;
+    }
+    redirect($redirectPath);
 }
 
 $packages = $db->query("SELECT id, name FROM packages ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
-$selectedPackage = isset($_GET['package']) ? (int)$_GET['package'] : 0;
 
 $sql = "SELECT o.id, u.full_name, u.phone, u.email, u.instagram, o.total, o.status, o.payment_proof, o.created_at,
   (SELECT GROUP_CONCAT(CONCAT(p.name, ' x', oi.qty) SEPARATOR ', ') FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id) as items
