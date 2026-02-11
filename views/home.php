@@ -163,6 +163,10 @@ $isAdmin = is_admin_logged_in();
       gap: 10px;
     }
 
+    .countdown.is-hidden {
+      display: none;
+    }
+
     .count-item {
       background: rgba(255, 255, 255, 0.16);
       border: 1px solid rgba(255, 255, 255, 0.45);
@@ -203,6 +207,20 @@ $isAdmin = is_admin_logged_in();
       opacity: 0.95;
       min-height: 18px;
       font-weight: 600;
+    }
+
+    .count-status.live {
+      margin-top: 6px;
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      background: rgba(255, 255, 255, 0.2);
+      font-family: var(--font-display);
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      font-size: clamp(18px, 2.1vw, 28px);
+      line-height: 1.1;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
     }
 
     .hero-join {
@@ -430,7 +448,7 @@ $isAdmin = is_admin_logged_in();
       <div class="date-box"><i class="bi bi-calendar-event"></i> FEBRUARY 28<sup>TH</sup>, 2026 | 4 PM - 6 PM</div>
 
       <div class="countdown-wrap" aria-live="polite">
-        <p class="countdown-label"><i class="bi bi-hourglass-split"></i> Countdown To Event Start</p>
+        <p class="countdown-label" id="countdownLabel"><i class="bi bi-hourglass-split"></i> Countdown To Event Start</p>
         <div class="countdown" id="eventCountdown">
           <div class="count-item">
             <div class="count-value" data-unit="days">00</div>
@@ -497,9 +515,11 @@ $isAdmin = is_admin_logged_in();
       var hoursEl = document.querySelector('[data-unit="hours"]');
       var minutesEl = document.querySelector('[data-unit="minutes"]');
       var secondsEl = document.querySelector('[data-unit="seconds"]');
+      var labelEl = document.getElementById('countdownLabel');
+      var countdownEl = document.getElementById('eventCountdown');
       var statusEl = document.getElementById('countdownStatus');
 
-      if (!daysEl || !hoursEl || !minutesEl || !secondsEl || !statusEl) return;
+      if (!daysEl || !hoursEl || !minutesEl || !secondsEl || !statusEl || !labelEl || !countdownEl) return;
 
       function pad(value) {
         return String(value).padStart(2, '0');
@@ -523,16 +543,25 @@ $isAdmin = is_admin_logged_in();
 
         if (now >= targetStart && now < targetEnd) {
           setCountdown(0);
-          statusEl.textContent = 'Event is currently running (4 PM - 6 PM).';
+          labelEl.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Event Start';
+          countdownEl.classList.add('is-hidden');
+          statusEl.classList.add('live');
+          statusEl.textContent = 'Let\'s Play';
           return;
         }
 
         if (now >= targetEnd) {
           setCountdown(0);
+          labelEl.innerHTML = '<i class="bi bi-check2-circle"></i> Event Finished';
+          countdownEl.classList.add('is-hidden');
+          statusEl.classList.remove('live');
           statusEl.textContent = 'Event has ended. See you at the next Temu Padel.';
           return;
         }
 
+        labelEl.innerHTML = '<i class="bi bi-hourglass-split"></i> Countdown To Event Start';
+        countdownEl.classList.remove('is-hidden');
+        statusEl.classList.remove('live');
         setCountdown(targetStart - now);
         statusEl.textContent = '';
       }
