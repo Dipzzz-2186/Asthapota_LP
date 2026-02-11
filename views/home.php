@@ -368,29 +368,27 @@ $isAdmin = is_admin_logged_in();
       --my: 50%;
       --tilt-x: 0deg;
       --tilt-y: 0deg;
-      margin-top: 8px;
+
+      margin-top: 12px;
+
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      padding: 12px 26px;
+      gap: 12px;
+
+      padding: 18px 52px;   /* ← diperpanjang */
+      font-size: 22px;      /* ← dibesarkan */
+      font-weight: 900;     /* ← lebih tegas */
+
       border-radius: 999px;
       border: 2px solid rgba(255, 255, 255, 0.72);
       background: rgba(11, 45, 97, 0.35);
       color: #fff;
-      font-family: var(--font-body);
-      font-size: 18px;
-      font-weight: 800;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      cursor: pointer;
+      letter-spacing: 1.6px;
+      
       position: relative;
       overflow: hidden;
       isolation: isolate;
-      box-shadow: 0 0 0 rgba(141, 199, 255, 0.35);
-      animation: join-pulse 2.8s ease-in-out infinite;
-      transform: perspective(720px) translateY(0) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
-      transition: transform 0.16s ease, background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
 
     .hero-join::before {
@@ -905,6 +903,7 @@ $isAdmin = is_admin_logged_in();
     }
 
     @media (max-width: 560px) {
+
       .panel {
         width: 94vw;
       }
@@ -927,15 +926,39 @@ $isAdmin = is_admin_logged_in();
 
       .countdown {
         grid-template-columns: repeat(2, minmax(74px, 1fr));
-        width: min(320px, 100%);
+        width: 100%;
+      }
+
+      /* 🔥 JOIN US BUTTON - Dibuat jauh lebih besar */
+      .hero-join {
+        width: 100%;
+        padding: 18px 22px;
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: 1.5px;
+        border-width: 2px;
+      }
+
+      .hero-join i {
+        font-size: 22px;
+      }
+
+      /* 🔥 CTA BUTTON (See Packages / Admin) */
+      .cta {
+        width: 100%;
+        min-width: 100%;
+        padding: 18px 20px;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 1px;
+      }
+
+      .cta i {
+        font-size: 22px;
       }
 
       .sponsor {
-        min-width: 164px;
-      }
-
-      .cta {
-        min-width: 94vw;
+        min-width: 160px;
       }
     }
   </style>
