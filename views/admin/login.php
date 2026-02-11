@@ -28,54 +28,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin Login</title>
   <link rel="stylesheet" href="/assets/css/style.css">
-  <style>
-    .admin-hero {
-      padding: 40px 0 20px;
-    }
-    .admin-wrap {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      align-items: stretch;
-    }
-    .admin-card {
-      background: var(--surface);
-      border-radius: var(--radius-lg);
-      padding: 28px;
-      box-shadow: var(--shadow);
-      border: 1px solid var(--stroke);
-    }
-    .admin-title {
-      font-family: 'Fraunces', serif;
-      font-size: clamp(28px, 3vw, 36px);
-      margin: 0 0 12px;
-    }
-    .admin-sub {
-      color: var(--muted);
-      margin: 0 0 20px;
-      line-height: 1.6;
-    }
-    .admin-meta {
-      display: grid;
-      gap: 10px;
-      font-size: 14px;
-      color: var(--muted);
-    }
-    .admin-meta div {
-      background: var(--surface-2);
-      border-radius: var(--radius-sm);
-      padding: 12px;
-      border: 1px solid var(--stroke);
-    }
-    .admin-form .btn {
-      width: 100%;
-    }
-    @media (max-width: 960px) {
-      .admin-wrap {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
 </head>
 <body class="page">
   <header class="page-header">
@@ -84,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="brand">
           <img class="brand-badge" src="/assets/img/lopad.jpg" alt="Lopad logo">
           <div>
-            <div>Asthapora</div>
+            <div>Temu Padel</div>
             <small style="color:var(--muted);">Admin Access</small>
           </div>
         </div>

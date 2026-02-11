@@ -85,264 +85,8 @@ foreach ($orders as $o) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin Dashboard</title>
+  <title>Admin Dashboard - Asthapora</title>
   <link rel="stylesheet" href="/assets/css/style.css">
-  <style>
-    .admin-shell {
-      padding: 24px 0 40px;
-    }
-    .admin-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-    .admin-title {
-      font-family: 'Fraunces', serif;
-      font-size: clamp(26px, 3vw, 36px);
-      margin: 0;
-    }
-    .admin-sub {
-      color: var(--muted);
-      margin: 6px 0 0;
-      font-size: 14px;
-    }
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 16px;
-      margin: 20px 0 24px;
-    }
-    .stat-card {
-      background: var(--surface);
-      border-radius: var(--radius-md);
-      padding: 18px;
-      border: 1px solid var(--stroke);
-      box-shadow: var(--shadow);
-    }
-    .stat-label {
-      font-size: 12px;
-      letter-spacing: 0.4px;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 8px;
-    }
-    .stat-value {
-      font-size: 24px;
-      font-weight: 700;
-    }
-    .table-wrap {
-      background: var(--surface);
-      border-radius: var(--radius-lg);
-      padding: 10px;
-      border: 1px solid var(--stroke);
-      box-shadow: var(--shadow);
-      overflow: auto;
-    }
-    table.admin-table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 860px;
-    }
-    table.admin-table th,
-    table.admin-table td {
-      padding: 12px 14px;
-      text-align: left;
-      border-bottom: 1px solid var(--stroke);
-      vertical-align: top;
-      font-size: 14px;
-    }
-    table.admin-table th {
-      font-size: 12px;
-      letter-spacing: 0.4px;
-      text-transform: uppercase;
-      color: var(--muted);
-      background: var(--surface-2);
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      background: var(--surface-2);
-      color: var(--text);
-      border: 1px solid var(--stroke);
-    }
-    .badge.paid {
-      background: rgba(46, 184, 92, 0.12);
-      color: #1f7a3f;
-      border-color: rgba(46, 184, 92, 0.3);
-    }
-    .badge.accepted {
-      background: rgba(34, 197, 94, 0.12);
-      color: #15803d;
-      border-color: rgba(34, 197, 94, 0.3);
-    }
-    .badge.rejected {
-      background: rgba(239, 68, 68, 0.12);
-      color: #b91c1c;
-      border-color: rgba(239, 68, 68, 0.3);
-    }
-    .badge.pending {
-      background: rgba(255, 180, 0, 0.12);
-      color: #8a5a00;
-      border-color: rgba(255, 180, 0, 0.3);
-    }
-    .action-group {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .btn.small {
-      padding: 6px 10px;
-      font-size: 12px;
-    }
-    .muted {
-      color: var(--muted);
-      font-size: 13px;
-    }
-    .proof-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 13px;
-      color: var(--primary);
-      background: transparent;
-      border: 0;
-      padding: 0;
-      cursor: pointer;
-    }
-    .proof-modal {
-      position: fixed;
-      inset: 0;
-      background: rgba(11, 18, 32, 0.6);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      z-index: 1200;
-    }
-    .proof-modal.show {
-      display: flex;
-    }
-    .proof-card {
-      background: var(--surface);
-      border-radius: var(--radius-lg);
-      border: 1px solid var(--stroke);
-      box-shadow: var(--shadow);
-      max-width: min(92vw, 900px);
-      width: 100%;
-      overflow: hidden;
-    }
-    .proof-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--stroke);
-      background: var(--surface-2);
-    }
-    .proof-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .proof-btn {
-      border: 1px solid var(--stroke);
-      background: var(--surface);
-      color: var(--text);
-      border-radius: 8px;
-      padding: 6px 10px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .proof-btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-    .proof-title {
-      font-weight: 700;
-      font-size: 14px;
-    }
-    .proof-close {
-      border: 0;
-      background: transparent;
-      cursor: pointer;
-      font-size: 18px;
-      line-height: 1;
-      color: var(--text);
-      padding: 6px;
-    }
-    .proof-body {
-      padding: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #0f172a;
-      overflow: hidden;
-    }
-    .proof-body img {
-      max-width: 100%;
-      max-height: 70vh;
-      border-radius: 10px;
-      background: #fff;
-      transform-origin: center center;
-      transition: transform 0.15s ease;
-      cursor: zoom-in;
-      user-select: none;
-    }
-    .proof-body img.zoomed {
-      cursor: grab;
-    }
-    .proof-body img.dragging {
-      cursor: grabbing;
-    }
-    .confirm-text {
-      padding: 14px 16px 0;
-      color: var(--text);
-      font-weight: 600;
-    }
-    .confirm-sub {
-      padding: 0 16px 10px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-    .confirm-actions {
-      display: flex;
-      gap: 10px;
-      justify-content: flex-end;
-      padding: 12px 16px 16px;
-      border-top: 1px solid var(--stroke);
-      background: var(--surface);
-    }
-    .confirm-actions .btn {
-      padding: 10px 16px;
-      font-size: 13px;
-      border-radius: 10px;
-    }
-    @media (max-width: 1100px) {
-      .stat-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-    @media (max-width: 640px) {
-      .admin-header {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-      .stat-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
 </head>
 <body class="page">
   <header class="page-header">
@@ -365,35 +109,41 @@ foreach ($orders as $o) {
 
   <main class="admin-shell">
     <div class="container">
-      <div class="admin-header">
+      <!-- Header Section -->
+      <div class="admin-header spaced">
         <div>
           <h1 class="admin-title">Dashboard</h1>
-          <p class="admin-sub">Ringkasan pesanan dan status pembayaran.</p>
+          <p class="admin-sub">Ringkasan pesanan dan status pembayaran</p>
         </div>
       </div>
 
+      <!-- Statistics Cards -->
       <div class="stat-grid">
         <div class="stat-card">
-          <div class="stat-label">Total Orders</div>
+          <div class="stat-label"><i class="bi bi-basket"></i> Total Orders</div>
           <div class="stat-value"><?= (int)$totalOrders ?></div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Paid Orders</div>
+          <div class="stat-label"><i class="bi bi-check-circle"></i> Paid Orders</div>
           <div class="stat-value"><?= (int)$paidOrders ?></div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Pending Orders</div>
+          <div class="stat-label"><i class="bi bi-clock-history"></i> Pending Orders</div>
           <div class="stat-value"><?= (int)$pendingOrders ?></div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Total Revenue</div>
-          <div class="stat-value"><?= h(rupiah($totalRevenue)) ?></div>
+          <div class="stat-label"><i class="bi bi-cash-stack"></i> Total Revenue</div>
+          <div class="stat-value small"><?= h(rupiah($totalRevenue)) ?></div>
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
-        <form method="get" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-          <div style="font-weight:600;">Filter Package</div>
+      <!-- Filter Section -->
+      <div class="card filter-card">
+        <form method="get" class="filter-form">
+          <div class="filter-label">
+            <i class="bi bi-funnel"></i>
+            <div>Filter Package</div>
+          </div>
           <select name="package">
             <option value="0">All Packages</option>
             <?php foreach ($packages as $p): ?>
@@ -402,75 +152,87 @@ foreach ($orders as $o) {
               </option>
             <?php endforeach; ?>
           </select>
-          <button class="btn primary" type="submit">Apply</button>
+          <button class="btn primary" type="submit"><i class="bi bi-search"></i> Apply Filter</button>
           <?php if ($selectedPackage > 0): ?>
-            <a class="btn ghost" href="/admin/dashboard">Reset</a>
+            <a class="btn ghost" href="/admin/dashboard"><i class="bi bi-x-circle"></i> Reset</a>
           <?php endif; ?>
         </form>
       </div>
 
+      <!-- Flash Messages -->
       <?php if ($flash['error']): ?>
-        <div class="alert" style="margin-bottom:12px;"><?= h($flash['error']) ?></div>
+        <div class="alert mb-16"><?= h($flash['error']) ?></div>
       <?php endif; ?>
       <?php if ($flash['success']): ?>
-        <div class="card" style="margin-bottom:12px;padding:12px 14px;"><?= h($flash['success']) ?></div>
+        <div class="alert-success"><?= h($flash['success']) ?></div>
       <?php endif; ?>
 
+      <!-- Orders Table -->
       <div class="table-wrap">
         <table class="admin-table">
           <thead>
             <tr>
-              <th>Order ID</th>
-              <th>User</th>
-              <th>Contact</th>
-              <th>Packages</th>
-              <th>Total</th>
-              <th>Status</th>
-              <th>Proof</th>
-              <!-- <th>Action</th> (KHOLIS)--> 
-              <th>Created</th>
+              <th><i class="bi bi-hash"></i> Order ID</th>
+              <th><i class="bi bi-person"></i> User</th>
+              <th><i class="bi bi-telephone"></i> Contact</th>
+              <th><i class="bi bi-box"></i> Packages</th>
+              <th><i class="bi bi-cash"></i> Total</th>
+              <th><i class="bi bi-activity"></i> Status</th>
+              <th><i class="bi bi-image"></i> Proof</th>
+              // (KHOLIS)
+              <!-- <th><i class="bi bi-gear"></i> Action</th>   -->
+              <th><i class="bi bi-calendar"></i> Created</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!$orders): ?>
-              <tr><td colspan="9" class="muted">No orders yet.</td></tr>
+              <tr><td colspan="8" class="table-empty">
+                <div class="empty-state">
+                  <i class="bi bi-inbox"></i>
+                  No orders yet
+                </div>
+              </td></tr>
             <?php endif; ?>
             <?php foreach ($orders as $o): ?>
               <tr>
-                <td>#<?= (int)$o['id'] ?></td>
-                <td><?= h($o['full_name']) ?></td>
-                <td>
-                  <?= h($o['phone']) ?><br>
-                  <?= h($o['email']) ?><br>
-                  <?php
-                    $ig = trim((string)($o['instagram'] ?? ''));
-                    $ig = $ig !== '' ? '@' . ltrim($ig, '@') : '-';
-                  ?>
-                  <?= h($ig) ?>
+                <td><strong>#<?= (int)$o['id'] ?></strong></td>
+                <td><strong><?= h($o['full_name']) ?></strong></td>
+                <td class="admin-contact">
+                  <div class="admin-contact-line"><i class="bi bi-telephone"></i> <?= h($o['phone']) ?></div>
+                  <div class="admin-contact-line"><i class="bi bi-envelope"></i> <?= h($o['email']) ?></div>
+                  <div class="admin-contact-line">
+                    <i class="bi bi-instagram"></i>
+                    <?php
+                      $ig = trim((string)($o['instagram'] ?? ''));
+                      $ig = $ig !== '' ? '@' . ltrim($ig, '@') : '-';
+                    ?>
+                    <?= h($ig) ?>
+                  </div>
                 </td>
                 <td><?= h($o['items'] ?? '-') ?></td>
-                <td><?= h(rupiah((int)$o['total'])) ?></td>
+                <td><strong><?= h(rupiah((int)$o['total'])) ?></strong></td>
                 <td>
                   <?php if ($o['status'] === 'paid'): ?>
-                    <span class="badge paid">Paid</span>
+                    <span class="badge paid"><i class="bi bi-check-circle"></i> Paid</span>
                   <?php elseif ($o['status'] === 'accepted'): ?>
-                    <span class="badge accepted">Accepted</span>
+                    <span class="badge accepted"><i class="bi bi-check-circle-fill"></i> Accepted</span>
                   <?php elseif ($o['status'] === 'rejected'): ?>
-                    <span class="badge rejected">Rejected</span>
+                    <span class="badge rejected"><i class="bi bi-x-circle"></i> Rejected</span>
                   <?php else: ?>
-                    <span class="badge pending"><?= h($o['status']) ?></span>
+                    <span class="badge pending"><i class="bi bi-clock"></i> <?= h($o['status']) ?></span>
                   <?php endif; ?>
                 </td>
                 <td>
                   <?php if ($o['payment_proof']): ?>
                     <button class="proof-link" type="button" data-proof="/uploads/<?= h($o['payment_proof']) ?>" data-order="#<?= (int)$o['id'] ?>">
-                      <i class="bi bi-file-earmark-image"></i> View
+                      <i class="bi bi-file-earmark-image"></i> View Proof
                     </button>
                   <?php else: ?>
                     <span class="muted">-</span>
                   <?php endif; ?>
                 </td>
-                <!-- <td> (KHOLIS)
+                // (KHOLIS)
+                <!-- <td>
                   <?php
                   // Buttons enabled only for paid orders with proof
                   $canAction = !empty($o['payment_proof']) && $o['status'] === 'paid';
@@ -483,7 +245,7 @@ foreach ($orders as $o) {
                       data-order-id="<?= (int)$o['id'] ?>"
                       data-proof="<?= $o['payment_proof'] ? '/uploads/' . h($o['payment_proof']) : '' ?>"
                       <?= $canAction ? '' : 'disabled' ?>
-                    >Accept</button>
+                    ><i class="bi bi-check-circle"></i> Accept</button>
                     <button
                       class="btn ghost small"
                       type="button"
@@ -491,12 +253,13 @@ foreach ($orders as $o) {
                       data-order-id="<?= (int)$o['id'] ?>"
                       data-proof="<?= $o['payment_proof'] ? '/uploads/' . h($o['payment_proof']) : '' ?>"
                       <?= $canAction ? '' : 'disabled' ?>
-                    >Reject</button>
+                    ><i class="bi bi-x-circle"></i> Reject</button>
                     <?php if (!$canAction && empty($o['payment_proof'])): ?>
                       <span class="muted">No proof</span>
                     <?php endif; ?>
                   </div>
                 </td> -->
+               
                 <td><?= h(date('d M Y H:i', strtotime($o['created_at']))) ?></td>
               </tr>
             <?php endforeach; ?>
@@ -506,15 +269,16 @@ foreach ($orders as $o) {
     </div>
   </main>
 
+  <!-- Payment Proof Modal -->
   <div class="proof-modal" id="proofModal" aria-hidden="true">
     <div class="proof-card" role="dialog" aria-modal="true" aria-labelledby="proofTitle">
       <div class="proof-head">
-        <div class="proof-title" id="proofTitle">Payment Proof</div>
+        <div class="proof-title" id="proofTitle"><i class="bi bi-image"></i> Payment Proof</div>
         <div class="proof-actions">
-          <button class="proof-btn" type="button" id="zoomOut">-</button>
-          <button class="proof-btn" type="button" id="zoomReset">Reset</button>
-          <button class="proof-btn" type="button" id="zoomIn">+</button>
-          <button class="proof-close" type="button" aria-label="Close">&times;</button>
+          <button class="proof-btn" type="button" id="zoomOut" title="Zoom Out"><i class="bi bi-dash-lg"></i></button>
+          <button class="proof-btn" type="button" id="zoomReset" title="Reset Zoom"><i class="bi bi-arrow-counterclockwise"></i></button>
+          <button class="proof-btn" type="button" id="zoomIn" title="Zoom In"><i class="bi bi-plus-lg"></i></button>
+          <button class="proof-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button>
         </div>
       </div>
       <div class="proof-body">
@@ -526,12 +290,12 @@ foreach ($orders as $o) {
   <div class="proof-modal" id="confirmModal" aria-hidden="true">
     <div class="proof-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
       <div class="proof-head">
-        <div class="proof-title" id="confirmTitle">Confirm Action</div>
+        <div class="proof-title" id="confirmTitle"><i class="bi bi-question-circle"></i> Confirm Action</div>
         <div class="proof-actions">
-          <button class="proof-btn" type="button" id="confirmZoomOut">-</button>
-          <button class="proof-btn" type="button" id="confirmZoomReset">Reset</button>
-          <button class="proof-btn" type="button" id="confirmZoomIn">+</button>
-          <button class="proof-close" type="button" aria-label="Close">&times;</button>
+          <button class="proof-btn" type="button" id="confirmZoomOut" title="Zoom Out"><i class="bi bi-dash-lg"></i></button>
+          <button class="proof-btn" type="button" id="confirmZoomReset" title="Reset Zoom"><i class="bi bi-arrow-counterclockwise"></i></button>
+          <button class="proof-btn" type="button" id="confirmZoomIn" title="Zoom In"><i class="bi bi-plus-lg"></i></button>
+          <button class="proof-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button>
         </div>
       </div>
       <div class="confirm-text" id="confirmQuestion">Are you sure?</div>
@@ -540,8 +304,8 @@ foreach ($orders as $o) {
         <img id="confirmProofImage" alt="Payment proof">
       </div>
       <div class="confirm-actions">
-        <button class="btn ghost" type="button" id="confirmCancel">Tidak</button>
-        <button class="btn primary" type="button" id="confirmSubmit">Ya</button>
+        <button class="btn ghost" type="button" id="confirmCancel"><i class="bi bi-x-circle"></i> Tidak</button>
+        <button class="btn primary" type="button" id="confirmSubmit"><i class="bi bi-check-circle"></i> Ya</button>
       </div>
     </div>
   </div>
@@ -552,6 +316,7 @@ foreach ($orders as $o) {
   </form>
 
   <script>
+    // Proof Modal Script
     (function() {
       var modal = document.getElementById('proofModal');
       var img = document.getElementById('proofImage');
@@ -573,7 +338,7 @@ foreach ($orders as $o) {
       function openModal(src, orderLabel) {
         img.src = src;
         img.alt = 'Payment proof ' + (orderLabel || '');
-        title.textContent = orderLabel ? ('Payment Proof ' + orderLabel) : 'Payment Proof';
+        title.innerHTML = '<i class="bi bi-image"></i> ' + (orderLabel ? ('Payment Proof ' + orderLabel) : 'Payment Proof');
         scale = 1;
         translateX = 0;
         translateY = 0;
@@ -716,7 +481,8 @@ foreach ($orders as $o) {
       function openModal(src, orderId, action) {
         img.src = src;
         img.alt = 'Payment proof #' + orderId;
-        title.textContent = (action === 'accept' ? 'Confirm Accept' : 'Confirm Reject') + ' #' + orderId;
+        var actionIcon = action === 'accept' ? '<i class="bi bi-check-circle"></i>' : '<i class="bi bi-x-circle"></i>';
+        title.innerHTML = actionIcon + ' ' + (action === 'accept' ? 'Confirm Accept' : 'Confirm Reject') + ' #' + orderId;
         if (question) {
           question.textContent = action === 'accept'
             ? 'Apakah anda yakin ingin menerima order ini?'
