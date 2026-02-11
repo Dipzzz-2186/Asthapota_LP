@@ -477,15 +477,15 @@ $isAdmin = is_admin_logged_in();
       <h2><i class="bi bi-patch-check"></i> Supported By</h2>
       <div class="sponsor-strip" aria-label="Supported by logos marquee">
         <div class="sponsor-track">
-          <div class="sponsor"><img src="/assets/img/hippi.png" alt="HIPPI"></div>
-          <div class="sponsor"><img src="/assets/img/logo.webp" alt="BAPORA"></div>
-          <div class="sponsor"><img src="/assets/img/fcom.png" alt="FCOM"></div>
-          <div class="sponsor"><img src="/assets/img/mypadel.png" alt="MY Padel"></div>
+          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/hippi.png" alt="HIPPI"></a>
+          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/logo.webp" alt="BAPORA"></a>
+          <a href="https://fcom.co.id/" target="_blank" class="sponsor"><img src="/assets/img/fcom.png" alt="FCOM"></a>
+          <a href="https://ayo.co.id/v/mypadel" target="_blank" class="sponsor"><img src="/assets/img/mypadel.png" alt="MY Padel"></a>
 
-          <div class="sponsor"><img src="/assets/img/hippi.png" alt="HIPPI"></div>
-          <div class="sponsor"><img src="/assets/img/logo.webp" alt="BAPORA"></div>
-          <div class="sponsor"><img src="/assets/img/fcom.png" alt="FCOM"></div>
-          <div class="sponsor"><img src="/assets/img/mypadel.png" alt="MY Padel"></div>
+          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/hippi.png" alt="HIPPI"></a>
+          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/logo.webp" alt="BAPORA"></a>
+          <a href="https://fcom.co.id/" target="_blank" class="sponsor"><img src="/assets/img/fcom.png" alt="FCOM"></a>
+          <a href="https://ayo.co.id/v/mypadel" target="_blank" class="sponsor"><img src="/assets/img/mypadel.png" alt="MY Padel"></a>
         </div>
       </div>
 
