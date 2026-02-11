@@ -11,11 +11,16 @@ $isAdmin = is_admin_logged_in();
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Temu Padel 2026</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
+
     :root {
       --blue: #1658ad;
       --white: #f6f7fb;
       --shadow: rgba(0, 0, 0, 0.32);
       --soft-shadow: rgba(0, 0, 0, 0.2);
+      --font-body: "Manrope", "Segoe UI", Tahoma, sans-serif;
+      --font-display: "Anton", "Arial Narrow", Impact, sans-serif;
+      --font-accent: "Playfair Display", Georgia, serif;
     }
 
     * { box-sizing: border-box; }
@@ -28,7 +33,9 @@ $isAdmin = is_admin_logged_in();
 
     body {
       color: var(--white);
-      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-family: var(--font-body);
+      font-weight: 500;
+      letter-spacing: 0.2px;
       background: url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
       overflow-x: hidden;
     }
@@ -61,25 +68,32 @@ $isAdmin = is_admin_logged_in();
 
     .welcome {
       margin: 0;
-      font-family: "Times New Roman", Georgia, serif;
+      font-family: var(--font-accent);
       font-style: italic;
       font-size: clamp(38px, 4.4vw, 66px);
       line-height: 1;
+      letter-spacing: 0.4px;
+      text-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
     }
 
     .title {
       margin: 0;
+      font-family: var(--font-display);
       font-size: clamp(48px, 10vw, 128px);
-      line-height: 0.95;
-      font-weight: 900;
-      letter-spacing: 2px;
+      line-height: 0.92;
+      font-weight: 400;
+      letter-spacing: 2.2px;
       text-transform: uppercase;
+      text-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
     }
 
     .subtitle {
       margin: 0;
+      font-family: var(--font-body);
       font-size: clamp(24px, 2.2vw, 36px);
-      font-weight: 600;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
     }
 
     .date-box {
@@ -89,11 +103,20 @@ $isAdmin = is_admin_logged_in();
       color: var(--blue);
       padding: 14px 28px;
       border-radius: 6px;
+      font-family: var(--font-display);
       font-size: clamp(22px, 2.4vw, 42px);
-      font-weight: 900;
-      letter-spacing: 1px;
+      font-weight: 400;
+      letter-spacing: 1.7px;
       text-transform: uppercase;
       box-shadow: 0 8px 24px var(--soft-shadow);
+    }
+
+    .date-box sup {
+      font-family: var(--font-body);
+      font-size: 0.38em;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      margin-left: 2px;
     }
 
     .countdown-wrap {
@@ -105,8 +128,9 @@ $isAdmin = is_admin_logged_in();
 
     .countdown-label {
       margin: 0;
-      font-size: 14px;
-      letter-spacing: 1.2px;
+      font-family: var(--font-accent);
+      font-size: 15px;
+      letter-spacing: 0.6px;
       text-transform: uppercase;
       font-weight: 600;
       opacity: 0.9;
@@ -127,24 +151,30 @@ $isAdmin = is_admin_logged_in();
     }
 
     .count-value {
+      font-family: var(--font-display);
       font-size: clamp(24px, 2.9vw, 38px);
-      font-weight: 800;
+      font-weight: 400;
       line-height: 1;
+      letter-spacing: 1.1px;
     }
 
     .count-unit {
       margin-top: 4px;
+      font-family: var(--font-body);
       font-size: 11px;
-      letter-spacing: 1px;
+      letter-spacing: 1.2px;
       text-transform: uppercase;
       opacity: 0.9;
+      font-weight: 700;
     }
 
     .count-status {
       margin: 2px 0 0;
+      font-family: var(--font-body);
       font-size: 13px;
       opacity: 0.95;
       min-height: 18px;
+      font-weight: 600;
     }
 
     .hero-join {
@@ -157,8 +187,11 @@ $isAdmin = is_admin_logged_in();
       border: 2px solid rgba(255, 255, 255, 0.72);
       background: rgba(11, 45, 97, 0.35);
       color: #fff;
+      font-family: var(--font-body);
       font-size: 18px;
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
       cursor: pointer;
       transition: transform 0.15s ease, background 0.2s ease;
     }
@@ -174,8 +207,11 @@ $isAdmin = is_admin_logged_in();
 
     .support h2 {
       margin: 0 0 8px;
+      font-family: var(--font-accent);
       font-size: clamp(36px, 3.4vw, 56px);
-      font-weight: 500;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
     }
 
     .sponsor-strip {
@@ -252,9 +288,12 @@ $isAdmin = is_admin_logged_in();
       text-decoration: none;
       background: #f3f4f8;
       color: var(--blue);
-      font-weight: 900;
+      font-family: var(--font-display);
+      font-weight: 400;
       font-size: clamp(30px, 3vw, 44px);
-      font-style: italic;
+      font-style: normal;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
       border-radius: 999px;
       border: 4px solid #07162d;
       box-shadow: 10px 10px 0 var(--shadow);
@@ -311,11 +350,13 @@ $isAdmin = is_admin_logged_in();
 
       .subtitle {
         font-size: clamp(20px, 5vw, 28px);
+        letter-spacing: 0.6px;
       }
 
       .date-box {
         font-size: clamp(18px, 6vw, 28px);
         padding: 12px 16px;
+        letter-spacing: 1px;
       }
 
       .countdown {
@@ -365,7 +406,7 @@ $isAdmin = is_admin_logged_in();
         <p class="count-status" id="countdownStatus"></p>
       </div>
 
-      <button type="button" class="hero-join" id="ikutYukBtn">Ikut Yuk</button>
+      <button type="button" class="hero-join" id="ikutYukBtn">Yuk Join</button>
     </section>
 
     <section class="panel support" id="registerPanel">
