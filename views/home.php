@@ -518,6 +518,14 @@ $isAdmin = is_admin_logged_in();
       background: rgba(255, 255, 255, 0.08);
     }
 
+    .sponsor:focus-visible {
+      outline: none;
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, 0.14);
+      box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.85), 0 0 0 5px rgba(137, 201, 255, 0.95);
+      animation: focus-ring-pulse 760ms ease-out 1;
+    }
+
     .sponsor img {
       width: 100%;
       max-width: 230px;
@@ -596,6 +604,18 @@ $isAdmin = is_admin_logged_in();
       0%, 100% { transform: translateY(0) scale(1); }
       45% { transform: translateY(-1px) scale(1.09); }
       70% { transform: translateY(1px) scale(1.03); }
+    }
+
+    @keyframes focus-ring-pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(137, 201, 255, 0);
+      }
+      50% {
+        box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.85), 0 0 0 8px rgba(137, 201, 255, 0.35);
+      }
+      100% {
+        box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.85), 0 0 0 5px rgba(137, 201, 255, 0.95);
+      }
     }
 
     @keyframes event-start-ring {
@@ -721,6 +741,21 @@ $isAdmin = is_admin_logged_in();
       box-shadow: 5px 5px 0 var(--shadow);
     }
 
+    .hero-join:focus-visible,
+    .cta:focus-visible {
+      outline: none;
+      border-color: #ffffff;
+      animation: focus-ring-pulse 760ms ease-out 1;
+    }
+
+    .hero-join:focus-visible {
+      box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.92), 0 0 0 6px rgba(137, 201, 255, 0.92), 0 10px 24px rgba(9, 28, 57, 0.42);
+    }
+
+    .cta:focus-visible {
+      box-shadow: 10px 10px 0 var(--shadow), 0 0 0 2px rgba(9, 26, 53, 0.92), 0 0 0 7px rgba(137, 201, 255, 0.95);
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .sponsor-track { animation: none; }
       .hero-join,
@@ -730,6 +765,11 @@ $isAdmin = is_admin_logged_in();
       .cta,
       .cta::before,
       .cta:hover i {
+        animation: none;
+      }
+      .hero-join:focus-visible,
+      .cta:focus-visible,
+      .sponsor:focus-visible {
         animation: none;
       }
       .countdown-wrap::before,
