@@ -36,12 +36,14 @@ $isAdmin = is_admin_logged_in();
       font-family: var(--font-body);
       font-weight: 500;
       letter-spacing: 0.2px;
-      background: url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
+      background: #0b2d61;
       overflow-x: hidden;
     }
 
     .landing {
       scroll-snap-type: y mandatory;
+      background: url('/assets/img/wallpaper.avif') center top / cover no-repeat;
+      background-attachment: scroll;
     }
 
     .panel {
