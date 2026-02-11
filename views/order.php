@@ -246,6 +246,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       background: #dbe9ff;
     }
 
+    .proof-preview {
+      margin-top: 12px;
+      display: none;
+      gap: 10px;
+    }
+
+    .proof-preview.is-visible {
+      display: grid;
+    }
+
+    .proof-preview-label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      color: #dbe7ff;
+    }
+
+    .proof-preview img {
+      width: min(100%, 360px);
+      max-height: 280px;
+      object-fit: contain;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+    }
+
     .btn.primary {
       background: #ffffff;
       color: #0b2d61;
@@ -330,7 +357,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="post" enctype="multipart/form-data">
           <div class="upload-box">
-            <input type="file" name="payment_proof" accept="image/*" required>
+            <input type="file" name="payment_proof" id="paymentProofInput" accept="image/*" required>
+            <div class="proof-preview" id="proofPreviewWrap" aria-live="polite">
+              <div class="proof-preview-label"><i class="bi bi-image"></i> Live Preview</div>
+              <img id="proofPreviewImage" src="" alt="Payment proof preview">
+            </div>
           </div>
           <div style="margin-top:16px;">
             <button class="btn primary" type="submit"><i class="bi bi-upload"></i> Upload Proof</button>
@@ -376,6 +407,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           }, 260);
         });
       });
+
+      var proofInput = document.getElementById('paymentProofInput');
+      var proofPreviewWrap = document.getElementById('proofPreviewWrap');
+      var proofPreviewImage = document.getElementById('proofPreviewImage');
+
+      if (proofInput && proofPreviewWrap && proofPreviewImage) {
+        proofInput.addEventListener('change', function () {
+          var file = proofInput.files && proofInput.files[0] ? proofInput.files[0] : null;
+
+          if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+            proofPreviewImage.removeAttribute('src');
+            proofPreviewWrap.classList.remove('is-visible');
+            return;
+          }
+
+          var reader = new FileReader();
+          reader.onload = function (event) {
+            proofPreviewImage.src = event.target && event.target.result ? event.target.result : '';
+            proofPreviewWrap.classList.toggle('is-visible', !!proofPreviewImage.src);
+          };
+          reader.onerror = function () {
+            proofPreviewImage.removeAttribute('src');
+            proofPreviewWrap.classList.remove('is-visible');
+          };
+          reader.readAsDataURL(file);
+        });
+      }
     })();
   </script>
 </body>
