@@ -214,7 +214,7 @@ $isAdmin = is_admin_logged_in();
       animation: sponsor-scroll 22s linear infinite;
     }
 
-    .support:hover .sponsor-track {
+    .sponsor-strip:hover .sponsor-track {
       animation-play-state: paused;
     }
 
