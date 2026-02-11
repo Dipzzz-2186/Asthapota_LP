@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
@@ -98,20 +98,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Register - Asthapora</title>
-  <link rel="stylesheet" href="/assets/css/style.css">
-</head>
-<body class="page">
-<?php render_navbar(['isAdmin' => $isAdmin]); ?>
 
-  <section class="section">
-    <div class="container grid-2">
+render_header([
+    'title' => 'Register - Asthapora',
+    'isAdmin' => $isAdmin,
+]);
+?>
+
+  <section class="hero-section">
+    <div class="container hero-grid">
       <div class="hero-card fade-up">
         <div class="pill"><i class="bi bi-person-plus"></i> Registration</div>
         <h1>Register Yourself</h1>
@@ -131,6 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           </div>
         </div>
       </div>
+
       <div class="form-wrap fade-up delay-1">
         <div class="section-title">Registration Form</div>
 
@@ -203,6 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <button class="btn primary" type="submit">Verifikasi <i class="bi bi-check2-circle"></i></button>
         </div>
       </form>
+
       <form method="post" action="">
         <input type="hidden" name="step" value="resend_otp">
         <button class="btn ghost" type="submit">Kirim Ulang</button>
@@ -244,6 +241,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       form.addEventListener('submit', normalize);
     })();
   </script>
-</body>
-</html>
 
+<?php render_footer(); ?>

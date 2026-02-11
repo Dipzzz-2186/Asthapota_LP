@@ -41,7 +41,7 @@ $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETC
             <a class="btn primary" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
           <?php else: ?>
             <a class="icon-btn" href="/register"><i class="bi bi-person"></i></a>
-            <a class="icon-btn" href="#packages"><i class="bi bi-bag"></i></a>
+            <a class="icon-btn" href="/packages-view"><i class="bi bi-bag"></i></a>
             <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
           <?php endif; ?>
         </div>
