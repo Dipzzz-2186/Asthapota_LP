@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     body {
       color: var(--white);
       font-family: "Segoe UI", Tahoma, sans-serif;
-      background: url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
+      background: url('/assets/img/wallpaper3.jpg') center/cover no-repeat fixed;
       overflow-x: hidden;
     }
 
@@ -211,10 +211,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       border: 1px solid rgba(255, 255, 255, 0.45);
     }
 
+    .auth-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 50;
+    }
+
+    .auth-modal.show {
+      display: flex;
+    }
+
+    .auth-modal-card {
+      width: min(430px, 100%);
+      background: rgba(7, 22, 45, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 14px;
+      padding: 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .auth-modal-title {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 800;
+    }
+
+    .auth-modal-text {
+      margin: 0;
+      font-size: 14px;
+      opacity: 0.92;
+    }
+
+    .auth-modal-actions {
+      margin-top: 4px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     @media (max-width: 640px) {
       .landing { width: 94vw; }
       #packagePanel { padding: 18px; }
       .actions .btn { width: 100%; }
+      .auth-modal .btn { width: 100%; }
     }
   </style>
 </head>
@@ -222,10 +267,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <main class="landing">
     <section id="packagePanel">
       <h1>Select Your Package</h1>
-
-      <?php if (!$can_order): ?>
-        <div class="alert">Please register first before selecting packages.</div>
-      <?php endif; ?>
 
       <?php if ($errors): ?>
         <div class="alert">
@@ -250,9 +291,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               </ul>
               <div class="price"><?= h(rupiah((int)$p['price'])) ?>,-</div>
               <div class="qty">
-                <button type="button" data-action="minus" <?= $can_order ? '' : 'disabled' ?>>-</button>
+                <button type="button" data-action="minus">-</button>
                 <input type="number" name="qty_<?= (int)$p['id'] ?>" min="0" value="0" <?= $can_order ? '' : 'disabled' ?>>
-                <button type="button" data-action="plus" <?= $can_order ? '' : 'disabled' ?>>+</button>
+                <button type="button" data-action="plus">+</button>
               </div>
             </article>
           <?php endforeach; ?>
@@ -271,21 +312,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </section>
   </main>
 
+  <?php if (!$can_order): ?>
+    <div class="auth-modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+      <div class="auth-modal-card">
+        <h2 class="auth-modal-title" id="authModalTitle">Register Required</h2>
+        <p class="auth-modal-text">Please register first before selecting packages.</p>
+        <div class="auth-modal-actions">
+          <a class="btn primary" href="/register">Register Now</a>
+          <button class="btn ghost" type="button" id="closeAuthModal">Close</button>
+        </div>
+      </div>
+    </div>
+  <?php endif; ?>
+
   <script>
     (function () {
+      var canOrder = <?= $can_order ? 'true' : 'false' ?>;
+      var authModal = document.getElementById('authModal');
+      var closeAuthModalBtn = document.getElementById('closeAuthModal');
+
       document.querySelectorAll('.qty').forEach(function(group){
         var input = group.querySelector('input');
         group.addEventListener('click', function(e){
-          if (!input || input.disabled) return;
-          if (e.target.dataset.action === 'plus') {
+          var action = e.target.dataset.action;
+          if (action !== 'plus' && action !== 'minus') return;
+
+          if (!canOrder) {
+            if (authModal) authModal.classList.add('show');
+            return;
+          }
+
+          if (!input) return;
+          if (action === 'plus') {
             input.value = parseInt(input.value || '0', 10) + 1;
           }
-          if (e.target.dataset.action === 'minus') {
+          if (action === 'minus') {
             var v = Math.max(0, parseInt(input.value || '0', 10) - 1);
             input.value = v;
           }
         });
       });
+
+      if (authModal && closeAuthModalBtn) {
+        closeAuthModalBtn.addEventListener('click', function () {
+          authModal.classList.remove('show');
+        });
+      }
     })();
   </script>
 </body>
