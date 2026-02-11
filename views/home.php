@@ -125,7 +125,7 @@ $isAdmin = is_admin_logged_in();
       padding: 48px 0;
     }
 
-    .hero > * {
+    .hero [data-seq] {
       opacity: 0;
       transform: translateY(26px) scale(0.98);
       filter: blur(5px);
@@ -133,19 +133,12 @@ $isAdmin = is_admin_logged_in();
       will-change: opacity, transform, filter;
     }
 
-    body.page-ready .hero > * {
+    body.page-ready .hero [data-seq] {
       opacity: 1;
       transform: none;
       filter: none;
+      transition-delay: var(--seq-delay, 0ms);
     }
-
-    body.page-ready .hero > :nth-child(1) { transition-delay: 90ms; }
-    body.page-ready .hero > :nth-child(2) { transition-delay: 180ms; }
-    body.page-ready .hero > :nth-child(3) { transition-delay: 270ms; }
-    body.page-ready .hero > :nth-child(4) { transition-delay: 360ms; }
-    body.page-ready .hero > :nth-child(5) { transition-delay: 450ms; }
-    body.page-ready .hero > :nth-child(6) { transition-delay: 540ms; }
-    body.page-ready .hero > :nth-child(7) { transition-delay: 630ms; }
 
     .hero-logo {
       width: 74px;
@@ -348,6 +341,21 @@ $isAdmin = is_admin_logged_in();
       display: inline-flex;
       align-items: center;
       gap: 10px;
+    }
+
+    body.js-observe [data-reveal] {
+      opacity: 0;
+      transform: translateY(26px) scale(0.99);
+      filter: blur(4px);
+      transition: opacity 0.55s cubic-bezier(.2,.7,.2,1), transform 0.55s cubic-bezier(.2,.7,.2,1), filter 0.55s ease;
+      transition-delay: var(--reveal-delay, 0ms);
+      will-change: opacity, transform, filter;
+    }
+
+    body.js-observe [data-reveal].is-visible {
+      opacity: 1;
+      transform: none;
+      filter: none;
     }
 
     .sponsor-strip {
@@ -573,13 +581,13 @@ $isAdmin = is_admin_logged_in();
 <body>
   <main class="landing">
     <section class="panel hero">
-      <img class="hero-logo" src="/assets/img/lopad.jpg" alt="Astaphora logo">
-      <p class="welcome">Welcome</p>
-      <h1 class="title">TEMU PADEL</h1>
-      <p class="subtitle"><i class="bi bi-stars"></i> A Monkeybar x BAPORA Event</p>
-      <div class="date-box"><i class="bi bi-calendar-event"></i> FEBRUARY 28<sup>TH</sup>, 2026 | 4 PM - 6 PM</div>
+      <img class="hero-logo" data-seq style="--seq-delay: 80ms;" src="/assets/img/lopad.jpg" alt="Astaphora logo">
+      <p class="welcome" data-seq style="--seq-delay: 170ms;">Welcome</p>
+      <h1 class="title" data-seq style="--seq-delay: 260ms;">TEMU PADEL</h1>
+      <p class="subtitle" data-seq style="--seq-delay: 350ms;"><i class="bi bi-stars"></i> A Monkeybar x BAPORA Event</p>
+      <div class="date-box" data-seq style="--seq-delay: 440ms;"><i class="bi bi-calendar-event"></i> FEBRUARY 28<sup>TH</sup>, 2026 | 4 PM - 6 PM</div>
 
-      <div class="countdown-wrap" aria-live="polite">
+      <div class="countdown-wrap" data-seq style="--seq-delay: 530ms;" aria-live="polite">
         <p class="countdown-label" id="countdownLabel"><i class="bi bi-hourglass-split"></i> Countdown To Event Start</p>
         <div class="countdown" id="eventCountdown">
           <div class="count-item">
@@ -602,12 +610,12 @@ $isAdmin = is_admin_logged_in();
         <p class="count-status" id="countdownStatus"></p>
       </div>
 
-      <button type="button" class="hero-join" id="ikutYukBtn"><i class="bi bi-arrow-down-circle"></i> Join Us</button>
+      <button type="button" class="hero-join" data-seq style="--seq-delay: 620ms;" id="ikutYukBtn"><i class="bi bi-arrow-down-circle"></i> Join Us</button>
     </section>
 
     <section class="panel support" id="registerPanel">
-      <h2><i class="bi bi-patch-check"></i> Supported By</h2>
-      <div class="sponsor-strip" aria-label="Supported by logos marquee">
+      <h2 data-reveal style="--reveal-delay: 60ms;"><i class="bi bi-patch-check"></i> Supported By</h2>
+      <div class="sponsor-strip" data-reveal style="--reveal-delay: 150ms;" aria-label="Supported by logos marquee">
         <div class="sponsor-track">
           <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/hippi.png" alt="HIPPI"></a>
           <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/logo.webp" alt="BAPORA"></a>
@@ -622,9 +630,9 @@ $isAdmin = is_admin_logged_in();
       </div>
 
       <?php if ($isAdmin): ?>
-        <a class="cta" href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Go To Admin Dashboard</a>
+        <a class="cta" data-reveal style="--reveal-delay: 240ms;" href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Go To Admin Dashboard</a>
       <?php else: ?>
-        <a class="cta" href="/packages"><i class="bi bi-box-seam"></i> Click Here To See Packages</a>
+        <a class="cta" data-reveal style="--reveal-delay: 240ms;" href="/packages"><i class="bi bi-box-seam"></i> Click Here To See Packages</a>
       <?php endif; ?>
     </section>
   </main>
@@ -647,6 +655,25 @@ $isAdmin = is_admin_logged_in();
         });
       } else if (body) {
         body.classList.add('page-ready');
+      }
+
+      if (body && !reduceMotion && 'IntersectionObserver' in window) {
+        body.classList.add('js-observe');
+        var revealTargets = document.querySelectorAll('#registerPanel [data-reveal]');
+        var revealObserver = new IntersectionObserver(function (entries, observer) {
+          entries.forEach(function (entry) {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          });
+        }, { threshold: 0.2, rootMargin: '0px 0px -8% 0px' });
+        revealTargets.forEach(function (el) {
+          revealObserver.observe(el);
+        });
+      } else {
+        document.querySelectorAll('#registerPanel [data-reveal]').forEach(function (el) {
+          el.classList.add('is-visible');
+        });
       }
 
       function canAnimateLink(a) {
