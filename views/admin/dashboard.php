@@ -8,42 +8,42 @@ $db = get_db();
 $flash = ['success' => '', 'error' => ''];
 
 // Accept/Reject order (admin action) (KHOLIS)
-// if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-//     // Validate request payload
-//     $orderId = (int)($_POST['order_id'] ?? 0);
-//     $action = $_POST['action'] ?? '';
-//     $allowed = ['accept', 'reject'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Validate request payload
+    $orderId = (int)($_POST['order_id'] ?? 0);
+    $action = $_POST['action'] ?? '';
+    $allowed = ['accept', 'reject'];
 
-//     if (!$orderId || !in_array($action, $allowed, true)) {
-//         $flash['error'] = 'Invalid request.';
-//     } else {
-//         // Load order + user for email notification
-//         $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
-//         $stmt->execute([$orderId]);
-//         $orderRow = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$orderId || !in_array($action, $allowed, true)) {
+        $flash['error'] = 'Invalid request.';
+    } else {
+        // Load order + user for email notification
+        $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
+        $stmt->execute([$orderId]);
+        $orderRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-//         if (!$orderRow) {
-//             $flash['error'] = 'Order not found.';
-//         } elseif (empty($orderRow['payment_proof'])) {
-//             // Require payment proof before any decision
-//             $flash['error'] = 'Cannot update. Payment proof is required.';
-//         } elseif ($orderRow['status'] !== 'paid') {
-//             // Only paid orders can be accepted/rejected
-//             $flash['error'] = 'Only paid orders can be accepted or rejected.';
-//         } else {
-//             // Update status + notify user
-//             $newStatus = $action === 'accept' ? 'accepted' : 'rejected';
-//             $update = $db->prepare('UPDATE orders SET status = ? WHERE id = ?');
-//             $update->execute([$newStatus, $orderId]);
+        if (!$orderRow) {
+            $flash['error'] = 'Order not found.';
+        } elseif (empty($orderRow['payment_proof'])) {
+            // Require payment proof before any decision
+            $flash['error'] = 'Cannot update. Payment proof is required.';
+        } elseif ($orderRow['status'] !== 'paid') {
+            // Only paid orders can be accepted/rejected
+            $flash['error'] = 'Only paid orders can be accepted or rejected.';
+        } else {
+            // Update status + notify user
+            $newStatus = $action === 'accept' ? 'accepted' : 'rejected';
+            $update = $db->prepare('UPDATE orders SET status = ? WHERE id = ?');
+            $update->execute([$newStatus, $orderId]);
 
-//             $orderRow['status'] = $newStatus;
-//             $sent = send_order_status_email($orderRow, $orderRow['email']);
-//             $flash['success'] = $sent
-//                 ? 'Order status updated and email sent.'
-//                 : 'Order status updated, but email failed to send.';
-//         }
-//     }
-// }
+            $orderRow['status'] = $newStatus;
+            $sent = send_order_status_email($orderRow, $orderRow['email']);
+            $flash['success'] = $sent
+                ? 'Order status updated and email sent.'
+                : 'Order status updated, but email failed to send.';
+        }
+    }
+}
 
 $packages = $db->query("SELECT id, name FROM packages ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 $selectedPackage = isset($_GET['package']) ? (int)$_GET['package'] : 0;
@@ -180,7 +180,7 @@ foreach ($orders as $o) {
               <th><i class="bi bi-activity"></i> Status</th>
               <th><i class="bi bi-image"></i> Proof</th>
               // (KHOLIS)
-              <!-- <th><i class="bi bi-gear"></i> Action</th>   -->
+              <th><i class="bi bi-gear"></i> Action</th>  
               <th><i class="bi bi-calendar"></i> Created</th>
             </tr>
           </thead>
@@ -232,7 +232,7 @@ foreach ($orders as $o) {
                   <?php endif; ?>
                 </td>
                 // (KHOLIS)
-                <!-- <td>
+                <td>
                   <?php
                   // Buttons enabled only for paid orders with proof
                   $canAction = !empty($o['payment_proof']) && $o['status'] === 'paid';
@@ -258,7 +258,7 @@ foreach ($orders as $o) {
                       <span class="muted">No proof</span>
                     <?php endif; ?>
                   </div>
-                </td> -->
+                </td>
                
                 <td><?= h(date('d M Y H:i', strtotime($o['created_at']))) ?></td>
               </tr>
