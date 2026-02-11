@@ -29,9 +29,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$errors) {
             $db = get_db();
-            $check = $db->prepare('SELECT id FROM users WHERE email = ?');
-            $check->execute([$email]);
-            if ($check->fetch()) {
+            $check = $db->prepare(
+                'SELECT u.id, COUNT(o.id) AS total_orders, SUM(CASE WHEN o.status = ? THEN 1 ELSE 0 END) AS rejected_orders
+                 FROM users u
+                 LEFT JOIN orders o ON o.user_id = u.id
+                 WHERE u.email = ?
+                 GROUP BY u.id
+                 ORDER BY u.id DESC'
+            );
+            $check->execute(['rejected', $email]);
+            $existingUsers = $check->fetchAll(PDO::FETCH_ASSOC);
+
+            $reuseUserId = 0;
+            $emailCanReuse = true;
+            if ($existingUsers) {
+                $reuseUserId = (int)$existingUsers[0]['id'];
+                foreach ($existingUsers as $row) {
+                    $totalOrders = (int)$row['total_orders'];
+                    $rejectedOrders = (int)($row['rejected_orders'] ?? 0);
+                    if ($totalOrders === 0 || $rejectedOrders !== $totalOrders) {
+                        $emailCanReuse = false;
+                        break;
+                    }
+                }
+            }
+
+            if ($existingUsers && !$emailCanReuse) {
                 $errors[] = 'Email already registered. Please use another email.';
             } else {
                 $otp = (string)random_int(100000, 999999);
@@ -40,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'phone' => $phone,
                     'email' => $email,
                     'instagram' => $instagram,
+                    'reuse_user_id' => $reuseUserId,
                     'otp' => $otp,
                     'otp_expires' => time() + 600,
                 ];
@@ -67,15 +91,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $otp_errors[] = 'OTP is incorrect.';
         } else {
             $db = get_db();
-            $stmt = $db->prepare('INSERT INTO users (full_name, phone, email, instagram, created_at) VALUES (?, ?, ?, ?, ?)');
-            $stmt->execute([
-                $pending['full_name'],
-                $pending['phone'],
-                $pending['email'],
-                $pending['instagram'],
-                date('c')
-            ]);
-            $_SESSION['user_id'] = (int)$db->lastInsertId();
+            $reuseUserId = (int)($pending['reuse_user_id'] ?? 0);
+
+            if ($reuseUserId > 0) {
+                $stmt = $db->prepare('UPDATE users SET full_name = ?, phone = ?, instagram = ? WHERE id = ? AND email = ?');
+                $stmt->execute([
+                    $pending['full_name'],
+                    $pending['phone'],
+                    $pending['instagram'],
+                    $reuseUserId,
+                    $pending['email'],
+                ]);
+                $_SESSION['user_id'] = $reuseUserId;
+            } else {
+                $stmt = $db->prepare('INSERT INTO users (full_name, phone, email, instagram, created_at) VALUES (?, ?, ?, ?, ?)');
+                $stmt->execute([
+                    $pending['full_name'],
+                    $pending['phone'],
+                    $pending['email'],
+                    $pending['instagram'],
+                    date('c')
+                ]);
+                $_SESSION['user_id'] = (int)$db->lastInsertId();
+            }
+
             unset($_SESSION['reg_pending']);
             redirect('/packages');
         }

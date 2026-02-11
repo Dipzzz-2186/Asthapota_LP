@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../app/db.php';
 require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/config.php';
@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link rel="stylesheet" href="/assets/css/style.css">
   <style>
     body.page.order-page {
-      background: linear-gradient(rgba(8, 16, 36, 0.72), rgba(8, 16, 36, 0.72)), url('/assets/img/wallpaper.avif') center/cover no-repeat fixed;
+      background: linear-gradient(rgba(8, 16, 36, 0.72), rgba(8, 16, 36, 0.72)), url('/assets/img/wallpaper3.jpg') center/cover no-repeat fixed;
       color: #eef4ff;
     }
 
@@ -265,4 +265,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </main>
 </body>
 </html>
+
 

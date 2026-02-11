@@ -262,7 +262,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <?php if ($can_order): ?>
             <button class="btn primary" type="submit">Continue to Order</button>
           <?php endif; ?>
-          <a class="btn primary" href="/register">Register Now</a>
+          <?php if (!$can_order): ?>
+            <a class="btn primary" href="/register">Register Now</a>
+          <?php endif; ?>
           <a class="btn ghost" href="/">Back to Home</a>
         </div>
       </form>
