@@ -133,7 +133,7 @@ $whereSql = ' WHERE ' . implode(' AND ', $whereParts);
 
 $summarySql = "SELECT
     COUNT(*) AS total_orders,
-    COALESCE(SUM(o.total), 0) AS total_revenue,
+    COALESCE(SUM(CASE WHEN o.status = 'accepted' THEN o.total ELSE 0 END), 0) AS total_revenue,
     SUM(CASE WHEN o.status IN ('paid', 'accepted', 'rejected') THEN 1 ELSE 0 END) AS paid_orders,
     SUM(CASE WHEN o.status NOT IN ('paid', 'accepted', 'rejected') THEN 1 ELSE 0 END) AS pending_orders
   FROM orders o
@@ -338,6 +338,22 @@ $extraHead = <<<'HTML'
     pointer-events: none;
     opacity: 0.45;
   }
+
+  table.admin-table th:nth-child(3),
+  table.admin-table td:nth-child(3) {
+    width: 240px;
+  }
+
+  .admin-contact-line {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .admin-contact-line .contact-value {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 </style>
 HTML;
 render_header([
@@ -439,6 +455,33 @@ render_header([
         <div class="alert-success"><?= h($flash['success']) ?></div>
       <?php endif; ?>
 
+      <?php if ($totalPages > 1): ?>
+        <div class="pagination-wrap">
+          <div class="pagination-info">
+            Menampilkan <?= (int)$startRow ?>-<?= (int)$endRow ?> dari <?= (int)$totalOrders ?> data
+          </div>
+          <div class="pagination">
+            <?php
+              $prevPage = max(1, $currentPage - 1);
+              $nextPage = min($totalPages, $currentPage + 1);
+              $windowStart = max(1, $currentPage - 2);
+              $windowEnd = min($totalPages, $currentPage + 2);
+            ?>
+            <a class="btn ghost small<?= $currentPage <= 1 ? ' is-disabled' : '' ?>" href="/admin/dashboard?<?= h(http_build_query($paginationBaseParams + ['page' => $prevPage])) ?>"><i class="bi bi-chevron-left"></i></a>
+            <?php for ($page = $windowStart; $page <= $windowEnd; $page++): ?>
+              <a class="btn ghost small<?= $page === $currentPage ? ' active' : '' ?>" href="/admin/dashboard?<?= h(http_build_query($paginationBaseParams + ['page' => $page])) ?>"><?= (int)$page ?></a>
+            <?php endfor; ?>
+            <a class="btn ghost small<?= $currentPage >= $totalPages ? ' is-disabled' : '' ?>" href="/admin/dashboard?<?= h(http_build_query($paginationBaseParams + ['page' => $nextPage])) ?>"><i class="bi bi-chevron-right"></i></a>
+          </div>
+        </div>
+      <?php elseif ($totalOrders > 0): ?>
+        <div class="pagination-wrap">
+          <div class="pagination-info">
+            Menampilkan <?= (int)$startRow ?>-<?= (int)$endRow ?> dari <?= (int)$totalOrders ?> data
+          </div>
+        </div>
+      <?php endif; ?>
+
       <!-- Orders Table -->
       <div class="table-wrap">
         <table class="admin-table">
@@ -469,15 +512,15 @@ render_header([
                 <td><strong>#<?= (int)$o['id'] ?></strong></td>
                 <td><strong><?= h($o['full_name']) ?></strong></td>
                 <td class="admin-contact">
-                  <div class="admin-contact-line"><i class="bi bi-telephone"></i> <?= h($o['phone']) ?></div>
-                  <div class="admin-contact-line"><i class="bi bi-envelope"></i> <?= h($o['email']) ?></div>
+                  <div class="admin-contact-line"><i class="bi bi-telephone"></i> <span class="contact-value"><?= h($o['phone']) ?></span></div>
+                  <div class="admin-contact-line"><i class="bi bi-envelope"></i> <span class="contact-value"><?= h($o['email']) ?></span></div>
                   <div class="admin-contact-line">
                     <i class="bi bi-instagram"></i>
                     <?php
                       $ig = trim((string)($o['instagram'] ?? ''));
                       $ig = $ig !== '' ? '@' . ltrim($ig, '@') : '-';
                     ?>
-                    <?= h($ig) ?>
+                    <span class="contact-value"><?= h($ig) ?></span>
                   </div>
                 </td>
                 <td><?= h($o['items'] ?? '-') ?></td>
