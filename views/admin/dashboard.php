@@ -7,7 +7,16 @@ require_admin();
 
 $db = get_db();
 $flash = ['success' => '', 'error' => ''];
-$selectedPackage = isset($_GET['package']) ? (int)$_GET['package'] : 0;
+$selectedPackage = isset($_REQUEST['package']) ? (int)$_REQUEST['package'] : 0;
+$selectedName = trim((string)($_REQUEST['name'] ?? ''));
+$selectedEmail = trim((string)($_REQUEST['email'] ?? ''));
+$selectedDate = trim((string)($_REQUEST['created_date'] ?? ''));
+$selectedStatusRaw = trim((string)($_REQUEST['status'] ?? ''));
+$allowedStatusFilters = ['pending', 'accepted', 'rejected'];
+$selectedStatus = in_array($selectedStatusRaw, $allowedStatusFilters, true) ? $selectedStatusRaw : '';
+if ($selectedDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)) {
+    $selectedDate = '';
+}
 
 ensure_session();
 if (!empty($_SESSION['dashboard_flash']) && is_array($_SESSION['dashboard_flash'])) {
@@ -53,9 +62,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $_SESSION['dashboard_flash'] = $flash;
-    $redirectPath = '/admin/dashboard';
+    $redirectParams = [];
     if ($selectedPackage > 0) {
-        $redirectPath .= '?package=' . $selectedPackage;
+        $redirectParams['package'] = $selectedPackage;
+    }
+    if ($selectedName !== '') {
+        $redirectParams['name'] = $selectedName;
+    }
+    if ($selectedEmail !== '') {
+        $redirectParams['email'] = $selectedEmail;
+    }
+    if ($selectedDate !== '') {
+        $redirectParams['created_date'] = $selectedDate;
+    }
+    if ($selectedStatus !== '') {
+        $redirectParams['status'] = $selectedStatus;
+    }
+    $redirectPath = '/admin/dashboard';
+    if ($redirectParams) {
+        $redirectPath .= '?' . http_build_query($redirectParams);
     }
     redirect($redirectPath);
 }
@@ -75,6 +100,25 @@ if ($selectedPackage > 0) {
     )";
     $params[] = $selectedPackage;
 }
+if ($selectedName !== '') {
+    $sql .= " AND u.full_name LIKE ?";
+    $params[] = '%' . $selectedName . '%';
+}
+if ($selectedEmail !== '') {
+    $sql .= " AND u.email LIKE ?";
+    $params[] = '%' . $selectedEmail . '%';
+}
+if ($selectedDate !== '') {
+    $sql .= " AND DATE(o.created_at) = ?";
+    $params[] = $selectedDate;
+}
+if ($selectedStatus === 'accepted' || $selectedStatus === 'rejected') {
+    $sql .= " AND o.status = ?";
+    $params[] = $selectedStatus;
+} elseif ($selectedStatus === 'pending') {
+    // "pending" on dashboard means orders still waiting final decision by admin.
+    $sql .= " AND o.status IN ('pending', 'paid')";
+}
 $sql .= " ORDER BY o.created_at ASC";
 
 $stmt = $db->prepare($sql);
@@ -93,11 +137,74 @@ foreach ($orders as $o) {
         $pendingOrders++;
     }
 }
+$hasActiveFilters = $selectedPackage > 0
+    || $selectedName !== ''
+    || $selectedEmail !== ''
+    || $selectedDate !== ''
+    || $selectedStatus !== '';
+$extraHead = <<<'HTML'
+<style>
+  .dashboard-filter-form {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.3fr) repeat(4, minmax(150px, 1fr)) auto;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .dashboard-filter-form .filter-label {
+    white-space: nowrap;
+  }
+
+  .dashboard-filter-form input,
+  .dashboard-filter-form select {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--stroke);
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--surface);
+    color: var(--text);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+
+  .dashboard-filter-form input:focus,
+  .dashboard-filter-form select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(0, 102, 255, 0.1);
+  }
+
+  .filter-hint {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  @media (max-width: 1180px) {
+    .dashboard-filter-form {
+      grid-template-columns: repeat(3, minmax(170px, 1fr));
+    }
+  }
+
+  @media (max-width: 760px) {
+    .dashboard-filter-form {
+      grid-template-columns: 1fr;
+    }
+
+    .dashboard-filter-form .btn.ghost {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
+HTML;
 render_header([
     'title' => 'Admin Dashboard - Asthapora',
     'isAdmin' => true,
     'showNav' => false,
     'brandSubtitle' => 'Dashboard Control Center',
+    'extraHead' => $extraHead,
 ]);
 ?>
 
@@ -133,11 +240,20 @@ render_header([
 
       <!-- Filter Section -->
       <div class="card filter-card">
-        <form method="get" class="filter-form">
+        <form method="get" class="filter-form dashboard-filter-form" id="dashboardFilterForm">
           <div class="filter-label">
             <i class="bi bi-funnel"></i>
-            <div>Filter Package</div>
+            <div>Filter Orders</div>
           </div>
+          <input type="text" name="name" value="<?= h($selectedName) ?>" placeholder="Nama akun">
+          <input type="email" name="email" value="<?= h($selectedEmail) ?>" placeholder="Email">
+          <input type="date" name="created_date" value="<?= h($selectedDate) ?>">
+          <select name="status">
+            <option value="">All Status</option>
+            <option value="pending" <?= $selectedStatus === 'pending' ? 'selected' : '' ?>>Pending</option>
+            <option value="accepted" <?= $selectedStatus === 'accepted' ? 'selected' : '' ?>>Accept</option>
+            <option value="rejected" <?= $selectedStatus === 'rejected' ? 'selected' : '' ?>>Reject</option>
+          </select>
           <select name="package">
             <option value="0">All Packages</option>
             <?php foreach ($packages as $p): ?>
@@ -147,7 +263,7 @@ render_header([
             <?php endforeach; ?>
           </select>
           <button class="btn primary" type="submit"><i class="bi bi-search"></i> Apply Filter</button>
-          <?php if ($selectedPackage > 0): ?>
+          <?php if ($hasActiveFilters): ?>
             <a class="btn ghost" href="/admin/dashboard"><i class="bi bi-x-circle"></i> Reset</a>
           <?php endif; ?>
         </form>
@@ -305,7 +421,104 @@ render_header([
   <form method="post" action="/admin/dashboard" id="confirmForm" style="display:none;">
     <input type="hidden" name="order_id" id="confirmOrderId" value="">
     <input type="hidden" name="action" id="confirmAction" value="">
+    <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+    <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+    <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+    <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+    <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
   </form>
+
+  <script>
+    (function () {
+      var form = document.getElementById('dashboardFilterForm');
+      if (!form) return;
+
+      var focusKey = 'adminDashboardFilterFocus';
+      var textTimer = null;
+      var textDelayMs = 600;
+
+      function saveTypingState(el) {
+        if (!el || !el.name) return;
+        var cursor = null;
+        if (typeof el.selectionStart === 'number') {
+          cursor = el.selectionStart;
+        } else if (typeof el.value === 'string') {
+          // Fallback for input types that do not expose selectionStart consistently (e.g. email).
+          cursor = el.value.length;
+        }
+        try {
+          sessionStorage.setItem(focusKey, JSON.stringify({
+            name: el.name,
+            cursor: cursor
+          }));
+        } catch (err) {}
+      }
+
+      function restoreTypingState() {
+        var raw = null;
+        try {
+          raw = sessionStorage.getItem(focusKey);
+        } catch (err) {}
+        if (!raw) return;
+        try {
+          var data = JSON.parse(raw);
+          if (!data || !data.name) return;
+          var target = form.querySelector('[name=\"' + data.name + '\"]');
+          if (!target) return;
+          target.focus();
+          var max = target.value.length;
+          var pos = typeof data.cursor === 'number' ? Math.max(0, Math.min(max, data.cursor)) : max;
+          window.requestAnimationFrame(function () {
+            if (typeof target.setSelectionRange === 'function') {
+              try {
+                target.setSelectionRange(pos, pos);
+                return;
+              } catch (err) {}
+            }
+            // Fallback: force caret to end when setSelectionRange is unsupported.
+            var val = target.value;
+            target.value = '';
+            target.value = val;
+          });
+        } catch (err) {}
+      }
+
+      function submitNow() {
+        var active = document.activeElement;
+        if (active && form.contains(active)) {
+          saveTypingState(active);
+        }
+        form.submit();
+      }
+
+      restoreTypingState();
+
+      form.querySelectorAll('select,input[type="date"]').forEach(function (el) {
+        el.addEventListener('change', submitNow);
+      });
+
+      form.querySelectorAll('input[type="text"],input[type="email"]').forEach(function (el) {
+        el.addEventListener('input', function () {
+          saveTypingState(el);
+          if (textTimer) clearTimeout(textTimer);
+          textTimer = setTimeout(submitNow, textDelayMs);
+        });
+        el.addEventListener('click', function () {
+          saveTypingState(el);
+        });
+        el.addEventListener('keyup', function () {
+          saveTypingState(el);
+        });
+        el.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (textTimer) clearTimeout(textTimer);
+            submitNow();
+          }
+        });
+      });
+    })();
+  </script>
 
   <script>
     // Proof Modal Script
