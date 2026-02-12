@@ -224,6 +224,9 @@ unset($_SESSION['order_draft'], $_SESSION['order_id']);
         <div><i class="bi bi-pin-map"></i> Kota Tangerang Selatan</div>
       </div>
       <div class="thankyou-note"><i class="bi bi-trophy"></i> See you on the court!</div>
+      <div class="thankyou-actions">
+        <a class="btn ghost" href="/logout"><i class="bi bi-box-arrow-right"></i> Exit</a>
+      </div>
     </section>
   </main>
   <script>
