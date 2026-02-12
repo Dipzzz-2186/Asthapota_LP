@@ -153,7 +153,7 @@ $isAdmin = is_admin_logged_in();
       width: min(1200px, 96vw);
       margin: 0 auto;
       gap: 18px;
-      padding: clamp(24px, 4vh, 42px) clamp(16px, 3vw, 28px);
+      padding: clamp(10px, 1.6vh, 20px) clamp(16px, 3vw, 28px) clamp(34px, 5.4vh, 56px);
       justify-content: center;
       align-items: center;
     }
@@ -931,7 +931,7 @@ $isAdmin = is_admin_logged_in();
     @media (max-height: 900px) {
       .hero {
         gap: 14px;
-        padding: clamp(18px, 3.2vh, 28px) clamp(14px, 2.6vw, 24px);
+        padding: clamp(10px, 1.8vh, 18px) clamp(14px, 2.6vw, 24px) clamp(24px, 4.2vh, 36px);
       }
 
       .hero-logo {
@@ -986,7 +986,7 @@ $isAdmin = is_admin_logged_in();
     @media (max-height: 760px) {
       .hero {
         gap: 8px;
-        padding: clamp(12px, 2.6vh, 20px) clamp(12px, 2.2vw, 20px);
+        padding: clamp(8px, 1.2vh, 14px) clamp(12px, 2.2vw, 20px) clamp(16px, 3vh, 24px);
       }
 
       .hero-logo {
