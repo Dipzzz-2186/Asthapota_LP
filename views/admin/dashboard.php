@@ -7,11 +7,14 @@ require_admin();
 
 $db = get_db();
 $flash = ['success' => '', 'error' => ''];
+$selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
+$selectedOrderId = ctype_digit($selectedOrderIdRaw) ? (int)$selectedOrderIdRaw : 0;
 $selectedPackage = isset($_REQUEST['package']) ? (int)$_REQUEST['package'] : 0;
 $selectedName = trim((string)($_REQUEST['name'] ?? ''));
 $selectedEmail = trim((string)($_REQUEST['email'] ?? ''));
 $selectedDate = trim((string)($_REQUEST['created_date'] ?? ''));
 $selectedStatusRaw = trim((string)($_REQUEST['status'] ?? ''));
+$selectedPage = isset($_REQUEST['page']) ? max(1, (int)$_REQUEST['page']) : 1;
 $allowedStatusFilters = ['pending', 'accepted', 'rejected'];
 $selectedStatus = in_array($selectedStatusRaw, $allowedStatusFilters, true) ? $selectedStatusRaw : '';
 if ($selectedDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)) {
@@ -66,6 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($selectedPackage > 0) {
         $redirectParams['package'] = $selectedPackage;
     }
+    if ($selectedOrderId > 0) {
+        $redirectParams['filter_order_id'] = $selectedOrderId;
+    }
     if ($selectedName !== '') {
         $redirectParams['name'] = $selectedName;
     }
@@ -78,6 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($selectedStatus !== '') {
         $redirectParams['status'] = $selectedStatus;
     }
+    if ($selectedPage > 1) {
+        $redirectParams['page'] = $selectedPage;
+    }
     $redirectPath = '/admin/dashboard';
     if ($redirectParams) {
         $redirectPath .= '?' . http_build_query($redirectParams);
@@ -87,13 +96,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $packages = $db->query("SELECT id, name FROM packages ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 
-$sql = "SELECT o.id, u.full_name, u.phone, u.email, u.instagram, o.total, o.status, o.payment_proof, o.created_at,
-  (SELECT GROUP_CONCAT(CONCAT(p.name, ' x', oi.qty) SEPARATOR ', ') FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id) as items
-  FROM orders o JOIN users u ON u.id = o.user_id
-  WHERE 1=1";
+$whereParts = ['1=1'];
 $params = [];
+if ($selectedOrderId > 0) {
+    $whereParts[] = "o.id = ?";
+    $params[] = $selectedOrderId;
+}
 if ($selectedPackage > 0) {
-    $sql .= " AND EXISTS (
+    $whereParts[] = "EXISTS (
         SELECT 1 FROM order_items oi
         JOIN packages p ON p.id = oi.package_id
         WHERE oi.order_id = o.id AND p.id = ?
@@ -101,63 +111,129 @@ if ($selectedPackage > 0) {
     $params[] = $selectedPackage;
 }
 if ($selectedName !== '') {
-    $sql .= " AND u.full_name LIKE ?";
+    $whereParts[] = "u.full_name LIKE ?";
     $params[] = '%' . $selectedName . '%';
 }
 if ($selectedEmail !== '') {
-    $sql .= " AND u.email LIKE ?";
+    $whereParts[] = "u.email LIKE ?";
     $params[] = '%' . $selectedEmail . '%';
 }
 if ($selectedDate !== '') {
-    $sql .= " AND DATE(o.created_at) = ?";
+    $whereParts[] = "DATE(o.created_at) = ?";
     $params[] = $selectedDate;
 }
 if ($selectedStatus === 'accepted' || $selectedStatus === 'rejected') {
-    $sql .= " AND o.status = ?";
+    $whereParts[] = "o.status = ?";
     $params[] = $selectedStatus;
 } elseif ($selectedStatus === 'pending') {
     // "pending" on dashboard means orders still waiting final decision by admin.
-    $sql .= " AND o.status IN ('pending', 'paid')";
+    $whereParts[] = "o.status IN ('pending', 'paid')";
 }
-$sql .= " ORDER BY o.created_at ASC";
+$whereSql = ' WHERE ' . implode(' AND ', $whereParts);
+
+$summarySql = "SELECT
+    COUNT(*) AS total_orders,
+    COALESCE(SUM(o.total), 0) AS total_revenue,
+    SUM(CASE WHEN o.status IN ('paid', 'accepted', 'rejected') THEN 1 ELSE 0 END) AS paid_orders,
+    SUM(CASE WHEN o.status NOT IN ('paid', 'accepted', 'rejected') THEN 1 ELSE 0 END) AS pending_orders
+  FROM orders o
+  JOIN users u ON u.id = o.user_id" . $whereSql;
+$summaryStmt = $db->prepare($summarySql);
+$summaryStmt->execute($params);
+$summary = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+$totalOrders = (int)($summary['total_orders'] ?? 0);
+$paidOrders = (int)($summary['paid_orders'] ?? 0);
+$pendingOrders = (int)($summary['pending_orders'] ?? 0);
+$totalRevenue = (int)($summary['total_revenue'] ?? 0);
+
+$perPage = 20;
+$totalPages = max(1, (int)ceil($totalOrders / $perPage));
+$currentPage = min($selectedPage, $totalPages);
+$offset = ($currentPage - 1) * $perPage;
+
+$sql = "SELECT o.id, u.full_name, u.phone, u.email, u.instagram, o.total, o.status, o.payment_proof, o.created_at,
+  (SELECT GROUP_CONCAT(CONCAT(p.name, ' x', oi.qty) SEPARATOR ', ') FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id) as items
+  FROM orders o JOIN users u ON u.id = o.user_id" . $whereSql .
+  " ORDER BY o.created_at DESC, o.id DESC LIMIT ? OFFSET ?";
 
 $stmt = $db->prepare($sql);
-$stmt->execute($params);
+foreach ($params as $index => $value) {
+    $stmt->bindValue($index + 1, $value);
+}
+$stmt->bindValue(count($params) + 1, $perPage, PDO::PARAM_INT);
+$stmt->bindValue(count($params) + 2, $offset, PDO::PARAM_INT);
+$stmt->execute();
 $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$totalOrders = count($orders);
-$paidOrders = 0;
-$pendingOrders = 0;
-$totalRevenue = 0;
-foreach ($orders as $o) {
-    $totalRevenue += (int)$o['total'];
-    if (in_array($o['status'], ['paid', 'accepted', 'rejected'], true)) {
-        $paidOrders++;
-    } else {
-        $pendingOrders++;
-    }
-}
 $hasActiveFilters = $selectedPackage > 0
+    || $selectedOrderId > 0
     || $selectedName !== ''
     || $selectedEmail !== ''
     || $selectedDate !== ''
     || $selectedStatus !== '';
+$startRow = $totalOrders > 0 ? ($offset + 1) : 0;
+$endRow = min($offset + count($orders), $totalOrders);
+$paginationBaseParams = [];
+if ($selectedOrderId > 0) {
+    $paginationBaseParams['filter_order_id'] = $selectedOrderId;
+}
+if ($selectedPackage > 0) {
+    $paginationBaseParams['package'] = $selectedPackage;
+}
+if ($selectedName !== '') {
+    $paginationBaseParams['name'] = $selectedName;
+}
+if ($selectedEmail !== '') {
+    $paginationBaseParams['email'] = $selectedEmail;
+}
+if ($selectedDate !== '') {
+    $paginationBaseParams['created_date'] = $selectedDate;
+}
+if ($selectedStatus !== '') {
+    $paginationBaseParams['status'] = $selectedStatus;
+}
 $extraHead = <<<'HTML'
 <style>
+  .filter-card {
+    padding: 18px 20px;
+    overflow: hidden;
+  }
+
   .dashboard-filter-form {
     display: grid;
-    grid-template-columns: minmax(180px, 1.3fr) repeat(4, minmax(150px, 1fr)) auto;
-    gap: 12px;
-    align-items: center;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    align-items: end;
   }
 
   .dashboard-filter-form .filter-label {
+    grid-column: 1 / -1;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .dashboard-filter-form .filter-field {
+    display: grid;
+    gap: 6px;
+  }
+
+  .dashboard-filter-form .field-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
   }
 
   .dashboard-filter-form input,
   .dashboard-filter-form select {
     width: 100%;
+    min-height: 52px;
     padding: 12px 14px;
     border-radius: var(--radius-sm);
     border: 2px solid var(--stroke);
@@ -168,12 +244,31 @@ $extraHead = <<<'HTML'
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
   }
 
+  .dashboard-filter-form input::placeholder {
+    color: var(--muted);
+  }
+
   .dashboard-filter-form input:focus,
   .dashboard-filter-form select:focus {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 4px rgba(0, 102, 255, 0.1);
   }
+
+  .dashboard-filter-form .filter-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    grid-column: 1 / -1;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-top: 8px;
+  }
+
+  .dashboard-filter-form .filter-actions .btn {
+    min-height: 46px;
+  }
+
 
   .filter-hint {
     margin-top: 10px;
@@ -192,10 +287,56 @@ $extraHead = <<<'HTML'
       grid-template-columns: 1fr;
     }
 
-    .dashboard-filter-form .btn.ghost {
+    .dashboard-filter-form .btn.ghost,
+    .dashboard-filter-form .btn.primary,
+    .dashboard-filter-form .filter-actions {
       width: 100%;
       justify-content: center;
     }
+
+  }
+
+  .pagination-wrap {
+    margin-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .pagination-info {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .pagination {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 6px;
+    border: 1px solid var(--stroke);
+    border-radius: 999px;
+    background: var(--surface);
+  }
+
+  .pagination .btn {
+    min-width: 40px;
+    justify-content: center;
+    border-radius: 999px;
+  }
+
+  .pagination .btn.active {
+    pointer-events: none;
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+
+  .pagination .btn.is-disabled {
+    pointer-events: none;
+    opacity: 0.45;
   }
 </style>
 HTML;
@@ -245,27 +386,48 @@ render_header([
             <i class="bi bi-funnel"></i>
             <div>Filter Orders</div>
           </div>
-          <input type="text" name="name" value="<?= h($selectedName) ?>" placeholder="Nama akun">
-          <input type="email" name="email" value="<?= h($selectedEmail) ?>" placeholder="Email">
-          <input type="date" name="created_date" value="<?= h($selectedDate) ?>">
-          <select name="status">
-            <option value="">All Status</option>
-            <option value="pending" <?= $selectedStatus === 'pending' ? 'selected' : '' ?>>Pending</option>
-            <option value="accepted" <?= $selectedStatus === 'accepted' ? 'selected' : '' ?>>Accept</option>
-            <option value="rejected" <?= $selectedStatus === 'rejected' ? 'selected' : '' ?>>Reject</option>
-          </select>
-          <select name="package">
-            <option value="0">All Packages</option>
-            <?php foreach ($packages as $p): ?>
-              <option value="<?= (int)$p['id'] ?>" <?= $selectedPackage === (int)$p['id'] ? 'selected' : '' ?>>
-                <?= h($p['name']) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-          <button class="btn primary" type="submit"><i class="bi bi-search"></i> Apply Filter</button>
-          <?php if ($hasActiveFilters): ?>
-            <a class="btn ghost" href="/admin/dashboard"><i class="bi bi-x-circle"></i> Reset</a>
-          <?php endif; ?>
+          <div class="filter-field">
+            <label class="field-label" for="filterOrderId">Order ID</label>
+            <input id="filterOrderId" type="text" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>" placeholder="Order ID">
+          </div>
+          <div class="filter-field">
+            <label class="field-label" for="filterName">Nama akun</label>
+            <input id="filterName" type="text" name="name" value="<?= h($selectedName) ?>" placeholder="Nama akun">
+          </div>
+          <div class="filter-field">
+            <label class="field-label" for="filterEmail">Email</label>
+            <input id="filterEmail" type="email" name="email" value="<?= h($selectedEmail) ?>" placeholder="Email">
+          </div>
+          <div class="filter-field">
+            <label class="field-label" for="filterDate">Tanggal</label>
+            <input id="filterDate" type="date" name="created_date" value="<?= h($selectedDate) ?>">
+          </div>
+          <div class="filter-field">
+            <label class="field-label" for="filterStatus">Status</label>
+            <select id="filterStatus" name="status">
+              <option value="">All Status</option>
+              <option value="pending" <?= $selectedStatus === 'pending' ? 'selected' : '' ?>>Pending</option>
+              <option value="accepted" <?= $selectedStatus === 'accepted' ? 'selected' : '' ?>>Accept</option>
+              <option value="rejected" <?= $selectedStatus === 'rejected' ? 'selected' : '' ?>>Reject</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label class="field-label" for="filterPackage">Package</label>
+            <select id="filterPackage" name="package">
+              <option value="0">All Packages</option>
+              <?php foreach ($packages as $p): ?>
+                <option value="<?= (int)$p['id'] ?>" <?= $selectedPackage === (int)$p['id'] ? 'selected' : '' ?>>
+                  <?= h($p['name']) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="filter-actions">
+            <button class="btn primary" type="submit"><i class="bi bi-search"></i> Apply</button>
+            <?php if ($hasActiveFilters): ?>
+              <a class="btn ghost" href="/admin/dashboard"><i class="bi bi-x-circle"></i> Reset</a>
+            <?php endif; ?>
+          </div>
         </form>
       </div>
 
@@ -374,6 +536,33 @@ render_header([
           </tbody>
         </table>
       </div>
+
+      <?php if ($totalPages > 1): ?>
+        <div class="pagination-wrap">
+          <div class="pagination-info">
+            Menampilkan <?= (int)$startRow ?>-<?= (int)$endRow ?> dari <?= (int)$totalOrders ?> data
+          </div>
+          <div class="pagination">
+            <?php
+              $prevPage = max(1, $currentPage - 1);
+              $nextPage = min($totalPages, $currentPage + 1);
+              $windowStart = max(1, $currentPage - 2);
+              $windowEnd = min($totalPages, $currentPage + 2);
+            ?>
+            <a class="btn ghost small<?= $currentPage <= 1 ? ' is-disabled' : '' ?>" href="/admin/dashboard?<?= h(http_build_query($paginationBaseParams + ['page' => $prevPage])) ?>"><i class="bi bi-chevron-left"></i></a>
+            <?php for ($page = $windowStart; $page <= $windowEnd; $page++): ?>
+              <a class="btn ghost small<?= $page === $currentPage ? ' active' : '' ?>" href="/admin/dashboard?<?= h(http_build_query($paginationBaseParams + ['page' => $page])) ?>"><?= (int)$page ?></a>
+            <?php endfor; ?>
+            <a class="btn ghost small<?= $currentPage >= $totalPages ? ' is-disabled' : '' ?>" href="/admin/dashboard?<?= h(http_build_query($paginationBaseParams + ['page' => $nextPage])) ?>"><i class="bi bi-chevron-right"></i></a>
+          </div>
+        </div>
+      <?php elseif ($totalOrders > 0): ?>
+        <div class="pagination-wrap">
+          <div class="pagination-info">
+            Menampilkan <?= (int)$startRow ?>-<?= (int)$endRow ?> dari <?= (int)$totalOrders ?> data
+          </div>
+        </div>
+      <?php endif; ?>
     </div>
   </main>
 
@@ -421,6 +610,8 @@ render_header([
   <form method="post" action="/admin/dashboard" id="confirmForm" style="display:none;">
     <input type="hidden" name="order_id" id="confirmOrderId" value="">
     <input type="hidden" name="action" id="confirmAction" value="">
+    <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+    <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
     <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
     <input type="hidden" name="name" value="<?= h($selectedName) ?>">
     <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
