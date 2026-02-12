@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/../app/auth.php';
 ensure_session();
 unset($_SESSION['order_draft']);
@@ -16,7 +16,7 @@ $isAdmin = is_admin_logged_in();
     @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
 
     :root {
-      --blue: #1658ad;
+      --blue: #b8bec8;
       --white: #f6f7fb;
       --shadow: rgba(0, 0, 0, 0.32);
       --soft-shadow: rgba(0, 0, 0, 0.2);
@@ -51,7 +51,9 @@ $isAdmin = is_admin_logged_in();
       font-weight: 500;
       letter-spacing: 0.2px;
       min-height: 100svh;
-      background: url('/assets/img/wallpaper.avif') center top / cover no-repeat;
+      background:
+        linear-gradient(180deg, rgba(7, 8, 10, 0.28) 0%, rgba(7, 8, 10, 0.5) 100%),
+        url('/assets/img/wallpapeh2.png') center center / cover no-repeat;
       background-attachment: scroll;
       position: relative;
       overflow-x: hidden;
@@ -74,9 +76,9 @@ $isAdmin = is_admin_logged_in();
 
     body::before {
       background:
-        radial-gradient(58% 54% at 50% 42%, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0) 72%),
-        radial-gradient(36% 34% at 18% 82%, rgba(23, 126, 255, 0.22), rgba(23, 126, 255, 0) 70%),
-        radial-gradient(34% 32% at 82% 18%, rgba(255, 193, 77, 0.2), rgba(255, 193, 77, 0) 72%);
+        radial-gradient(58% 54% at 50% 42%, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 72%),
+        radial-gradient(36% 34% at 18% 82%, rgba(182, 188, 198, 0.2), rgba(182, 188, 198, 0) 70%),
+        radial-gradient(34% 32% at 82% 18%, rgba(138, 144, 156, 0.2), rgba(138, 144, 156, 0) 72%);
       filter: blur(10px);
     }
 
@@ -125,8 +127,8 @@ $isAdmin = is_admin_logged_in();
       height: 100%;
       transform-origin: left center;
       transform: scaleX(0);
-      background: linear-gradient(90deg, #8fcbff 0%, #ffffff 56%, #ffd892 100%);
-      box-shadow: 0 0 12px rgba(143, 203, 255, 0.45);
+      background: linear-gradient(90deg, #8f949d 0%, #f2f3f6 56%, #9aa0ab 100%);
+      box-shadow: 0 0 12px rgba(197, 203, 214, 0.4);
       transition: transform 0.14s linear;
     }
 
@@ -233,7 +235,7 @@ $isAdmin = is_admin_logged_in();
       align-items: center;
       gap: 10px;
       background: #fff;
-      color: var(--blue);
+      color: #14171d;
       padding: 14px 28px;
       border-radius: 6px;
       font-family: var(--font-display);
@@ -410,7 +412,7 @@ $isAdmin = is_admin_logged_in();
 
       border-radius: 999px;
       border: 2px solid rgba(255, 255, 255, 0.72);
-      background: rgba(11, 45, 97, 0.35);
+      background: rgba(25, 29, 36, 0.46);
       color: #fff;
       letter-spacing: 1.6px;
       
@@ -454,9 +456,9 @@ $isAdmin = is_admin_logged_in();
 
     .hero-join:hover {
       transform: perspective(720px) translateY(-3px) scale(1.02) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
-      background: rgba(11, 45, 97, 0.55);
+      background: rgba(34, 39, 48, 0.72);
       border-color: rgba(255, 255, 255, 0.95);
-      box-shadow: 0 10px 24px rgba(9, 28, 57, 0.42);
+      box-shadow: 0 10px 24px rgba(12, 14, 20, 0.42);
     }
 
     .hero-join:hover::after {
@@ -487,7 +489,7 @@ $isAdmin = is_admin_logged_in();
     .support h2 {
       margin: 0 0 8px;
       font-family: var(--font-accent);
-      font-size: clamp(36px, 3.4vw, 56px);
+      font-size: clamp(30px, 2.8vw, 46px);
       font-weight: 700;
       letter-spacing: 0.5px;
       text-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
@@ -512,7 +514,9 @@ $isAdmin = is_admin_logged_in();
     }
 
     .sponsor-strip {
-      width: min(980px, 100%);
+      width: 100vw;
+      margin-left: calc(50% - 50vw);
+      margin-right: calc(50% - 50vw);
       overflow: hidden;
       padding: 12px 0;
       position: relative;
@@ -531,12 +535,12 @@ $isAdmin = is_admin_logged_in();
 
     .sponsor-strip::before {
       left: 0;
-      background: linear-gradient(to right, rgba(11, 45, 97, 0.48), transparent);
+      background: linear-gradient(to right, rgba(16, 18, 24, 0.6), transparent);
     }
 
     .sponsor-strip::after {
       right: 0;
-      background: linear-gradient(to left, rgba(11, 45, 97, 0.48), transparent);
+      background: linear-gradient(to left, rgba(16, 18, 24, 0.6), transparent);
     }
 
     .sponsor-track {
@@ -597,8 +601,8 @@ $isAdmin = is_admin_logged_in();
     }
 
     @keyframes join-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(141, 199, 255, 0.12); }
-      50% { box-shadow: 0 0 0 9px rgba(141, 199, 255, 0.03); }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(188, 194, 203, 0.12); }
+      50% { box-shadow: 0 0 0 9px rgba(188, 194, 203, 0.03); }
     }
 
     @keyframes join-sheen {
@@ -640,13 +644,13 @@ $isAdmin = is_admin_logged_in();
 
     @keyframes focus-ring-pulse {
       0% {
-        box-shadow: 0 0 0 0 rgba(137, 201, 255, 0);
+        box-shadow: 0 0 0 0 rgba(187, 193, 202, 0);
       }
       50% {
-        box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.85), 0 0 0 8px rgba(137, 201, 255, 0.35);
+        box-shadow: 0 0 0 2px rgba(19, 22, 28, 0.85), 0 0 0 8px rgba(187, 193, 202, 0.35);
       }
       100% {
-        box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.85), 0 0 0 5px rgba(137, 201, 255, 0.95);
+        box-shadow: 0 0 0 2px rgba(19, 22, 28, 0.85), 0 0 0 5px rgba(187, 193, 202, 0.95);
       }
     }
 
@@ -729,9 +733,9 @@ $isAdmin = is_admin_logged_in();
       text-transform: uppercase;
       border-radius: 999px;
       border: 2px solid rgba(255, 255, 255, 0.72);
-      background: rgba(11, 45, 97, 0.35);
+      background: rgba(25, 29, 36, 0.52);
       color: #fff;
-      box-shadow: 0 0 0 rgba(141, 199, 255, 0.35);
+      box-shadow: 0 0 0 rgba(182, 188, 198, 0.3);
       position: relative;
       overflow: hidden;
       isolation: isolate;
@@ -775,9 +779,9 @@ $isAdmin = is_admin_logged_in();
 
     .cta:hover {
       transform: perspective(720px) translateY(-3px) scale(1.02) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
-      background: rgba(11, 45, 97, 0.55);
+      background: rgba(34, 39, 48, 0.78);
       border-color: rgba(255, 255, 255, 0.95);
-      box-shadow: 0 10px 24px rgba(9, 28, 57, 0.42);
+      box-shadow: 0 10px 24px rgba(12, 14, 20, 0.42);
     }
 
     .cta:hover::after {
@@ -793,10 +797,10 @@ $isAdmin = is_admin_logged_in();
     }
 
     .cta-register {
-      background: linear-gradient(135deg, #34d399 0%, #10b981 52%, #059669 100%);
-      color: #f7fffc;
-      border-color: rgba(210, 255, 240, 0.92);
-      box-shadow: 0 10px 24px rgba(4, 67, 53, 0.34);
+      background: linear-gradient(135deg, #c6cbd4 0%, #9aa0aa 52%, #6f7682 100%);
+      color: #12151c;
+      border-color: rgba(236, 239, 245, 0.94);
+      box-shadow: 0 10px 24px rgba(10, 12, 17, 0.36);
       animation: none;
       margin-bottom: 12px;
     }
@@ -807,10 +811,10 @@ $isAdmin = is_admin_logged_in();
     }
 
     .cta-register:hover {
-      background: linear-gradient(135deg, #4adea5 0%, #18c38f 52%, #0da573 100%);
-      color: #ffffff;
-      border-color: rgba(226, 255, 245, 0.98);
-      box-shadow: 0 12px 28px rgba(4, 67, 53, 0.4);
+      background: linear-gradient(135deg, #d9dde4 0%, #acb2bc 52%, #7f8692 100%);
+      color: #0f131a;
+      border-color: rgba(245, 247, 251, 0.98);
+      box-shadow: 0 12px 28px rgba(10, 12, 17, 0.42);
     }
 
     .hero-join:focus-visible,
@@ -821,11 +825,11 @@ $isAdmin = is_admin_logged_in();
     }
 
     .hero-join:focus-visible {
-      box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.92), 0 0 0 6px rgba(137, 201, 255, 0.92), 0 10px 24px rgba(9, 28, 57, 0.42);
+      box-shadow: 0 0 0 2px rgba(19, 22, 28, 0.92), 0 0 0 6px rgba(187, 193, 202, 0.9), 0 10px 24px rgba(12, 14, 20, 0.42);
     }
 
     .cta:focus-visible {
-      box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.92), 0 0 0 7px rgba(137, 201, 255, 0.95), 0 10px 24px rgba(9, 28, 57, 0.42);
+      box-shadow: 0 0 0 2px rgba(19, 22, 28, 0.92), 0 0 0 7px rgba(187, 193, 202, 0.94), 0 10px 24px rgba(12, 14, 20, 0.42);
     }
 
     .back-top {
@@ -836,7 +840,7 @@ $isAdmin = is_admin_logged_in();
       height: 50px;
       border: 1.6px solid rgba(255, 255, 255, 0.76);
       border-radius: 999px;
-      background: rgba(11, 45, 97, 0.46);
+      background: rgba(25, 29, 36, 0.62);
       color: #fff;
       display: inline-flex;
       align-items: center;
@@ -847,7 +851,7 @@ $isAdmin = is_admin_logged_in();
       opacity: 0;
       visibility: hidden;
       transform: translateY(14px) scale(0.95);
-      box-shadow: 0 8px 18px rgba(4, 16, 36, 0.33);
+      box-shadow: 0 8px 18px rgba(12, 14, 20, 0.36);
       backdrop-filter: blur(4px);
       transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0.2s, background 0.2s ease, border-color 0.2s ease;
     }
@@ -860,7 +864,7 @@ $isAdmin = is_admin_logged_in();
     }
 
     .back-top:hover {
-      background: rgba(11, 45, 97, 0.62);
+      background: rgba(34, 39, 48, 0.84);
       border-color: rgba(255, 255, 255, 0.95);
       transform: translateY(-2px) scale(1.04);
     }
@@ -872,7 +876,7 @@ $isAdmin = is_admin_logged_in();
     .back-top:focus-visible {
       outline: none;
       border-color: #fff;
-      box-shadow: 0 0 0 2px rgba(9, 26, 53, 0.92), 0 0 0 6px rgba(137, 201, 255, 0.92), 0 8px 18px rgba(4, 16, 36, 0.33);
+      box-shadow: 0 0 0 2px rgba(19, 22, 28, 0.92), 0 0 0 6px rgba(187, 193, 202, 0.92), 0 8px 18px rgba(12, 14, 20, 0.36);
       animation: focus-ring-pulse 760ms ease-out 1;
     }
 
@@ -939,9 +943,12 @@ $isAdmin = is_admin_logged_in();
         height: 64px;
       }
 
-      .welcome,
-      .support h2 {
+      .welcome {
         font-size: clamp(58px, 8.6vh, 94px);
+      }
+
+      .support h2 {
+        font-size: clamp(27px, 3.3vh, 38px);
       }
 
       .title {
@@ -994,9 +1001,12 @@ $isAdmin = is_admin_logged_in();
         height: 56px;
       }
 
-      .welcome,
-      .support h2 {
+      .welcome {
         font-size: clamp(50px, 7vh, 78px);
+      }
+
+      .support h2 {
+        font-size: clamp(24px, 3.1vh, 34px);
       }
 
       .title {
