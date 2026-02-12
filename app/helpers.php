@@ -230,19 +230,24 @@ function send_order_status_email(array $order, string $toEmail): bool {
         : ($statusRaw === 'rejected'
             ? 'background:#fff1f1;border:1px solid #ffd0d0;'
             : 'background:#eef4ff;border:1px solid #cfe0ff;');
+    $mapsUrl = 'https://www.google.com/maps/search/?api=1&query='
+        . rawurlencode('MY PADEL, Jl. Jelupang Utama, Kec. Serpong Utara, Kota Tangerang Selatan');
     $eventDetails = $statusRaw === 'accepted'
         ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:14px;background:#fff8e8;border:1px solid #ffe2ac;border-radius:12px;">
              <tr>
                <td style="padding:12px 14px;font-size:13px;line-height:1.6;color:#6b4d1f;">
                  <div style="font-weight:700;color:#4f3a18;margin-bottom:6px;">Detail Event Temu Padel 2026</div>
-                 <div><strong>Tanggal:</strong> 28 Februari 2026</div>
-                 <div><strong>Waktu:</strong> 16:00 - 18:00 WIB</div>
-                 <div><strong>Lokasi:</strong> MY PADEL</div>
-                 <div><strong>Alamat:</strong> Jl. Jelupang Utama, Kec. Serpong Utara, Kota Tangerang Selatan</div>
-               </td>
-             </tr>
-           </table>
-           <p style="margin:14px 0 0;font-size:13px;color:#5a6b86;">Silakan hadir 15-30 menit lebih awal untuk proses check-in.</p>'
+                  <div><strong>Tanggal:</strong> 28 Februari 2026</div>
+                  <div><strong>Waktu:</strong> 16:00 - 18:00 WIB</div>
+                  <div><strong>Lokasi:</strong> MY PADEL</div>
+                  <div><strong>Alamat:</strong> Jl. Jelupang Utama, Kec. Serpong Utara, Kota Tangerang Selatan</div>
+                  <div style="margin-top:12px;">
+                    <a href="' . htmlspecialchars($mapsUrl, ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1e5ed8;color:#ffffff;text-decoration:none;font-weight:700;font-size:12px;padding:10px 14px;border-radius:10px;">Buka di Google Maps</a>
+                  </div>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:14px 0 0;font-size:13px;color:#5a6b86;">Silakan hadir 15-30 menit lebih awal untuk proses check-in.</p>'
         : '';
     $rejectNote = $statusRaw === 'rejected'
         ? '<p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#6d3640;">Pesanan ini dinyatakan <strong>ditolak</strong>. Jika kamu butuh bantuan atau ingin melakukan pemesanan ulang, silakan hubungi tim panitia.</p>'

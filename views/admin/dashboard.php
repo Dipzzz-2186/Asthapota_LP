@@ -29,6 +29,9 @@ if (!empty($_SESSION['dashboard_flash']) && is_array($_SESSION['dashboard_flash'
 
 // Accept/Reject order (admin action) (KHOLIS)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Start fresh for each action to avoid mixing previous flash with current result.
+    $flash = ['success' => '', 'error' => ''];
+
     // Validate request payload
     $orderId = (int)($_POST['order_id'] ?? 0);
     $action = $_POST['action'] ?? '';
@@ -1010,9 +1013,41 @@ render_header([
         }
       });
 
+      var isSubmitting = false;
+      form.addEventListener('submit', function(e) {
+        if (isSubmitting) {
+          e.preventDefault();
+          return;
+        }
+        isSubmitting = true;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
+        cancelBtn.disabled = true;
+        closeBtn.disabled = true;
+      });
+
       submitBtn.addEventListener('click', function() {
         form.submit();
       });
+    })();
+  </script>
+  <script>
+    (function() {
+      var alerts = document.querySelectorAll('.alert, .alert-success');
+      if (!alerts.length) return;
+
+      setTimeout(function() {
+        alerts.forEach(function(el) {
+          el.style.transition = 'opacity 0.35s ease, transform 0.35s ease';
+          el.style.opacity = '0';
+          el.style.transform = 'translateY(-6px)';
+          setTimeout(function() {
+            if (el && el.parentNode) {
+              el.parentNode.removeChild(el);
+            }
+          }, 360);
+        });
+      }, 3500);
     })();
   </script>
   <script>
