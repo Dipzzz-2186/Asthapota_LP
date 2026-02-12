@@ -148,6 +148,16 @@ $isAdmin = is_admin_logged_in();
       padding: 48px 0;
     }
 
+    .hero {
+      min-height: 100svh;
+      width: min(1200px, 96vw);
+      margin: 0 auto;
+      gap: 18px;
+      padding: clamp(24px, 4vh, 42px) clamp(16px, 3vw, 28px);
+      justify-content: center;
+      align-items: center;
+    }
+
     .hero [data-seq] {
       opacity: 0;
       transform: translateY(26px) scale(0.98);
@@ -181,7 +191,7 @@ $isAdmin = is_admin_logged_in();
       margin: 0;
       font-family: var(--font-accent);
       font-style: italic;
-      font-size: clamp(38px, 4.4vw, 66px);
+      font-size: clamp(72px, 7.8vw, 110px);
       line-height: 1;
       letter-spacing: 0.4px;
       text-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
@@ -190,7 +200,7 @@ $isAdmin = is_admin_logged_in();
     .title {
       margin: 0;
       font-family: var(--font-display);
-      font-size: clamp(48px, 10vw, 128px);
+      font-size: clamp(80px, 12.5vw, 170px);
       line-height: 0.92;
       font-weight: 400;
       letter-spacing: 2.2px;
@@ -201,7 +211,7 @@ $isAdmin = is_admin_logged_in();
     .subtitle {
       margin: 0;
       font-family: var(--font-body);
-      font-size: clamp(24px, 2.2vw, 36px);
+      font-size: clamp(42px, 3.9vw, 64px);
       font-weight: 800;
       letter-spacing: 1px;
       text-transform: uppercase;
@@ -227,7 +237,7 @@ $isAdmin = is_admin_logged_in();
       padding: 14px 28px;
       border-radius: 6px;
       font-family: var(--font-display);
-      font-size: clamp(22px, 2.4vw, 42px);
+      font-size: clamp(40px, 4.4vw, 68px);
       font-weight: 400;
       letter-spacing: 1.7px;
       text-transform: uppercase;
@@ -293,7 +303,7 @@ $isAdmin = is_admin_logged_in();
     .countdown-label {
       margin: 0;
       font-family: var(--font-accent);
-      font-size: 15px;
+      font-size: 28px;
       letter-spacing: 0.6px;
       text-transform: uppercase;
       font-weight: 600;
@@ -302,8 +312,8 @@ $isAdmin = is_admin_logged_in();
 
     .countdown {
       display: grid;
-      grid-template-columns: repeat(4, minmax(72px, 110px));
-      gap: 10px;
+      grid-template-columns: repeat(4, minmax(90px, 130px));
+      gap: 12px;
     }
 
     .countdown.is-hidden {
@@ -314,7 +324,7 @@ $isAdmin = is_admin_logged_in();
       background: rgba(255, 255, 255, 0.16);
       border: 1px solid rgba(255, 255, 255, 0.45);
       border-radius: 12px;
-      padding: 10px 8px;
+      padding: 12px 10px;
       backdrop-filter: blur(3px);
       transition: transform 0.16s ease, border-color 0.2s ease, background 0.2s ease;
     }
@@ -327,7 +337,7 @@ $isAdmin = is_admin_logged_in();
 
     .count-value {
       font-family: var(--font-display);
-      font-size: clamp(24px, 2.9vw, 38px);
+      font-size: clamp(44px, 5vw, 70px);
       font-weight: 400;
       line-height: 1;
       letter-spacing: 1.1px;
@@ -342,7 +352,7 @@ $isAdmin = is_admin_logged_in();
     .count-unit {
       margin-top: 4px;
       font-family: var(--font-body);
-      font-size: 11px;
+      font-size: 18px;
       letter-spacing: 1.2px;
       text-transform: uppercase;
       opacity: 0.9;
@@ -352,7 +362,7 @@ $isAdmin = is_admin_logged_in();
     .count-status {
       margin: 2px 0 0;
       font-family: var(--font-body);
-      font-size: 13px;
+      font-size: 18px;
       opacity: 0.95;
       min-height: 18px;
       font-weight: 600;
@@ -394,8 +404,8 @@ $isAdmin = is_admin_logged_in();
       justify-content: center;
       gap: 12px;
 
-      padding: 18px 52px;   /* ? diperpanjang */
-      font-size: 22px;      /* ? dibesarkan */
+      padding: 22px 62px;
+      font-size: 30px;
       font-weight: 900;     /* ? lebih tegas */
 
       border-radius: 999px;
@@ -920,8 +930,8 @@ $isAdmin = is_admin_logged_in();
 
     @media (max-height: 900px) {
       .hero {
-        gap: 16px;
-        padding: 30px 0 24px;
+        gap: 14px;
+        padding: clamp(18px, 3.2vh, 28px) clamp(14px, 2.6vw, 24px);
       }
 
       .hero-logo {
@@ -929,31 +939,86 @@ $isAdmin = is_admin_logged_in();
         height: 64px;
       }
 
-      .welcome {
-        font-size: clamp(30px, 5.2vh, 50px);
+      .welcome,
+      .support h2 {
+        font-size: clamp(58px, 8.6vh, 94px);
       }
 
       .title {
-        font-size: clamp(40px, 12vh, 98px);
+        font-size: clamp(66px, 14vh, 132px);
       }
 
       .subtitle {
-        font-size: clamp(18px, 3.4vh, 30px);
+        font-size: clamp(34px, 5.4vh, 52px);
       }
 
       .date-box {
-        margin-top: 10px;
-        padding: 10px 18px;
-        font-size: clamp(16px, 3.3vh, 30px);
+        margin-top: 6px;
+        padding: 12px 22px;
+        font-size: clamp(34px, 5.8vh, 52px);
       }
 
       .countdown-wrap {
-        margin-top: 4px;
-        gap: 8px;
+        margin-top: 2px;
+        gap: 6px;
       }
 
       .countdown {
-        grid-template-columns: repeat(4, minmax(64px, 92px));
+        grid-template-columns: repeat(4, minmax(82px, 110px));
+        gap: 10px;
+      }
+
+      .count-item {
+        padding: 10px 8px;
+      }
+
+      .count-value {
+        font-size: clamp(38px, 6vh, 56px);
+      }
+
+      .hero-join {
+        margin-top: 4px;
+        padding: 18px 40px;
+        font-size: 28px;
+      }
+    }
+
+    @media (max-height: 760px) {
+      .hero {
+        gap: 8px;
+        padding: clamp(12px, 2.6vh, 20px) clamp(12px, 2.2vw, 20px);
+      }
+
+      .hero-logo {
+        width: 56px;
+        height: 56px;
+      }
+
+      .welcome,
+      .support h2 {
+        font-size: clamp(50px, 7vh, 78px);
+      }
+
+      .title {
+        font-size: clamp(56px, 11.8vh, 104px);
+      }
+
+      .subtitle {
+        font-size: clamp(30px, 4.8vh, 44px);
+      }
+
+      .date-box {
+        margin-top: 2px;
+        padding: 10px 16px;
+        font-size: clamp(28px, 5vh, 42px);
+      }
+
+      .countdown-label {
+        font-size: 20px;
+      }
+
+      .countdown {
+        grid-template-columns: repeat(4, minmax(72px, 96px));
         gap: 8px;
       }
 
@@ -962,60 +1027,16 @@ $isAdmin = is_admin_logged_in();
       }
 
       .count-value {
-        font-size: clamp(20px, 3.8vh, 30px);
-      }
-
-      .hero-join {
-        margin-top: 8px;
-        padding: 14px 34px;
-        font-size: 18px;
-      }
-    }
-
-    @media (max-height: 760px) {
-      .hero {
-        gap: 12px;
-        padding: 22px 0 18px;
-      }
-
-      .welcome {
-        font-size: clamp(26px, 4.8vh, 40px);
-      }
-
-      .title {
-        font-size: clamp(34px, 9.4vh, 74px);
-      }
-
-      .subtitle {
-        font-size: clamp(16px, 2.8vh, 24px);
-      }
-
-      .date-box {
-        margin-top: 6px;
-        padding: 8px 14px;
-        font-size: clamp(14px, 2.9vh, 24px);
-      }
-
-      .countdown-label {
-        font-size: 12px;
-      }
-
-      .countdown {
-        grid-template-columns: repeat(4, minmax(58px, 84px));
-        gap: 6px;
-      }
-
-      .count-item {
-        padding: 6px 5px;
+        font-size: clamp(34px, 5.8vh, 48px);
       }
 
       .count-unit {
-        font-size: 10px;
+        font-size: 15px;
       }
 
       .hero-join {
-        padding: 12px 28px;
-        font-size: 16px;
+        padding: 16px 32px;
+        font-size: 24px;
       }
     }
 
