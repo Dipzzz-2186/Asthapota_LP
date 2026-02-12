@@ -781,4 +781,11 @@ render_header([
       });
     })();
   </script>
+  <script>
+    (function() {
+      setInterval(function() {
+        window.location.reload();
+      }, 60000);
+    })();
+  </script>
 <?php render_footer(['isAdmin' => true]); ?>

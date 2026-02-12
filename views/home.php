@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../app/auth.php';
 ensure_session();
 unset($_SESSION['order_draft']);
@@ -10,7 +10,7 @@ $isAdmin = is_admin_logged_in();
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Temu Padel 2026</title>
+  <title>Home - Temu Padel 2026</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
     @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
@@ -20,6 +20,7 @@ $isAdmin = is_admin_logged_in();
       --white: #f6f7fb;
       --shadow: rgba(0, 0, 0, 0.32);
       --soft-shadow: rgba(0, 0, 0, 0.2);
+      --text-stroke-dark: rgba(0, 0, 0, 0.88);
       --font-body: "Manrope", "Segoe UI", Tahoma, sans-serif;
       --font-display: "Anton", "Arial Narrow", Impact, sans-serif;
       --font-accent: "Playfair Display", Georgia, serif;
@@ -41,7 +42,6 @@ $isAdmin = is_admin_logged_in();
       margin: 0;
       min-height: 100%;
       scroll-behavior: smooth;
-      scroll-snap-type: y mandatory;
       overscroll-behavior: none;
     }
 
@@ -145,7 +145,6 @@ $isAdmin = is_admin_logged_in();
       justify-content: center;
       text-align: center;
       gap: 22px;
-      scroll-snap-align: start;
       padding: 48px 0;
     }
 
@@ -206,6 +205,16 @@ $isAdmin = is_admin_logged_in();
       font-weight: 800;
       letter-spacing: 1px;
       text-transform: uppercase;
+    }
+
+    .hero .welcome,
+    .hero .title,
+    .hero .subtitle {
+      -webkit-text-stroke: 1px var(--text-stroke-dark);
+      paint-order: stroke fill;
+      text-shadow:
+        0 2px 10px rgba(0, 0, 0, 0.42),
+        0 0 1px rgba(0, 0, 0, 0.95);
     }
 
     .date-box {
@@ -349,6 +358,15 @@ $isAdmin = is_admin_logged_in();
       font-weight: 600;
     }
 
+    .hero .countdown-label,
+    .hero .count-value,
+    .hero .count-unit,
+    .hero .count-status {
+      -webkit-text-stroke: 0.7px rgba(0, 0, 0, 0.84);
+      paint-order: stroke fill;
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+    }
+
     .count-status.live {
       margin-top: 6px;
       padding: 8px 18px;
@@ -376,9 +394,9 @@ $isAdmin = is_admin_logged_in();
       justify-content: center;
       gap: 12px;
 
-      padding: 18px 52px;   /* ← diperpanjang */
-      font-size: 22px;      /* ← dibesarkan */
-      font-weight: 900;     /* ← lebih tegas */
+      padding: 18px 52px;   /* ? diperpanjang */
+      font-size: 22px;      /* ? dibesarkan */
+      font-weight: 900;     /* ? lebih tegas */
 
       border-radius: 999px;
       border: 2px solid rgba(255, 255, 255, 0.72);
@@ -900,6 +918,107 @@ $isAdmin = is_admin_logged_in();
       }
     }
 
+    @media (max-height: 900px) {
+      .hero {
+        gap: 16px;
+        padding: 30px 0 24px;
+      }
+
+      .hero-logo {
+        width: 64px;
+        height: 64px;
+      }
+
+      .welcome {
+        font-size: clamp(30px, 5.2vh, 50px);
+      }
+
+      .title {
+        font-size: clamp(40px, 12vh, 98px);
+      }
+
+      .subtitle {
+        font-size: clamp(18px, 3.4vh, 30px);
+      }
+
+      .date-box {
+        margin-top: 10px;
+        padding: 10px 18px;
+        font-size: clamp(16px, 3.3vh, 30px);
+      }
+
+      .countdown-wrap {
+        margin-top: 4px;
+        gap: 8px;
+      }
+
+      .countdown {
+        grid-template-columns: repeat(4, minmax(64px, 92px));
+        gap: 8px;
+      }
+
+      .count-item {
+        padding: 8px 6px;
+      }
+
+      .count-value {
+        font-size: clamp(20px, 3.8vh, 30px);
+      }
+
+      .hero-join {
+        margin-top: 8px;
+        padding: 14px 34px;
+        font-size: 18px;
+      }
+    }
+
+    @media (max-height: 760px) {
+      .hero {
+        gap: 12px;
+        padding: 22px 0 18px;
+      }
+
+      .welcome {
+        font-size: clamp(26px, 4.8vh, 40px);
+      }
+
+      .title {
+        font-size: clamp(34px, 9.4vh, 74px);
+      }
+
+      .subtitle {
+        font-size: clamp(16px, 2.8vh, 24px);
+      }
+
+      .date-box {
+        margin-top: 6px;
+        padding: 8px 14px;
+        font-size: clamp(14px, 2.9vh, 24px);
+      }
+
+      .countdown-label {
+        font-size: 12px;
+      }
+
+      .countdown {
+        grid-template-columns: repeat(4, minmax(58px, 84px));
+        gap: 6px;
+      }
+
+      .count-item {
+        padding: 6px 5px;
+      }
+
+      .count-unit {
+        font-size: 10px;
+      }
+
+      .hero-join {
+        padding: 12px 28px;
+        font-size: 16px;
+      }
+    }
+
     @media (max-width: 860px) {
       .panel {
         gap: 20px;
@@ -950,7 +1069,7 @@ $isAdmin = is_admin_logged_in();
         width: 100%;
       }
 
-      /* 🔥 JOIN US BUTTON - Dibuat jauh lebih besar */
+      /* ?? JOIN US BUTTON - Dibuat jauh lebih besar */
       .hero-join {
         width: 100%;
         padding: 18px 22px;
@@ -964,7 +1083,7 @@ $isAdmin = is_admin_logged_in();
         font-size: 22px;
       }
 
-      /* 🔥 CTA BUTTON (See Packages / Admin) */
+      /* ?? CTA BUTTON (See Packages / Admin) */
       .cta {
         width: 100%;
         min-width: 100%;
@@ -1236,6 +1355,22 @@ $isAdmin = is_admin_logged_in();
         });
       });
 
+      document.addEventListener('keydown', function (event) {
+        if (!event.ctrlKey || !event.altKey) return;
+        if ((event.key || '').toLowerCase() !== 'a') return;
+
+        var target = event.target;
+        if (target) {
+          var tag = (target.tagName || '').toLowerCase();
+          if (tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable) {
+            return;
+          }
+        }
+
+        event.preventDefault();
+        window.location.href = '/admin/login';
+      });
+
       var targetStart = new Date('2026-02-28T16:00:00+07:00').getTime();
       var targetEnd = new Date('2026-02-28T18:00:00+07:00').getTime();
 
@@ -1322,3 +1457,4 @@ $isAdmin = is_admin_logged_in();
   </script>
 </body>
 </html>
+
