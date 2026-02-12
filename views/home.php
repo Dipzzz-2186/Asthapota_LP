@@ -544,6 +544,7 @@ $isAdmin = is_admin_logged_in();
     }
 
     .sponsor-track {
+      --marquee-shift: 50%;
       width: max-content;
       display: flex;
       align-items: center;
@@ -597,7 +598,7 @@ $isAdmin = is_admin_logged_in();
 
     @keyframes sponsor-scroll {
       from { transform: translateX(0); }
-      to { transform: translateX(-50%); }
+      to { transform: translateX(calc(-1 * var(--marquee-shift))); }
     }
 
     @keyframes join-pulse {
@@ -1184,11 +1185,6 @@ $isAdmin = is_admin_logged_in();
           <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/logo.webp" alt="BAPORA"></a>
           <a href="https://fcom.co.id/" target="_blank" class="sponsor"><img src="/assets/img/fcom.png" alt="FCOM"></a>
           <a href="https://ayo.co.id/v/mypadel" target="_blank" class="sponsor"><img src="/assets/img/mypadel.png" alt="MY Padel"></a>
-
-          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/hippi.png" alt="HIPPI"></a>
-          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/logo.webp" alt="BAPORA"></a>
-          <a href="https://fcom.co.id/" target="_blank" class="sponsor"><img src="/assets/img/fcom.png" alt="FCOM"></a>
-          <a href="https://ayo.co.id/v/mypadel" target="_blank" class="sponsor"><img src="/assets/img/mypadel.png" alt="MY Padel"></a>
         </div>
       </div>
 
@@ -1274,6 +1270,53 @@ $isAdmin = is_admin_logged_in();
           el.classList.add('is-visible');
         });
       }
+
+      function setupSponsorMarquee() {
+        var tracks = document.querySelectorAll('.sponsor-strip .sponsor-track');
+        tracks.forEach(function (track) {
+          var strip = track.closest('.sponsor-strip');
+          if (!strip) return;
+
+          Array.prototype.slice.call(track.children).forEach(function (node) {
+            if (node.dataset.clone === '1') {
+              node.remove();
+            }
+          });
+
+          var baseItems = Array.prototype.slice.call(track.querySelectorAll('.sponsor')).filter(function (item) {
+            return item.dataset.clone !== '1';
+          });
+          if (!baseItems.length) return;
+
+          var style = window.getComputedStyle(track);
+          var gap = parseFloat(style.columnGap || style.gap || '0') || 0;
+          var firstItem = baseItems[0];
+          var lastItem = baseItems[baseItems.length - 1];
+          var baseWidth = (lastItem.offsetLeft + lastItem.offsetWidth) - firstItem.offsetLeft;
+          var shift = Math.max(1, baseWidth + gap);
+
+          function appendCloneSet() {
+            baseItems.forEach(function (item) {
+              var clone = item.cloneNode(true);
+              clone.dataset.clone = '1';
+              clone.setAttribute('aria-hidden', 'true');
+              clone.setAttribute('tabindex', '-1');
+              track.appendChild(clone);
+            });
+          }
+
+          appendCloneSet();
+          while ((track.scrollWidth - shift) < (strip.clientWidth + 2)) {
+            appendCloneSet();
+          }
+
+          track.style.setProperty('--marquee-shift', shift + 'px');
+        });
+      }
+
+      setupSponsorMarquee();
+      window.addEventListener('load', setupSponsorMarquee);
+      window.addEventListener('resize', setupSponsorMarquee);
 
       function canAnimateLink(a) {
         if (!a) return false;
