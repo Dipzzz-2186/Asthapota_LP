@@ -5,7 +5,7 @@ require_once __DIR__ . '/../app/auth.php';
 ensure_session();
 
 if (empty($_SESSION['user_id'])) {
-    redirect('/register?notice=register_required');
+    redirect('/register?from=packages&notice=register_required');
 }
 $orderId = (int)($_GET['order'] ?? 0);
 if ($orderId <= 0) {

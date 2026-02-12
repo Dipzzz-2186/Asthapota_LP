@@ -6,7 +6,7 @@ require_once __DIR__ . '/../app/auth.php';
 ensure_session();
 
 if (empty($_SESSION['user_id'])) {
-    redirect('/register?notice=register_required');
+    redirect('/register?from=packages&notice=register_required');
 }
 
 $draft = $_SESSION['order_draft'] ?? null;
@@ -26,7 +26,7 @@ $user = $userStmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user) {
     unset($_SESSION['user_id'], $_SESSION['order_draft'], $_SESSION['order_id']);
-    redirect('/register');
+    redirect('/register?from=packages');
 }
 
 $items = [];

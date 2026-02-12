@@ -16,7 +16,7 @@ $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$can_order) {
-        redirect('/register?notice=register_required');
+        redirect('/register?from=packages&notice=register_required');
     }
 
     $qtys = [];
@@ -435,7 +435,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button class="btn primary" type="submit"><i class="bi bi-arrow-right-circle"></i> Continue to Order</button>
           <?php endif; ?>
           <?php if (!$can_order): ?>
-            <a class="btn primary" href="/register"><i class="bi bi-person-plus"></i> Register Now</a>
+            <a class="btn primary" href="/register?from=packages"><i class="bi bi-person-plus"></i> Register Now</a>
           <?php endif; ?>
           <a class="btn ghost" href="/"><i class="bi bi-house-door"></i> Back to Home</a>
         </div>
@@ -449,7 +449,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <h2 class="auth-modal-title" id="authModalTitle"><i class="bi bi-shield-lock"></i> Register Required</h2>
         <p class="auth-modal-text">Please register first before selecting packages.</p>
         <div class="auth-modal-actions">
-          <a class="btn primary" href="/register"><i class="bi bi-person-plus"></i> Register Now</a>
+          <a class="btn primary" href="/register?from=packages"><i class="bi bi-person-plus"></i> Register Now</a>
           <button class="btn ghost" type="button" id="closeAuthModal"><i class="bi bi-x-lg"></i> Close</button>
         </div>
       </div>

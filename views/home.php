@@ -764,6 +764,27 @@ $isAdmin = is_admin_logged_in();
       transform: perspective(720px) translateY(-1px) scale(0.995) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
     }
 
+    .cta-register {
+      background: linear-gradient(135deg, #34d399 0%, #10b981 52%, #059669 100%);
+      color: #f7fffc;
+      border-color: rgba(210, 255, 240, 0.92);
+      box-shadow: 0 10px 24px rgba(4, 67, 53, 0.34);
+      animation: none;
+      margin-bottom: 12px;
+    }
+
+    .cta-register::before,
+    .cta-register::after {
+      display: none;
+    }
+
+    .cta-register:hover {
+      background: linear-gradient(135deg, #4adea5 0%, #18c38f 52%, #0da573 100%);
+      color: #ffffff;
+      border-color: rgba(226, 255, 245, 0.98);
+      box-shadow: 0 12px 28px rgba(4, 67, 53, 0.4);
+    }
+
     .hero-join:focus-visible,
     .cta:focus-visible {
       outline: none;
@@ -1024,6 +1045,7 @@ $isAdmin = is_admin_logged_in();
       <?php if ($isAdmin): ?>
         <a class="cta" data-reveal style="--reveal-delay: 240ms;" href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Go To Admin Dashboard</a>
       <?php else: ?>
+        <a class="cta cta-register" data-reveal style="--reveal-delay: 240ms;" href="/register?from=home"><i class="bi bi-person-plus"></i> Click Here To Register</a>
         <a class="cta" data-reveal style="--reveal-delay: 240ms;" href="/packages"><i class="bi bi-box-seam"></i> Click Here To See Packages</a>
       <?php endif; ?>
     </section>
@@ -1131,7 +1153,7 @@ $isAdmin = is_admin_logged_in();
 
       var ikutBtn = document.getElementById('ikutYukBtn');
       var registerPanel = document.getElementById('registerPanel');
-      var ctaBtn = document.querySelector('.cta');
+      var ctaButtons = Array.prototype.slice.call(document.querySelectorAll('.cta'));
 
       if (ikutBtn && registerPanel) {
         if (!reduceMotion && window.matchMedia('(pointer:fine)').matches) {
@@ -1174,7 +1196,7 @@ $isAdmin = is_admin_logged_in();
         });
       }
 
-      if (ctaBtn) {
+      ctaButtons.forEach(function (ctaBtn) {
         if (!reduceMotion && window.matchMedia('(pointer:fine)').matches) {
           ctaBtn.addEventListener('pointermove', function (event) {
             var rect = ctaBtn.getBoundingClientRect();
@@ -1212,7 +1234,7 @@ $isAdmin = is_admin_logged_in();
             });
           }
         });
-      }
+      });
 
       var targetStart = new Date('2026-02-28T16:00:00+07:00').getTime();
       var targetEnd = new Date('2026-02-28T18:00:00+07:00').getTime();

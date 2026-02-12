@@ -4,9 +4,19 @@ require_once __DIR__ . '/../app/helpers.php';
 require_once __DIR__ . '/../app/auth.php';
 ensure_session();
 
+function register_source(?string $source): string {
+    return $source === 'home' ? 'home' : 'packages';
+}
+
+$from = register_source($_GET['from'] ?? $_POST['from'] ?? ($_SESSION['register_from'] ?? 'packages'));
+$_SESSION['register_from'] = $from;
+$backHref = $from === 'home' ? '/' : '/packages';
+$backIcon = $from === 'home' ? 'bi-house-door' : 'bi-box-seam';
+$backLabel = $from === 'home' ? 'Back to Home' : 'Back to Packages';
+
 if (!empty($_GET['cancel_otp']) && $_GET['cancel_otp'] === '1') {
     unset($_SESSION['reg_pending']);
-    redirect('/register');
+    redirect('/register?from=' . $from);
 }
 
 $errors = [];
@@ -442,6 +452,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <form class="form" method="post" action="" id="registerForm">
         <input type="hidden" name="step" value="send_otp">
+        <input type="hidden" name="from" value="<?= h($from) ?>">
 
         <label>
           <span class="label-text"><i class="bi bi-person-badge"></i> Full Name*</span>
@@ -468,7 +479,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="actions">
           <button class="btn primary" type="submit"><i class="bi bi-send-check"></i> Continue</button>
-          <a class="btn ghost" href="/packages"><i class="bi bi-box-seam"></i> Back to Packages</a>
+          <a class="btn ghost" href="<?= h($backHref) ?>"><i class="bi <?= h($backIcon) ?>"></i> <?= h($backLabel) ?></a>
         </div>
       </form>
     </section>
@@ -478,7 +489,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <div class="modal-card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
           <div class="modal-title"><i class="bi bi-shield-lock"></i> OTP Verification</div>
-          <a class="icon-btn" href="/register?cancel_otp=1" aria-label="Close"><i class="bi bi-x-lg"></i> Close</a>
+          <a class="icon-btn" href="/register?from=<?= h($from) ?>&cancel_otp=1" aria-label="Close"><i class="bi bi-x-lg"></i> Close</a>
         </div>
       <div class="help-text">Enter OTP sent to email: <?= $pending ? h($pending['email']) : '-' ?></div>
 
@@ -492,6 +503,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form class="form" method="post" action="" id="otpVerifyForm">
           <input type="hidden" name="step" value="verify_otp">
+          <input type="hidden" name="from" value="<?= h($from) ?>">
           <label>
           <span class="label-text"><i class="bi bi-key"></i> OTP Code*</span>
           <input type="text" name="otp" inputmode="numeric" required>
@@ -502,6 +514,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <form method="post" action="">
         <input type="hidden" name="step" value="resend_otp">
+        <input type="hidden" name="from" value="<?= h($from) ?>">
         <button class="btn ghost" type="submit"><i class="bi bi-arrow-repeat"></i> Resend OTP</button>
       </form>
     </div>
