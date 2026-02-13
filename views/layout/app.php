@@ -21,8 +21,6 @@ if (!function_exists('render_navbar')) {
           </div>
         </div>
         <div class="topbar-actions">
-          <a class="btn ghost" href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
-          <a class="btn ghost" href="/admin/scan"><i class="bi bi-qr-code-scan"></i> Scan QR</a>
           <?php if ($showAdminLogout): ?>
           <a class="btn primary" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
           <?php endif; ?>

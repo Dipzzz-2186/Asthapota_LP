@@ -324,6 +324,7 @@ render_header([
     <div id="qr-reader"></div>
 
     <div class="scan-actions">
+      <a class="btn ghost" href="/admin/dashboard"><i class="bi bi-arrow-left-circle"></i> Kembali ke Dashboard</a>
       <button class="btn primary" id="startScan" type="button"><i class="bi bi-camera-video"></i> Start Scan</button>
       <button class="btn ghost" id="stopScan" type="button"><i class="bi bi-stop-circle"></i> Stop Scan</button>
     </div>
