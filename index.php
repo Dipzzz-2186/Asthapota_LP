@@ -22,6 +22,7 @@ $routes = [
     '/packages' => __DIR__ . '/views/packages.php',
     '/order' => __DIR__ . '/views/order.php',
     '/order.php' => __DIR__ . '/views/order.php',
+    '/download/qris' => __DIR__ . '/views/download_qris.php',
     '/thankyou' => __DIR__ . '/views/thankyou.php',
     '/logout' => __DIR__ . '/views/logout.php',
     admin_login_path() => __DIR__ . '/views/admin/login.php',

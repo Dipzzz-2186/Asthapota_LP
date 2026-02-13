@@ -302,6 +302,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       background: rgba(255, 255, 255, 0.2);
     }
 
+    .payment-card.qris-card {
+      display: grid;
+      gap: 10px;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .qris-label {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f2f7ff;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .qris-image {
+      width: min(100%, 300px);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      background: #fff;
+      padding: 8px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+    }
+
+    .qris-download {
+      text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #eef4ff;
+      background: rgba(255, 255, 255, 0.12);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .qris-download:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255, 255, 255, 0.72);
+    }
+
     .upload-box {
       border: 2px dashed rgba(255, 255, 255, 0.45);
       border-radius: 12px;
@@ -463,10 +509,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <section class="order-panel form-wrap fade-up delay-1">
         <div class="section-title"><i class="bi bi-credit-card-2-front"></i> Payment Info</div>
-        <div class="payment-card" style="margin-bottom:16px;">
-          <div><i class="bi bi-bank"></i> <strong>Payment to BCA Account</strong></div>
-          <div><i class="bi bi-123"></i> Account Number: 1234567890</div>
-          <div><i class="bi bi-building"></i> Account Name: PT Manifestasi Kehidupan Berlimpah</div>
+        <div class="payment-card qris-card" style="margin-bottom:16px;">
+          <div class="qris-label"><i class="bi bi-qr-code-scan"></i> <strong>Scan QRIS for Payment</strong></div>
+          <img class="qris-image" src="/assets/img/qris_payment.jpeg" alt="QRIS payment code">
+          <button class="qris-download" id="qrisDownloadBtn" href="/download/qris" download="qris_payment.jpeg">
+            <i class="bi bi-download"></i> Download QR
+        </button>
         </div>
 
         <div class="section-title"><i class="bi bi-cloud-arrow-up"></i> Upload Your Payment Proof</div>
@@ -557,6 +605,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           }, 260);
         });
       });
+
+      var qrisDownloadBtn = document.getElementById('qrisDownloadBtn');
+      if (qrisDownloadBtn) {
+        qrisDownloadBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          var downloadUrl = qrisDownloadBtn.getAttribute('href');
+          if (!downloadUrl) return;
+          var frame = document.createElement('iframe');
+          frame.style.display = 'none';
+          frame.setAttribute('aria-hidden', 'true');
+          frame.src = downloadUrl;
+          document.body.appendChild(frame);
+          window.setTimeout(function () {
+            if (frame && frame.parentNode) {
+              frame.parentNode.removeChild(frame);
+            }
+          }, 3000);
+        });
+      }
 
       var proofInput = document.getElementById('paymentProofInput');
       var proofPreviewWrap = document.getElementById('proofPreviewWrap');
