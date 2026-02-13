@@ -53,7 +53,7 @@ $isAdmin = is_admin_logged_in();
       min-height: 100svh;
       background:
         linear-gradient(180deg, rgba(7, 8, 10, 0.28) 0%, rgba(7, 8, 10, 0.5) 100%),
-        url('/assets/img/wallpapeh2.png') center center / cover no-repeat;
+        url('/assets/img/wallpapeh2.jpg') center center / cover no-repeat;
       background-attachment: scroll;
       position: relative;
       overflow-x: hidden;
