@@ -33,7 +33,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $flash = ['success' => '', 'error' => ''];
     $dashboardAction = trim((string)($_POST['dashboard_action'] ?? 'order_decision'));
 
-    if ($dashboardAction === 'create_sponsor') {
+    if ($dashboardAction === 'change_admin_password') {
+        $currentPassword = (string)($_POST['current_password'] ?? '');
+        $newPassword = (string)($_POST['new_password'] ?? '');
+        $confirmPassword = (string)($_POST['confirm_password'] ?? '');
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
+
+        if ($adminId <= 0) {
+            $flash['error'] = 'Session admin tidak valid. Silakan login ulang.';
+        } elseif ($currentPassword === '' || $newPassword === '' || $confirmPassword === '') {
+            $flash['error'] = 'Semua field password wajib diisi.';
+        } elseif ($newPassword !== $confirmPassword) {
+            $flash['error'] = 'Konfirmasi password baru tidak cocok.';
+        } else {
+            try {
+                $adminStmt = $db->prepare('SELECT id, password_hash FROM admins WHERE id = ? LIMIT 1');
+                $adminStmt->execute([$adminId]);
+                $adminRow = $adminStmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$adminRow) {
+                    $flash['error'] = 'Admin tidak ditemukan.';
+                } elseif (!password_verify($currentPassword, (string)($adminRow['password_hash'] ?? ''))) {
+                    $flash['error'] = 'Password saat ini salah.';
+                } elseif (password_verify($newPassword, (string)($adminRow['password_hash'] ?? ''))) {
+                    $flash['error'] = 'Password baru harus berbeda dari password saat ini.';
+                } else {
+                    $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+                    if (!$newHash) {
+                        $flash['error'] = 'Gagal memproses password baru.';
+                    } else {
+                        $updStmt = $db->prepare('UPDATE admins SET password_hash = ? WHERE id = ?');
+                        $updStmt->execute([$newHash, $adminId]);
+                        $flash['success'] = 'Password admin berhasil diperbarui.';
+                    }
+                }
+            } catch (Throwable $e) {
+                $flash['error'] = 'Gagal memperbarui password admin.';
+            }
+        }
+    } elseif ($dashboardAction === 'create_sponsor') {
         $sponsorName = trim((string)($_POST['sponsor_name'] ?? ''));
         $sponsorLink = trim((string)($_POST['sponsor_link'] ?? ''));
         $logoFile = $_FILES['sponsor_logo'] ?? null;
@@ -796,7 +834,7 @@ $extraHead = <<<'HTML'
   .sponsor-form { padding: 18px; display: grid; gap: 14px; overflow-y: auto; }
   .sponsor-field { display: grid; gap: 7px; }
   .sponsor-field label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .sponsor-field input[type="text"], .sponsor-field input[type="url"], .sponsor-field input[type="file"] {
+  .sponsor-field input[type="text"], .sponsor-field input[type="url"], .sponsor-field input[type="password"], .sponsor-field input[type="file"] {
     width: 100%; min-height: 46px; padding: 11px 13px; border-radius: 10px;
     border: 1.5px solid var(--stroke); font-size: 14px; font-family: inherit;
     background: var(--surface); color: var(--text); font-weight: 500; transition: border-color 0.18s, box-shadow 0.18s;
@@ -916,6 +954,9 @@ render_header([
         </div>
         <div class="dashboard-head-actions">
           <a class="btn ghost" href="/admin/scan"><i class="bi bi-qr-code-scan"></i> Scan QR</a>
+          <button class="btn ghost" type="button" id="openPasswordModal">
+            <i class="bi bi-key"></i> Ganti Password
+          </button>
           <button class="btn primary" type="button" id="openSponsorModal">
             <i class="bi bi-building-add"></i> Tambah Sponsor
           </button>
@@ -1320,6 +1361,42 @@ render_header([
     </div>
   </div>
 
+  <div class="sponsor-modal" id="passwordModal" aria-hidden="true">
+    <div class="sponsor-modal-card" role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
+      <div class="sponsor-modal-head">
+        <h2 class="sponsor-modal-title" id="passwordModalTitle"><i class="bi bi-shield-lock"></i> Ganti Password Admin</h2>
+        <button class="sponsor-modal-close" type="button" id="closePasswordModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <form class="sponsor-form" method="post" action="/admin/dashboard" id="passwordForm">
+        <input type="hidden" name="dashboard_action" value="change_admin_password">
+        <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+        <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+        <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+        <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+        <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+        <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+        <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+
+        <div class="sponsor-field">
+          <label for="currentPassword">Password Saat Ini</label>
+          <input id="currentPassword" type="password" name="current_password" autocomplete="current-password" required>
+        </div>
+        <div class="sponsor-field">
+          <label for="newPassword">Password Baru</label>
+          <input id="newPassword" type="password" name="new_password" autocomplete="new-password" required>
+        </div>
+        <div class="sponsor-field">
+          <label for="confirmPassword">Konfirmasi Password Baru</label>
+          <input id="confirmPassword" type="password" name="confirm_password" autocomplete="new-password" required>
+        </div>
+        <div class="sponsor-form-actions">
+          <button class="btn ghost" type="button" id="cancelPasswordModal"><i class="bi bi-x-circle"></i> Batal</button>
+          <button class="btn primary" type="submit"><i class="bi bi-check-circle"></i> Simpan Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     // ── Mobile filter toggle ───────────────────────────────────
     (function () {
@@ -1410,6 +1487,34 @@ render_header([
         el.addEventListener('keyup', function () { saveTypingState(el); });
         el.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); if (textTimer) clearTimeout(textTimer); submitNow(); } });
       });
+    })();
+  </script>
+
+  <script>
+    // ── Change Password Modal ─────────────────────────────────
+    (function () {
+      var modal = document.getElementById('passwordModal');
+      var openBtn = document.getElementById('openPasswordModal');
+      var closeBtn = document.getElementById('closePasswordModal');
+      var cancelBtn = document.getElementById('cancelPasswordModal');
+      if (!modal || !openBtn || !closeBtn || !cancelBtn) return;
+      function openModal() {
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('sponsor-modal-open');
+        var c = document.getElementById('currentPassword');
+        if (c) setTimeout(function () { c.focus(); }, 20);
+      }
+      function closeModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('sponsor-modal-open');
+      }
+      openBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      cancelBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
     })();
   </script>
 
