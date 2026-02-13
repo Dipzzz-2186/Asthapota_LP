@@ -68,7 +68,7 @@ http_response_code(404);
       padding: 24px;
       color: var(--white);
       font-family: var(--font-body);
-      background: url('/assets/img/wallpaper3.jpg') center center / cover no-repeat;
+      background: url('/assets/img/wallpapeh2.jpg') center center / cover no-repeat;
       position: relative;
       overflow: hidden;
     }

@@ -395,9 +395,9 @@ function send_order_status_email(array $order, string $toEmail): bool {
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding:0 14px 12px;font-size:12px;color:#4f6d98;">
-                    Link QR: <a href="' . $safeScanUrl . '" style="color:#1e5ed8;">' . $safeScanUrl . '</a><br>
-                    Token cadangan: <span style="font-family:monospace;">' . $safeToken . '</span>
+                  <td style="padding:0 14px 12px;font-size:12px;color:#4f6d98;word-break:break-word;overflow-wrap:anywhere;">
+                    Link QR: <a href="' . $safeScanUrl . '" style="color:#1e5ed8;word-break:break-all;overflow-wrap:anywhere;">' . $safeScanUrl . '</a><br>
+                    Token cadangan: <span style="font-family:monospace;word-break:break-all;overflow-wrap:anywhere;">' . $safeToken . '</span>
                   </td>
                 </tr>
               </table>';
