@@ -19,7 +19,7 @@ function redirect(string $path): void {
 }
 
 function admin_login_path(): string {
-    return '/admin/kholis';
+    return '/admin/login-akun-admin';
 }
 
 function smtp_send(string $to, string $subject, string $htmlBody): bool {
