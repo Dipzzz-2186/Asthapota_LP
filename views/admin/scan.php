@@ -9,6 +9,18 @@ $db = get_db();
 ensure_order_qr_schema($db);
 ensure_order_attendee_checkin_schema($db);
 
+function normalize_gender_value($rawGender)
+{
+    $gender = strtolower(trim((string)$rawGender));
+    if (in_array($gender, ['male', 'm', 'laki-laki', 'laki', 'pria'], true)) {
+        return 'male';
+    }
+    if (in_array($gender, ['female', 'f', 'perempuan', 'wanita'], true)) {
+        return 'female';
+    }
+    return 'unknown';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json; charset=UTF-8');
 
@@ -57,10 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $orderId = (int)$row['id'];
     $ownerName = trim((string)($row['full_name'] ?? ''));
-    $orderGender = strtolower(trim((string)($row['gender'] ?? '')));
-    if ($orderGender !== 'male' && $orderGender !== 'female') {
-        $orderGender = 'unknown';
-    }
+    $orderGender = normalize_gender_value($row['gender'] ?? '');
 
     $attendees = [];
     try {
@@ -379,15 +388,17 @@ $extraHead = <<<'HTML'
     height: 78px;
     border-radius: 999px;
     position: relative;
-    display: grid;
-    place-items: center;
-    color: #fff;
+    overflow: hidden;
     animation: floaty 2s ease-in-out infinite;
     box-shadow: 0 10px 18px rgba(20, 41, 74, 0.2);
   }
 
-  .profile-avatar .face {
-    font-size: 30px;
+  .profile-avatar .avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 999px;
+    position: relative;
     z-index: 2;
   }
 
@@ -586,10 +597,10 @@ render_header([
       return 'Unknown';
     }
 
-    function genderFace(g) {
-      if (g === 'male') return '🧑';
-      if (g === 'female') return '👩';
-      return '🙂';
+    function genderAvatarSrc(g) {
+      if (g === 'male') return '/assets/img/padellaki.png';
+      if (g === 'female') return '/assets/img/padelpr..png';
+      return '/assets/img/padellaki.png';
     }
 
     function genderIcon(g) {
@@ -602,7 +613,7 @@ render_header([
       var g = normalizeGender(gender);
       var s = stats || {};
       return '<div class="profile-card">' +
-        '<div class="profile-avatar ' + g + '"><span class="face">' + genderFace(g) + '</span></div>' +
+        '<div class="profile-avatar ' + g + '"><img class="avatar-img" src="' + genderAvatarSrc(g) + '" alt="' + escapeHtml(genderLabel(g)) + ' avatar"></div>' +
         '<div class="profile-body">' +
           '<p class="profile-name">' + escapeHtml(name || '-') + '</p>' +
           '<p class="profile-role">' + escapeHtml(role || '') + ' <span class="gender-chip ' + g + '"><i class="bi ' + genderIcon(g) + '"></i> ' + escapeHtml(genderLabel(g)) + '</span></p>' +
@@ -864,3 +875,4 @@ render_header([
   })();
 </script>
 <?php render_footer(['isAdmin' => true]); ?>
+
