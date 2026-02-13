@@ -474,7 +474,7 @@ render_header([
         var contentType = res.headers.get('content-type') || '';
         if (contentType.indexOf('application/json') === -1) {
           return res.text().then(function (txt) {
-            var isLoginHtml = txt.indexOf('Admin Login') !== -1 || txt.indexOf('/admin/login') !== -1;
+            var isLoginHtml = txt.indexOf('Admin Login') !== -1 || txt.indexOf('<?= h(admin_login_path()) ?>') !== -1;
             if (isLoginHtml || res.status === 401 || res.status === 403) {
               throw new Error('Sesi admin habis. Silakan login lagi.');
             }

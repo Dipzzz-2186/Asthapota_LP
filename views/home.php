@@ -1496,7 +1496,7 @@ if (!$sponsorItems) {
         }
 
         event.preventDefault();
-        window.location.href = '/admin/login';
+        window.location.href = '<?= h(admin_login_path()) ?>';
       });
 
       var targetStart = new Date('2026-02-28T16:00:00+07:00').getTime();

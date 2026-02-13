@@ -1,4 +1,5 @@
-﻿<?php
+<?php
+require_once __DIR__ . '/app/helpers.php';
 $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
 // Let the built-in server handle existing static files directly.
@@ -23,8 +24,7 @@ $routes = [
     '/order.php' => __DIR__ . '/views/order.php',
     '/thankyou' => __DIR__ . '/views/thankyou.php',
     '/logout' => __DIR__ . '/views/logout.php',
-    '/admin' => __DIR__ . '/views/admin/login.php',
-    '/admin/login' => __DIR__ . '/views/admin/login.php',
+    admin_login_path() => __DIR__ . '/views/admin/login.php',
     '/admin/dashboard' => __DIR__ . '/views/admin/dashboard.php',
     '/admin/scan' => __DIR__ . '/views/admin/scan.php',
     '/admin/logout' => __DIR__ . '/views/admin/logout.php',
@@ -156,3 +156,5 @@ http_response_code(404);
   </main>
 </body>
 </html>
+
+

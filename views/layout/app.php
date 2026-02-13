@@ -106,7 +106,7 @@ if (!function_exists('render_footer')) {
         if (isTypingTarget(e.target)) return;
         if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'a' || e.key === 'A')) {
           e.preventDefault();
-          window.location.href = '/admin/login';
+          window.location.href = '<?= h(admin_login_path()) ?>';
         }
       });
     })();
@@ -170,7 +170,7 @@ if (!function_exists('render_footer')) {
         if (isTypingTarget(e.target)) return;
         if (e.ctrlKey && e.shiftKey && !e.altKey && (e.key === 'a' || e.key === 'A')) {
           e.preventDefault();
-          window.location.href = '/admin/login';
+          window.location.href = '<?= h(admin_login_path()) ?>';
         }
       });
     })();

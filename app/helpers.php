@@ -18,6 +18,10 @@ function redirect(string $path): void {
     exit;
 }
 
+function admin_login_path(): string {
+    return '/admin/kholis';
+}
+
 function smtp_send(string $to, string $subject, string $htmlBody): bool {
     global $CONFIG;
     $host = $CONFIG['smtp_host'] ?? '';
