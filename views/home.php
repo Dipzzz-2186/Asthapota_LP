@@ -1,11 +1,49 @@
 ﻿<?php
 require_once __DIR__ . '/../app/auth.php';
+require_once __DIR__ . '/../app/db.php';
 ensure_session();
 unset($_SESSION['order_draft']);
 
 $isAdmin = is_admin_logged_in();
 $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/'));
 $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, '/');
+
+$sponsorItems = [];
+try {
+    $db = get_db();
+    $sponsorRows = $db->query('SELECT name, website_url, logo_path FROM sponsors ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($sponsorRows as $row) {
+        $name = trim((string)($row['name'] ?? ''));
+        $logoPath = trim((string)($row['logo_path'] ?? ''));
+        $websiteUrl = trim((string)($row['website_url'] ?? ''));
+        if ($logoPath === '') {
+            continue;
+        }
+
+        if (preg_match('/^https?:\/\//i', $logoPath)) {
+            $logoSrc = $logoPath;
+        } else {
+            $logoSrc = $basePath . '/' . ltrim($logoPath, '/');
+        }
+
+        $sponsorItems[] = [
+            'name' => $name !== '' ? $name : 'Sponsor',
+            'logo' => $logoSrc,
+            'url' => filter_var($websiteUrl, FILTER_VALIDATE_URL) ? $websiteUrl : '',
+        ];
+    }
+} catch (Throwable $e) {
+    $sponsorItems = [];
+}
+
+if (!$sponsorItems) {
+    $sponsorItems = [
+        ['name' => 'HIPPI', 'logo' => $basePath . '/assets/img/hippi.png', 'url' => 'https://www.hippi.or.id/'],
+        ['name' => 'BAPORA', 'logo' => $basePath . '/assets/img/logo.webp', 'url' => 'https://www.hippi.or.id/'],
+        ['name' => 'FCOM', 'logo' => $basePath . '/assets/img/fcom.png', 'url' => 'https://fcom.co.id/'],
+        ['name' => 'MY Padel', 'logo' => $basePath . '/assets/img/mypadel.png', 'url' => 'https://ayo.co.id/v/mypadel'],
+    ];
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -26,6 +64,10 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
       --font-body: "Manrope", "Segoe UI", Tahoma, sans-serif;
       --font-display: "Anton", "Arial Narrow", Impact, sans-serif;
       --font-accent: "Playfair Display", Georgia, serif;
+      --sponsor-card-w: 220px;
+      --sponsor-card-h: 110px;
+      --sponsor-logo-w: 172px;
+      --sponsor-logo-h: 72px;
     }
 
     * {
@@ -559,8 +601,9 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
     }
 
     .sponsor {
-      width: 220px;
-      height: 110px;
+      width: var(--sponsor-card-w);
+      min-width: var(--sponsor-card-w);
+      height: var(--sponsor-card-h);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -583,9 +626,10 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
     }
 
     .sponsor img {
-      width: 172px;
-      height: 72px;
+      width: var(--sponsor-logo-w);
+      height: var(--sponsor-logo-h);
       object-fit: contain;
+      object-position: center;
       filter: brightness(0) saturate(100%) invert(100%);
       user-select: none;
       pointer-events: none;
@@ -1053,6 +1097,13 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
     }
 
     @media (max-width: 860px) {
+      :root {
+        --sponsor-card-w: 190px;
+        --sponsor-card-h: 96px;
+        --sponsor-logo-w: 150px;
+        --sponsor-logo-h: 60px;
+      }
+
       .panel {
         gap: 20px;
       }
@@ -1065,10 +1116,6 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
         grid-template-columns: repeat(2, minmax(90px, 130px));
       }
 
-      .sponsor {
-        min-width: 190px;
-      }
-
       .sponsor-strip::before,
       .sponsor-strip::after {
         width: 42px;
@@ -1076,6 +1123,12 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
     }
 
     @media (max-width: 560px) {
+      :root {
+        --sponsor-card-w: 166px;
+        --sponsor-card-h: 86px;
+        --sponsor-logo-w: 132px;
+        --sponsor-logo-h: 54px;
+      }
 
       .panel {
         width: 94vw;
@@ -1130,9 +1183,6 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
         font-size: 22px;
       }
 
-      .sponsor {
-        min-width: 160px;
-      }
     }
   </style>
 </head>
@@ -1182,10 +1232,13 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
       <h2 data-reveal style="--reveal-delay: 60ms;"><i class="bi bi-patch-check"></i> Supported By</h2>
       <div class="sponsor-strip" data-reveal style="--reveal-delay: 150ms;" aria-label="Supported by logos marquee">
         <div class="sponsor-track">
-          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="<?= h($basePath) ?>/assets/img/hippi.png" alt="HIPPI"></a>
-          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="<?= h($basePath) ?>/assets/img/logo.webp" alt="BAPORA"></a>
-          <a href="https://fcom.co.id/" target="_blank" class="sponsor"><img src="<?= h($basePath) ?>/assets/img/fcom.png" alt="FCOM"></a>
-          <a href="https://ayo.co.id/v/mypadel" target="_blank" class="sponsor"><img src="<?= h($basePath) ?>/assets/img/mypadel.png" alt="MY Padel"></a>
+          <?php foreach ($sponsorItems as $sp): ?>
+            <?php if (!empty($sp['url'])): ?>
+              <a href="<?= h($sp['url']) ?>" target="_blank" rel="noopener noreferrer" class="sponsor"><img src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>"></a>
+            <?php else: ?>
+              <div class="sponsor"><img src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>"></div>
+            <?php endif; ?>
+          <?php endforeach; ?>
         </div>
       </div>
 

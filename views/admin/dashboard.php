@@ -27,43 +27,119 @@ if (!empty($_SESSION['dashboard_flash']) && is_array($_SESSION['dashboard_flash'
     unset($_SESSION['dashboard_flash']);
 }
 
-// Accept/Reject order (admin action) (KHOLIS)
+// Handle admin actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Start fresh for each action to avoid mixing previous flash with current result.
     $flash = ['success' => '', 'error' => ''];
+    $dashboardAction = trim((string)($_POST['dashboard_action'] ?? 'order_decision'));
 
-    // Validate request payload
-    $orderId = (int)($_POST['order_id'] ?? 0);
-    $action = $_POST['action'] ?? '';
-    $allowed = ['accept', 'reject'];
+    if ($dashboardAction === 'create_sponsor') {
+        $sponsorName = trim((string)($_POST['sponsor_name'] ?? ''));
+        $sponsorLink = trim((string)($_POST['sponsor_link'] ?? ''));
+        $logoFile = $_FILES['sponsor_logo'] ?? null;
 
-    if (!$orderId || !in_array($action, $allowed, true)) {
-        $flash['error'] = 'Invalid request.';
-    } else {
-        // Load order + user for email notification
-        $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
-        $stmt->execute([$orderId]);
-        $orderRow = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$orderRow) {
-            $flash['error'] = 'Order not found.';
-        } elseif (empty($orderRow['payment_proof'])) {
-            // Require payment proof before any decision
-            $flash['error'] = 'Cannot update. Payment proof is required.';
-        } elseif ($orderRow['status'] !== 'paid') {
-            // Only paid orders can be accepted/rejected
-            $flash['error'] = 'Only paid orders can be accepted or rejected.';
+        if ($sponsorName === '') {
+            $flash['error'] = 'Sponsor name is required.';
+        } elseif (mb_strlen($sponsorName) > 150) {
+            $flash['error'] = 'Sponsor name is too long.';
+        } elseif ($sponsorLink !== '' && !filter_var($sponsorLink, FILTER_VALIDATE_URL)) {
+            $flash['error'] = 'Sponsor link must be a valid URL.';
+        } elseif (!is_array($logoFile) || (int)($logoFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $flash['error'] = 'Sponsor logo is required.';
         } else {
-            // Update status + notify user
-            $newStatus = $action === 'accept' ? 'accepted' : 'rejected';
-            $update = $db->prepare('UPDATE orders SET status = ? WHERE id = ?');
-            $update->execute([$newStatus, $orderId]);
+            $tmpPath = (string)($logoFile['tmp_name'] ?? '');
+            $mime = '';
+            if ($tmpPath !== '' && is_file($tmpPath)) {
+                $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                if ($finfo) {
+                    $mime = (string)finfo_file($finfo, $tmpPath);
+                    finfo_close($finfo);
+                }
+            }
 
-            $orderRow['status'] = $newStatus;
-            $sent = send_order_status_email($orderRow, $orderRow['email']);
-            $flash['success'] = $sent
-                ? 'Order status updated and email sent.'
-                : 'Order status updated, but email failed to send.';
+            $allowedMimes = [
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/webp' => 'webp',
+            ];
+
+            if (!isset($allowedMimes[$mime])) {
+                $flash['error'] = 'Logo must be JPG, PNG, or WEBP format.';
+            } else {
+                $uploadDir = __DIR__ . '/../../uploads/sponsors';
+                if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+                    $flash['error'] = 'Failed to prepare sponsor upload directory.';
+                } else {
+                    $newFileName = 'sponsor-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.' . $allowedMimes[$mime];
+                    $targetPath = $uploadDir . '/' . $newFileName;
+                    $storedLogoPath = '/uploads/sponsors/' . $newFileName;
+
+                    if (!move_uploaded_file($tmpPath, $targetPath)) {
+                        $flash['error'] = 'Failed to upload sponsor logo.';
+                    } else {
+                        try {
+                            $db->exec(
+                                "CREATE TABLE IF NOT EXISTS sponsors (
+                                    id INT AUTO_INCREMENT PRIMARY KEY,
+                                    name VARCHAR(150) NOT NULL,
+                                    website_url VARCHAR(255) NULL,
+                                    logo_path VARCHAR(255) NOT NULL,
+                                    created_at DATETIME NOT NULL
+                                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+                            );
+
+                            $insertSponsor = $db->prepare('INSERT INTO sponsors (name, website_url, logo_path, created_at) VALUES (?, ?, ?, ?)');
+                            $insertSponsor->execute([
+                                $sponsorName,
+                                $sponsorLink !== '' ? $sponsorLink : null,
+                                $storedLogoPath,
+                                date('Y-m-d H:i:s'),
+                            ]);
+                            $flash['success'] = 'Sponsor added successfully.';
+                        } catch (Throwable $e) {
+                            if (is_file($targetPath)) {
+                                @unlink($targetPath);
+                            }
+                            $flash['error'] = 'Failed to save sponsor data.';
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // Validate request payload
+        $orderId = (int)($_POST['order_id'] ?? 0);
+        $action = $_POST['action'] ?? '';
+        $allowed = ['accept', 'reject'];
+
+        if (!$orderId || !in_array($action, $allowed, true)) {
+            $flash['error'] = 'Invalid request.';
+        } else {
+            // Load order + user for email notification
+            $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
+            $stmt->execute([$orderId]);
+            $orderRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$orderRow) {
+                $flash['error'] = 'Order not found.';
+            } elseif (empty($orderRow['payment_proof'])) {
+                // Require payment proof before any decision
+                $flash['error'] = 'Cannot update. Payment proof is required.';
+            } elseif ($orderRow['status'] !== 'paid') {
+                // Only paid orders can be accepted/rejected
+                $flash['error'] = 'Only paid orders can be accepted or rejected.';
+            } else {
+                // Update status + notify user
+                $newStatus = $action === 'accept' ? 'accepted' : 'rejected';
+                $update = $db->prepare('UPDATE orders SET status = ? WHERE id = ?');
+                $update->execute([$newStatus, $orderId]);
+
+                $orderRow['status'] = $newStatus;
+                $sent = send_order_status_email($orderRow, $orderRow['email']);
+                $flash['success'] = $sent
+                    ? 'Order status updated and email sent.'
+                    : 'Order status updated, but email failed to send.';
+            }
         }
     }
 
@@ -357,6 +433,191 @@ $extraHead = <<<'HTML'
     overflow-wrap: anywhere;
     word-break: break-word;
   }
+
+  .dashboard-head-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .sponsor-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 19, 34, 0.72);
+    backdrop-filter: blur(3px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: clamp(12px, 2vw, 22px);
+  }
+
+  .sponsor-modal.show {
+    display: flex;
+    animation: sponsorModalFade 0.2s ease-out;
+  }
+
+  .sponsor-modal-card {
+    width: min(560px, 100%);
+    max-height: min(88vh, 760px);
+    background: var(--surface);
+    border: 1px solid var(--stroke);
+    border-radius: 16px;
+    box-shadow: 0 22px 45px rgba(9, 20, 39, 0.35);
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    animation: sponsorModalCardIn 0.24s cubic-bezier(.2, .7, .2, 1);
+  }
+
+  .sponsor-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--stroke);
+  }
+
+  .sponsor-modal-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sponsor-modal-close {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid var(--stroke);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.14s ease;
+  }
+
+  .sponsor-modal-close:hover {
+    background: #eef4ff;
+    border-color: #bfd2ff;
+    transform: translateY(-1px);
+  }
+
+  .sponsor-form {
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+    overflow-y: auto;
+  }
+
+  .sponsor-field {
+    display: grid;
+    gap: 6px;
+  }
+
+  .sponsor-field label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .sponsor-field input[type="text"],
+  .sponsor-field input[type="url"],
+  .sponsor-field input[type="file"] {
+    width: 100%;
+    min-height: 50px;
+    padding: 11px 12px;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--stroke);
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .sponsor-field input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(0, 102, 255, 0.1);
+  }
+
+  .sponsor-field input[type="file"] {
+    padding: 8px;
+    cursor: pointer;
+    background: #f7f9ff;
+  }
+
+  .sponsor-field input[type="file"]::file-selector-button {
+    border: 0;
+    border-radius: 999px;
+    padding: 9px 13px;
+    margin-right: 10px;
+    background: #dfeaff;
+    color: #0d3f98;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .sponsor-help {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .sponsor-form-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+
+  body.sponsor-modal-open {
+    overflow: hidden;
+  }
+
+  @media (max-width: 640px) {
+    .sponsor-modal-card {
+      max-height: 92vh;
+      border-radius: 14px;
+    }
+
+    .sponsor-form-actions {
+      justify-content: stretch;
+    }
+
+    .sponsor-form-actions .btn {
+      width: 100%;
+    }
+  }
+
+  @keyframes sponsorModalFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes sponsorModalCardIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
 </style>
 HTML;
 render_header([
@@ -375,6 +636,11 @@ render_header([
         <div>
           <h1 class="admin-title">Dashboard</h1>
           <p class="admin-sub">Ringkasan pesanan dan status pembayaran</p>
+        </div>
+        <div class="dashboard-head-actions">
+          <button class="btn primary" type="button" id="openSponsorModal">
+            <i class="bi bi-building-add"></i> Tambah Sponsor
+          </button>
         </div>
       </div>
 
@@ -654,6 +920,7 @@ render_header([
   </div>
 
   <form method="post" action="/admin/dashboard" id="confirmForm" style="display:none;">
+    <input type="hidden" name="dashboard_action" value="order_decision">
     <input type="hidden" name="order_id" id="confirmOrderId" value="">
     <input type="hidden" name="action" id="confirmAction" value="">
     <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
@@ -664,6 +931,46 @@ render_header([
     <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
     <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
   </form>
+
+  <div class="sponsor-modal" id="sponsorModal" aria-hidden="true">
+    <div class="sponsor-modal-card" role="dialog" aria-modal="true" aria-labelledby="sponsorModalTitle">
+      <div class="sponsor-modal-head">
+        <h2 class="sponsor-modal-title" id="sponsorModalTitle"><i class="bi bi-building-add"></i> Tambah Sponsor</h2>
+        <button class="sponsor-modal-close" type="button" id="closeSponsorModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <form class="sponsor-form" method="post" action="/admin/dashboard" enctype="multipart/form-data" id="sponsorForm">
+        <input type="hidden" name="dashboard_action" value="create_sponsor">
+        <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+        <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+        <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+        <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+        <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+        <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+        <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+
+        <div class="sponsor-field">
+          <label for="sponsorName">Nama Sponsor</label>
+          <input id="sponsorName" type="text" name="sponsor_name" placeholder="Contoh: FCOM" required>
+        </div>
+
+        <div class="sponsor-field">
+          <label for="sponsorLink">Link Web Sponsor (opsional)</label>
+          <input id="sponsorLink" type="url" name="sponsor_link" placeholder="https://example.com">
+        </div>
+
+        <div class="sponsor-field">
+          <label for="sponsorLogo">Logo Sponsor</label>
+          <input id="sponsorLogo" type="file" name="sponsor_logo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
+          <p class="sponsor-help">Format: JPG, PNG, WEBP.</p>
+        </div>
+
+        <div class="sponsor-form-actions">
+          <button class="btn ghost" type="button" id="cancelSponsorModal"><i class="bi bi-x-circle"></i> Batal</button>
+          <button class="btn primary" type="submit"><i class="bi bi-check-circle"></i> Simpan Sponsor</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script>
     (function () {
@@ -753,6 +1060,50 @@ render_header([
             submitNow();
           }
         });
+      });
+    })();
+  </script>
+
+  <script>
+    (function () {
+      var modal = document.getElementById('sponsorModal');
+      var openBtn = document.getElementById('openSponsorModal');
+      var closeBtn = document.getElementById('closeSponsorModal');
+      var cancelBtn = document.getElementById('cancelSponsorModal');
+      var form = document.getElementById('sponsorForm');
+
+      if (!modal || !openBtn || !closeBtn || !cancelBtn || !form) return;
+
+      function openModal() {
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('sponsor-modal-open');
+        var nameInput = document.getElementById('sponsorName');
+        if (nameInput) {
+          setTimeout(function () { nameInput.focus(); }, 20);
+        }
+      }
+
+      function closeModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('sponsor-modal-open');
+      }
+
+      openBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      cancelBtn.addEventListener('click', closeModal);
+
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) {
+          closeModal();
+        }
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+          closeModal();
+        }
       });
     })();
   </script>
