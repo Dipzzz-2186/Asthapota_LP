@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__ . '/config.php';
 
+// Keep all PHP-side timestamps (order/check-in/etc.) in one app timezone.
+if (!empty($CONFIG['app_timezone']) && is_string($CONFIG['app_timezone'])) {
+    date_default_timezone_set($CONFIG['app_timezone']);
+}
+
 function get_db(): PDO {
     static $db = null;
     if ($db) return $db;
