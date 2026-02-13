@@ -31,6 +31,7 @@ if (!$user) {
 
 $items = [];
 $total = 0;
+$totalTickets = 0;
 foreach ((array)$draft['items'] as $it) {
     $packageId = (int)($it['package_id'] ?? 0);
     $qty = max(0, (int)($it['qty'] ?? 0));
@@ -46,9 +47,10 @@ foreach ((array)$draft['items'] as $it) {
         'name' => $name,
     ];
     $total += $qty * $price;
+    $totalTickets += $qty;
 }
 
-if (!$items || $total <= 0) {
+if (!$items || $total <= 0 || $totalTickets <= 0) {
     unset($_SESSION['order_draft']);
     redirect('/packages');
 }
@@ -59,7 +61,34 @@ if (!empty($user['instagram'])) {
 }
 
 $errors = [];
+$additionalAttendeeCount = max(0, $totalTickets - 1);
+$attendeeNames = array_fill(0, $additionalAttendeeCount, '');
+
+if ($additionalAttendeeCount > 0 && isset($_SESSION['order_draft']['attendee_names']) && is_array($_SESSION['order_draft']['attendee_names'])) {
+    for ($i = 0; $i < $additionalAttendeeCount; $i++) {
+        $attendeeNames[$i] = trim((string)($_SESSION['order_draft']['attendee_names'][$i] ?? ''));
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($additionalAttendeeCount > 0) {
+        $rawNames = $_POST['attendee_names'] ?? [];
+        if (!is_array($rawNames)) {
+            $rawNames = [];
+        }
+        for ($i = 0; $i < $additionalAttendeeCount; $i++) {
+            $nameInput = trim((string)($rawNames[$i] ?? ''));
+            $attendeeNames[$i] = $nameInput;
+            if ($nameInput === '') {
+                $errors[] = 'Please fill in attendee name #' . ($i + 2) . '.';
+            } elseif (strlen($nameInput) > 120) {
+                $errors[] = 'Attendee name #' . ($i + 2) . ' is too long (max 120 characters).';
+            }
+        }
+    }
+
+    $_SESSION['order_draft']['attendee_names'] = $attendeeNames;
+
     if (!isset($_FILES['payment_proof']) || $_FILES['payment_proof']['error'] !== UPLOAD_ERR_OK) {
         $errors[] = 'Please upload a valid payment proof.';
     } else {
@@ -104,6 +133,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     if ($orderId > 0) {
+                        try {
+                            $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, position_no, created_at) VALUES (?, ?, ?, ?)');
+                            $attendeeStmt->execute([$orderId, (string)$user['full_name'], 1, date('Y-m-d H:i:s')]);
+                            foreach ($attendeeNames as $idx => $attendeeName) {
+                                $attendeeStmt->execute([$orderId, $attendeeName, $idx + 2, date('Y-m-d H:i:s')]);
+                            }
+                        } catch (Throwable $e) {
+                            // Keep order success even when attendee table does not exist.
+                        }
+
                         unset($_SESSION['order_draft']);
                         send_invoice_email([
                             'id' => $orderId,
@@ -298,6 +337,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       background: #dbe9ff;
     }
 
+    .attendee-grid {
+      display: grid;
+      gap: 10px;
+      margin: 14px 0 18px;
+    }
+
+    .attendee-grid label {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      color: #e9f1ff;
+    }
+
+    .attendee-grid input[type="text"] {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.95);
+      color: #1f2d40;
+      font: inherit;
+      font-size: 14px;
+    }
+
+    .attendee-hint {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #dbe7ff;
+      opacity: 0.95;
+    }
+
     .proof-preview {
       margin-top: 12px;
       display: none;
@@ -408,6 +480,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <form method="post" enctype="multipart/form-data">
+          <?php if ($additionalAttendeeCount > 0): ?>
+            <div class="payment-card">
+              <div><i class="bi bi-people"></i> <strong>Additional Attendees</strong></div>
+              <div class="attendee-hint">Total tickets: <?= (int)$totalTickets ?>. Please fill names for attendee #2 until #<?= (int)$totalTickets ?>.</div>
+              <div class="attendee-grid">
+                <?php for ($i = 0; $i < $additionalAttendeeCount; $i++): ?>
+                  <label for="attendee_name_<?= (int)$i ?>">
+                    Attendee #<?= (int)($i + 2) ?>
+                    <input
+                      type="text"
+                      id="attendee_name_<?= (int)$i ?>"
+                      name="attendee_names[]"
+                      maxlength="120"
+                      value="<?= h($attendeeNames[$i] ?? '') ?>"
+                      required
+                    >
+                  </label>
+                <?php endfor; ?>
+              </div>
+            </div>
+          <?php endif; ?>
           <div class="upload-box">
             <input type="file" name="payment_proof" id="paymentProofInput" accept="image/*" required>
             <div class="proof-preview" id="proofPreviewWrap" aria-live="polite">

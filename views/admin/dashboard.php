@@ -244,6 +244,72 @@ $stmt->bindValue(count($params) + 1, $perPage, PDO::PARAM_INT);
 $stmt->bindValue(count($params) + 2, $offset, PDO::PARAM_INT);
 $stmt->execute();
 $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$orderItemDetailsMap = [];
+$orderTicketCountMap = [];
+$orderAttendeeMap = [];
+$orderIds = array_values(array_unique(array_map(static function ($row) {
+    return (int)($row['id'] ?? 0);
+}, $orders)));
+
+if ($orderIds) {
+    $inPlaceholders = implode(',', array_fill(0, count($orderIds), '?'));
+
+    $itemSql = "SELECT oi.order_id, p.name AS package_name, oi.qty, oi.price
+        FROM order_items oi
+        JOIN packages p ON p.id = oi.package_id
+        WHERE oi.order_id IN ($inPlaceholders)
+        ORDER BY oi.order_id ASC, p.name ASC";
+    $itemStmt = $db->prepare($itemSql);
+    foreach ($orderIds as $index => $orderId) {
+        $itemStmt->bindValue($index + 1, $orderId, PDO::PARAM_INT);
+    }
+    $itemStmt->execute();
+    foreach ($itemStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $oid = (int)($row['order_id'] ?? 0);
+        if ($oid <= 0) {
+            continue;
+        }
+        if (!isset($orderItemDetailsMap[$oid])) {
+            $orderItemDetailsMap[$oid] = [];
+        }
+        $qty = max(0, (int)($row['qty'] ?? 0));
+        $price = max(0, (int)($row['price'] ?? 0));
+        $orderItemDetailsMap[$oid][] = [
+            'package_name' => (string)($row['package_name'] ?? ''),
+            'qty' => $qty,
+            'price' => $price,
+            'subtotal' => $qty * $price,
+        ];
+        $orderTicketCountMap[$oid] = ($orderTicketCountMap[$oid] ?? 0) + $qty;
+    }
+
+    try {
+        $attendeeSql = "SELECT order_id, attendee_name, position_no
+            FROM order_attendees
+            WHERE order_id IN ($inPlaceholders)
+            ORDER BY order_id ASC, position_no ASC, id ASC";
+        $attendeeStmt = $db->prepare($attendeeSql);
+        foreach ($orderIds as $index => $orderId) {
+            $attendeeStmt->bindValue($index + 1, $orderId, PDO::PARAM_INT);
+        }
+        $attendeeStmt->execute();
+        foreach ($attendeeStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $oid = (int)($row['order_id'] ?? 0);
+            if ($oid <= 0) {
+                continue;
+            }
+            if (!isset($orderAttendeeMap[$oid])) {
+                $orderAttendeeMap[$oid] = [];
+            }
+            $orderAttendeeMap[$oid][] = [
+                'position_no' => (int)($row['position_no'] ?? 0),
+                'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
+            ];
+        }
+    } catch (Throwable $e) {
+        $orderAttendeeMap = [];
+    }
+}
 
 $hasActiveFilters = $selectedPackage > 0
     || $selectedOrderId > 0
@@ -618,6 +684,122 @@ $extraHead = <<<'HTML'
       transform: translateY(0) scale(1);
     }
   }
+
+  #orderDetailModal .proof-card {
+    max-width: min(95vw, 1020px);
+    border-radius: 22px;
+  }
+
+  #orderDetailModal .proof-head {
+    padding: 16px 20px;
+  }
+
+  #orderDetailModal .proof-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.4px;
+  }
+
+  .order-detail-body {
+    padding: 14px 20px 20px;
+    max-height: calc(90vh - 72px);
+    overflow-y: auto;
+  }
+
+  .detail-head {
+    margin-bottom: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .detail-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--stroke);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .detail-chip .chip-label {
+    color: var(--muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-size: 11px;
+  }
+
+  .detail-chip .chip-value {
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .detail-box {
+    border: 1px solid var(--stroke);
+    border-radius: 14px;
+    background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+    padding: 14px;
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+  }
+
+  .detail-title {
+    font-size: 14px;
+    font-weight: 800;
+    margin-bottom: 10px;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .detail-list {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .detail-list li {
+    border: 1px solid var(--stroke);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 10px 12px;
+    line-height: 1.45;
+  }
+
+  .detail-empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 4px 2px 2px;
+  }
+
+  @media (max-width: 900px) {
+    #orderDetailModal .proof-title {
+      font-size: 22px;
+    }
+
+    .order-detail-body {
+      padding: 12px;
+    }
+
+    .detail-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 HTML;
 render_header([
@@ -818,8 +1000,26 @@ render_header([
                   <?php
                   // Buttons enabled only for paid orders with proof
                   $canAction = !empty($o['payment_proof']) && $o['status'] === 'paid';
+                  $detailOrderId = (int)$o['id'];
+                  $detailItems = $orderItemDetailsMap[$detailOrderId] ?? [];
+                  $detailAttendees = $orderAttendeeMap[$detailOrderId] ?? [];
+                  $detailPayload = [
+                      'order_id' => $detailOrderId,
+                      'user_name' => (string)($o['full_name'] ?? ''),
+                      'total' => (int)($o['total'] ?? 0),
+                      'status' => (string)($o['status'] ?? ''),
+                      'created_at' => (string)($o['created_at'] ?? ''),
+                      'ticket_count' => (int)($orderTicketCountMap[$detailOrderId] ?? 0),
+                      'items' => $detailItems,
+                      'attendees' => $detailAttendees,
+                  ];
                   ?>
                   <div class="action-group">
+                    <button
+                      class="btn ghost small"
+                      type="button"
+                      data-order-detail="<?= h(json_encode($detailPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>"
+                    ><i class="bi bi-info-circle"></i> Detail</button>
                     <button
                       class="btn primary small"
                       type="button"
@@ -915,6 +1115,32 @@ render_header([
       <div class="confirm-actions">
         <button class="btn ghost" type="button" id="confirmCancel"><i class="bi bi-x-circle"></i> Tidak</button>
         <button class="btn primary" type="button" id="confirmSubmit"><i class="bi bi-check-circle"></i> Ya</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="proof-modal" id="orderDetailModal" aria-hidden="true">
+    <div class="proof-card" role="dialog" aria-modal="true" aria-labelledby="orderDetailTitle">
+      <div class="proof-head">
+        <div class="proof-title" id="orderDetailTitle"><i class="bi bi-receipt"></i> Order Detail</div>
+        <div class="proof-actions">
+          <button class="proof-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+      </div>
+      <div class="order-detail-body">
+        <div class="detail-head" id="orderDetailHead"></div>
+        <div class="detail-grid">
+          <div class="detail-box">
+            <div class="detail-title"><i class="bi bi-box-seam"></i> Package Breakdown</div>
+            <ul class="detail-list" id="orderDetailItems"></ul>
+            <div class="detail-empty" id="orderDetailItemsEmpty">No package detail available.</div>
+          </div>
+          <div class="detail-box">
+            <div class="detail-title"><i class="bi bi-people"></i> Attendees</div>
+            <ul class="detail-list" id="orderDetailAttendees"></ul>
+            <div class="detail-empty" id="orderDetailAttendeesEmpty">No attendee data available.</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1103,6 +1329,131 @@ render_header([
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && modal.classList.contains('show')) {
           closeModal();
+        }
+      });
+    })();
+  </script>
+
+  <script>
+    (function() {
+      var modal = document.getElementById('orderDetailModal');
+      if (!modal) return;
+      var title = document.getElementById('orderDetailTitle');
+      var detailHead = document.getElementById('orderDetailHead');
+      var detailItems = document.getElementById('orderDetailItems');
+      var detailItemsEmpty = document.getElementById('orderDetailItemsEmpty');
+      var detailAttendees = document.getElementById('orderDetailAttendees');
+      var detailAttendeesEmpty = document.getElementById('orderDetailAttendeesEmpty');
+      var closeBtn = modal.querySelector('.proof-close');
+
+      function statusLabel(status) {
+        if (status === 'paid') return 'Paid';
+        if (status === 'accepted') return 'Accepted';
+        if (status === 'rejected') return 'Rejected';
+        return status || '-';
+      }
+
+      function asCurrency(n) {
+        var value = Number(n || 0);
+        return 'Rp ' + value.toLocaleString('id-ID');
+      }
+
+      function formatDate(raw) {
+        if (!raw) return '-';
+        var d = new Date(raw);
+        if (isNaN(d.getTime())) return String(raw);
+        return d.toLocaleString('id-ID', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+
+      function escapeHtml(text) {
+        return String(text == null ? '' : text)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function clearList(el) {
+        while (el.firstChild) {
+          el.removeChild(el.firstChild);
+        }
+      }
+
+      function openDetail(rawJson) {
+        var payload = null;
+        try {
+          payload = JSON.parse(rawJson || '{}');
+        } catch (err) {
+          payload = {};
+        }
+
+        var orderId = Number(payload.order_id || 0);
+        title.innerHTML = '<i class="bi bi-receipt"></i> Order Detail #' + (orderId || '-');
+
+        var createdAt = formatDate(payload.created_at);
+        var ticketCount = Number(payload.ticket_count || 0);
+        detailHead.innerHTML =
+          '<div class="detail-chip"><span class="chip-label">User</span><span class="chip-value">' + escapeHtml(payload.user_name || '-') + '</span></div>' +
+          '<div class="detail-chip"><span class="chip-label">Status</span><span class="chip-value">' + escapeHtml(statusLabel(payload.status || '')) + '</span></div>' +
+          '<div class="detail-chip"><span class="chip-label">Tickets</span><span class="chip-value">' + ticketCount + '</span></div>' +
+          '<div class="detail-chip"><span class="chip-label">Total</span><span class="chip-value">' + asCurrency(payload.total || 0) + '</span></div>' +
+          '<div class="detail-chip"><span class="chip-label">Created</span><span class="chip-value">' + escapeHtml(createdAt) + '</span></div>';
+
+        clearList(detailItems);
+        var items = Array.isArray(payload.items) ? payload.items : [];
+        items.forEach(function(it) {
+          var li = document.createElement('li');
+          var packageName = it && it.package_name ? String(it.package_name) : '-';
+          var qty = Number(it && it.qty ? it.qty : 0);
+          var price = Number(it && it.price ? it.price : 0);
+          var subtotal = Number(it && it.subtotal ? it.subtotal : (qty * price));
+          li.textContent = packageName + ' x' + qty + ' @ ' + asCurrency(price) + ' = ' + asCurrency(subtotal);
+          detailItems.appendChild(li);
+        });
+        detailItemsEmpty.style.display = items.length ? 'none' : 'block';
+
+        clearList(detailAttendees);
+        var attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
+        attendees.forEach(function(at) {
+          var li = document.createElement('li');
+          var pos = Number(at && at.position_no ? at.position_no : 0);
+          var name = at && at.attendee_name ? String(at.attendee_name) : '-';
+          li.textContent = (pos > 0 ? ('#' + pos + ' - ') : '') + name;
+          detailAttendees.appendChild(li);
+        });
+        detailAttendeesEmpty.style.display = attendees.length ? 'none' : 'block';
+
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeDetail() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+
+      document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          openDetail(btn.getAttribute('data-order-detail') || '{}');
+        });
+      });
+
+      closeBtn.addEventListener('click', closeDetail);
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+          closeDetail();
+        }
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+          closeDetail();
         }
       });
     })();
