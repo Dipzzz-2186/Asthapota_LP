@@ -172,13 +172,6 @@ $extraHead = <<<'HTML'
     letter-spacing: 0.3px;
   }
 
-  .scan-head-badge .dot {
-    width: 7px; height: 7px;
-    border-radius: 999px;
-    background: var(--primary);
-    animation: livePulse 1.6s ease-in-out infinite;
-  }
-
   @keyframes livePulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.4; transform: scale(0.7); }
@@ -780,12 +773,7 @@ render_header([
       <h1 class="scan-title"><i class="bi bi-qr-code-scan"></i> QR Check-In</h1>
       <p class="scan-sub">Scan QR tiket → pilih nama attendee → konfirmasi. 1 QR bisa dipakai sesuai jumlah tiket.</p>
     </div>
-    <div class="scan-head-badge">
-      <span class="dot"></span>
-      Live Scanner
-    </div>
   </div>
-
   <div class="scan-grid">
 
     <!-- ── Left: Scanner Console ──────────────────────────── -->
