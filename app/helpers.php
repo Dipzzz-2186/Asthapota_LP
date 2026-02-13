@@ -448,6 +448,11 @@ function send_order_status_email(array $order, string $toEmail): bool {
                     <img src="' . $safeQrImageUrl . '" alt="QR Ticket Asthapora" width="220" height="220" style="display:block;width:220px;max-width:100%;height:auto;border:1px solid #b9d5ff;border-radius:10px;background:#ffffff;padding:8px;">
                   </td>
                 </tr>
+                <tr>
+                  <td style="padding:0 14px 12px;font-size:12px;color:#4f6d98;word-break:break-word;overflow-wrap:anywhere;">
+                    Token cadangan: <span style="font-family:monospace;word-break:break-all;overflow-wrap:anywhere;">' . $safeToken . '</span>
+                  </td>
+                </tr>
               </table>';
         }
     }
