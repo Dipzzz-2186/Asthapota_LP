@@ -405,6 +405,8 @@ $extraHead = <<<'HTML'
   .dashboard-filter-form .filter-label .bi { color: var(--primary); }
 
   .filter-field { display: grid; gap: 6px; }
+  .filter-field-status { padding-right: 12px; }
+  .filter-field-package { padding-left: 12px; }
 
   .field-label {
     font-size: 11px;
@@ -868,6 +870,8 @@ $extraHead = <<<'HTML'
 
     .filter-card { padding: 14px 14px; }
     .dashboard-filter-form { grid-template-columns: 1fr; gap: 10px; }
+    .filter-field-status,
+    .filter-field-package { padding: 0; }
     .dashboard-filter-form .filter-actions { flex-direction: column; align-items: stretch; }
     .dashboard-filter-form .filter-actions .btn { width: 100%; justify-content: center; }
 
@@ -980,7 +984,7 @@ render_header([
             <label class="field-label" for="filterDate">Tanggal</label>
             <input id="filterDate" type="date" name="created_date" value="<?= h($selectedDate) ?>">
           </div>
-          <div class="filter-field">
+          <div class="filter-field filter-field-status">
             <label class="field-label" for="filterStatus">Status</label>
             <select id="filterStatus" name="status">
               <option value="">Semua Status</option>
@@ -989,7 +993,7 @@ render_header([
               <option value="rejected" <?= $selectedStatus === 'rejected' ? 'selected' : '' ?>>Rejected</option>
             </select>
           </div>
-          <div class="filter-field">
+          <div class="filter-field filter-field-package">
             <label class="field-label" for="filterPackage">Package</label>
             <select id="filterPackage" name="package">
               <option value="0">Semua Package</option>
