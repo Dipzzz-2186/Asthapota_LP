@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $full_name = trim($_POST['full_name'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
         $email = trim($_POST['email'] ?? '');
+        $gender = trim($_POST['gender'] ?? '');
         $instagram = trim($_POST['instagram'] ?? '');
         $instagram = ltrim($instagram, '@');
 
@@ -36,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($phone === '') $errors[] = 'Phone number is required.';
         if ($email === '') $errors[] = 'Email is required.';
         if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Email format is invalid.';
+        if (!in_array($gender, ['Laki-laki', 'Perempuan'], true)) $errors[] = 'Gender is required.';
 
         if (!$errors) {
             $db = get_db();
@@ -72,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'full_name' => $full_name,
                     'phone' => $phone,
                     'email' => $email,
+                    'gender' => $gender,
                     'instagram' => $instagram,
                     'reuse_user_id' => $reuseUserId,
                     'otp' => $otp,
@@ -104,21 +107,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $reuseUserId = (int)($pending['reuse_user_id'] ?? 0);
 
             if ($reuseUserId > 0) {
-                $stmt = $db->prepare('UPDATE users SET full_name = ?, phone = ?, instagram = ? WHERE id = ? AND email = ?');
+                $stmt = $db->prepare('UPDATE users SET full_name = ?, phone = ?, gender = ?, instagram = ? WHERE id = ? AND email = ?');
                 $stmt->execute([
                     $pending['full_name'],
                     $pending['phone'],
+                    $pending['gender'],
                     $pending['instagram'],
                     $reuseUserId,
                     $pending['email'],
                 ]);
                 $_SESSION['user_id'] = $reuseUserId;
             } else {
-                $stmt = $db->prepare('INSERT INTO users (full_name, phone, email, instagram, created_at) VALUES (?, ?, ?, ?, ?)');
+                $stmt = $db->prepare('INSERT INTO users (full_name, phone, email, gender, instagram, created_at) VALUES (?, ?, ?, ?, ?, ?)');
                 $stmt->execute([
                     $pending['full_name'],
                     $pending['phone'],
                     $pending['email'],
+                    $pending['gender'],
                     $pending['instagram'],
                     date('c')
                 ]);
@@ -280,7 +285,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       gap: 8px;
     }
 
-    input {
+    input,
+    select {
       width: 100%;
       height: 44px;
       border-radius: 10px;
@@ -292,7 +298,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
     }
 
-    input:focus {
+    input:focus,
+    select:focus {
       outline: none;
       border-color: rgba(22, 88, 173, 0.75);
       box-shadow: 0 0 0 3px rgba(22, 88, 173, 0.22);
@@ -467,6 +474,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <label>
           <span class="label-text"><i class="bi bi-envelope"></i> E-mail*</span>
           <input type="email" name="email" required>
+        </label>
+
+        <label>
+          <span class="label-text"><i class="bi bi-gender-ambiguous"></i> Gender*</span>
+          <select name="gender" required>
+            <option value="" selected disabled>Pilih gender</option>
+            <option value="Laki-laki">Laki-laki</option>
+            <option value="Perempuan">Perempuan</option>
+          </select>
         </label>
 
         <label>
