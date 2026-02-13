@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $attendees = [];
     try {
-        $attendeeStmt = $db->prepare('SELECT id, attendee_name, position_no, checked_in_at
+        $attendeeStmt = $db->prepare('SELECT id, attendee_name, gender, position_no, checked_in_at
             FROM order_attendees
             WHERE order_id = ?
             ORDER BY position_no ASC, id ASC');
@@ -90,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $attendees[] = [
                 'id' => $attendeeId,
                 'name' => $attendeeName,
+                'gender' => normalize_gender_value($attendeeRow['gender'] ?? ''),
                 'position_no' => (int)($attendeeRow['position_no'] ?? 0),
                 'checked_in_at' => (string)($attendeeRow['checked_in_at'] ?? ''),
             ];
@@ -102,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $attendees[] = [
             'id' => 0,
             'name' => $ownerName !== '' ? $ownerName : 'Pemesan',
+            'gender' => $orderGender,
             'position_no' => 1,
             'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
         ];
@@ -167,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'ok' => true,
             'order_id' => $orderId,
             'name' => (string)$selected['name'],
-            'gender' => $orderGender,
+            'gender' => normalize_gender_value($selected['gender'] ?? $orderGender),
             'checked_in_at' => $now,
             'message' => 'Check-in berhasil.',
         ]);
