@@ -1583,10 +1583,5 @@ render_header([
       }, 3500);
     })();
   </script>
-
-  <script>
-    // ── Auto reload 60s ────────────────────────────────────────
-    (function() { setInterval(function() { window.location.reload(); }, 60000); })();
-  </script>
-
+  
 <?php render_footer(['isAdmin' => true]); ?>
