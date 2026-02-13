@@ -4,6 +4,8 @@ ensure_session();
 unset($_SESSION['order_draft']);
 
 $isAdmin = is_admin_logged_in();
+$scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/'));
+$basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, '/');
 ?>
 <!doctype html>
 <html lang="en">
@@ -53,7 +55,7 @@ $isAdmin = is_admin_logged_in();
       min-height: 100svh;
       background:
         linear-gradient(180deg, rgba(7, 8, 10, 0.28) 0%, rgba(7, 8, 10, 0.5) 100%),
-        url('/assets/img/wallpapeh2.jpg') center center / cover no-repeat;
+        url('<?= h($basePath) ?>/assets/img/wallpapeh2.jpg') center center / cover no-repeat;
       background-attachment: scroll;
       position: relative;
       overflow-x: hidden;
@@ -557,8 +559,8 @@ $isAdmin = is_admin_logged_in();
     }
 
     .sponsor {
-      min-width: 220px;
-      min-height: 110px;
+      width: 220px;
+      height: 110px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -581,9 +583,8 @@ $isAdmin = is_admin_logged_in();
     }
 
     .sponsor img {
-      width: 100%;
-      max-width: 230px;
-      max-height: 96px;
+      width: 172px;
+      height: 72px;
       object-fit: contain;
       filter: brightness(0) saturate(100%) invert(100%);
       user-select: none;
@@ -1145,7 +1146,7 @@ $isAdmin = is_admin_logged_in();
 
   <main class="landing">
     <section class="panel hero">
-      <img class="hero-logo" data-seq style="--seq-delay: 80ms;" src="/assets/img/lopad.jpg" alt="Astaphora logo">
+      <img class="hero-logo" data-seq style="--seq-delay: 80ms;" src="<?= h($basePath) ?>/assets/img/lopad.jpg" alt="Astaphora logo">
       <p class="welcome" data-seq style="--seq-delay: 170ms;">Welcome</p>
       <h1 class="title" data-seq style="--seq-delay: 260ms;">TEMU PADEL</h1>
       <p class="subtitle" data-seq style="--seq-delay: 350ms;"><i class="bi bi-stars"></i> A Monkeybar x BAPORA Event</p>
@@ -1181,10 +1182,10 @@ $isAdmin = is_admin_logged_in();
       <h2 data-reveal style="--reveal-delay: 60ms;"><i class="bi bi-patch-check"></i> Supported By</h2>
       <div class="sponsor-strip" data-reveal style="--reveal-delay: 150ms;" aria-label="Supported by logos marquee">
         <div class="sponsor-track">
-          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/hippi.png" alt="HIPPI"></a>
-          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="/assets/img/logo.webp" alt="BAPORA"></a>
-          <a href="https://fcom.co.id/" target="_blank" class="sponsor"><img src="/assets/img/fcom.png" alt="FCOM"></a>
-          <a href="https://ayo.co.id/v/mypadel" target="_blank" class="sponsor"><img src="/assets/img/mypadel.png" alt="MY Padel"></a>
+          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="<?= h($basePath) ?>/assets/img/hippi.png" alt="HIPPI"></a>
+          <a href="https://www.hippi.or.id/" target="_blank" class="sponsor"><img src="<?= h($basePath) ?>/assets/img/logo.webp" alt="BAPORA"></a>
+          <a href="https://fcom.co.id/" target="_blank" class="sponsor"><img src="<?= h($basePath) ?>/assets/img/fcom.png" alt="FCOM"></a>
+          <a href="https://ayo.co.id/v/mypadel" target="_blank" class="sponsor"><img src="<?= h($basePath) ?>/assets/img/mypadel.png" alt="MY Padel"></a>
         </div>
       </div>
 
