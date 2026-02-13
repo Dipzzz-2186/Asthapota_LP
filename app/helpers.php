@@ -316,14 +316,68 @@ function ensure_order_attendee_checkin_schema(PDO $db): void {
             return;
         }
 
+        $columns = [
+            'checked_in_at' => "ALTER TABLE order_attendees ADD COLUMN checked_in_at DATETIME NULL AFTER created_at",
+            'gender' => "ALTER TABLE order_attendees ADD COLUMN gender ENUM('Laki-laki','Perempuan') NOT NULL DEFAULT 'Laki-laki' AFTER attendee_name",
+        ];
         $checkStmt = $db->prepare(
             "SELECT COUNT(*) FROM information_schema.COLUMNS
-             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_attendees' AND COLUMN_NAME = 'checked_in_at'"
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_attendees' AND COLUMN_NAME = ?"
         );
-        $checkStmt->execute([$currentDb]);
-        $exists = (int)$checkStmt->fetchColumn() > 0;
-        if (!$exists) {
-            $db->exec("ALTER TABLE order_attendees ADD COLUMN checked_in_at DATETIME NULL AFTER created_at");
+        foreach ($columns as $columnName => $alterSql) {
+            $checkStmt->execute([$currentDb, $columnName]);
+            $exists = (int)$checkStmt->fetchColumn() > 0;
+            if (!$exists) {
+                $db->exec($alterSql);
+            }
+        }
+
+        // Ensure enum definition is normalized to Indonesian labels.
+        try {
+            $columnTypeStmt = $db->prepare(
+                "SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_attendees' AND COLUMN_NAME = 'gender'
+                 LIMIT 1"
+            );
+            $columnTypeStmt->execute([$currentDb]);
+            $columnType = strtolower((string)$columnTypeStmt->fetchColumn());
+            if ($columnType !== '') {
+                $hasLaki = strpos($columnType, "'laki-laki'") !== false;
+                $hasPerempuan = strpos($columnType, "'perempuan'") !== false;
+                if (!$hasLaki || !$hasPerempuan) {
+                    $db->exec("ALTER TABLE order_attendees
+                        MODIFY COLUMN gender ENUM('Laki-laki','Perempuan') NOT NULL DEFAULT 'Laki-laki'");
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore enum normalization errors and keep app usable.
+        }
+
+        // Normalize legacy values that may still exist in gender column.
+        try {
+            $db->exec("UPDATE order_attendees
+                SET gender = CASE
+                    WHEN LOWER(TRIM(gender)) IN ('female', 'f', 'perempuan', 'wanita') THEN 'Perempuan'
+                    ELSE 'Laki-laki'
+                END");
+        } catch (Throwable $e) {
+            // Ignore data normalization errors.
+        }
+
+        // Backfill from legacy attendee_gender when available.
+        try {
+            $checkStmt->execute([$currentDb, 'attendee_gender']);
+            $legacyExists = (int)$checkStmt->fetchColumn() > 0;
+            if ($legacyExists) {
+                $db->exec("UPDATE order_attendees
+                    SET gender = CASE
+                        WHEN LOWER(TRIM(attendee_gender)) IN ('female', 'f', 'perempuan', 'wanita') THEN 'Perempuan'
+                        ELSE 'Laki-laki'
+                    END
+                    WHERE gender IS NULL OR gender = ''");
+            }
+        } catch (Throwable $e) {
+            // Ignore legacy column migration issues.
         }
     } catch (Throwable $e) {
         // Keep app functional even if attendee schema migration fails.

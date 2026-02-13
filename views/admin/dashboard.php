@@ -270,6 +270,20 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $orderItemDetailsMap = [];
 $orderTicketCountMap = [];
 $orderAttendeeMap = [];
+$normalizeAttendeeGenderLabel = static function ($raw): string {
+    $value = trim((string)$raw);
+    if ($value === '') {
+        return '';
+    }
+    $lower = strtolower($value);
+    if (in_array($lower, ['male', 'm', 'laki-laki', 'laki', 'pria'], true)) {
+        return 'Laki-laki';
+    }
+    if (in_array($lower, ['female', 'f', 'perempuan', 'wanita'], true)) {
+        return 'Perempuan';
+    }
+    return $value;
+};
 $orderIds = array_values(array_unique(array_map(static function ($row) {
     return (int)($row['id'] ?? 0);
 }, $orders)));
@@ -307,7 +321,7 @@ if ($orderIds) {
     }
 
     try {
-        $attendeeSql = "SELECT order_id, attendee_name, position_no, checked_in_at
+        $attendeeSql = "SELECT order_id, attendee_name, gender, position_no, checked_in_at
             FROM order_attendees
             WHERE order_id IN ($inPlaceholders)
             ORDER BY order_id ASC, position_no ASC, id ASC";
@@ -327,11 +341,39 @@ if ($orderIds) {
             $orderAttendeeMap[$oid][] = [
                 'position_no' => (int)($row['position_no'] ?? 0),
                 'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
+                'attendee_gender' => $normalizeAttendeeGenderLabel((string)($row['gender'] ?? '')),
                 'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
             ];
         }
     } catch (Throwable $e) {
-        $orderAttendeeMap = [];
+        try {
+            $attendeeSql = "SELECT order_id, attendee_name, attendee_gender, position_no, checked_in_at
+                FROM order_attendees
+                WHERE order_id IN ($inPlaceholders)
+                ORDER BY order_id ASC, position_no ASC, id ASC";
+            $attendeeStmt = $db->prepare($attendeeSql);
+            foreach ($orderIds as $index => $orderId) {
+                $attendeeStmt->bindValue($index + 1, $orderId, PDO::PARAM_INT);
+            }
+            $attendeeStmt->execute();
+            foreach ($attendeeStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $oid = (int)($row['order_id'] ?? 0);
+                if ($oid <= 0) {
+                    continue;
+                }
+                if (!isset($orderAttendeeMap[$oid])) {
+                    $orderAttendeeMap[$oid] = [];
+                }
+                $orderAttendeeMap[$oid][] = [
+                    'position_no' => (int)($row['position_no'] ?? 0),
+                    'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
+                    'attendee_gender' => $normalizeAttendeeGenderLabel((string)($row['attendee_gender'] ?? '')),
+                    'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
+                ];
+            }
+        } catch (Throwable $e2) {
+            $orderAttendeeMap = [];
+        }
     }
 }
 
@@ -1465,11 +1507,16 @@ render_header([
           var li = document.createElement('li');
           var pos = Number(at && at.position_no ? at.position_no : 0);
           var name = at && at.attendee_name ? String(at.attendee_name) : '-';
+          var genderRaw = at && at.attendee_gender ? String(at.attendee_gender).trim() : '';
+          var genderLabel = '';
+          if (genderRaw === 'Laki-laki') genderLabel = 'Laki-laki';
+          if (genderRaw === 'Perempuan') genderLabel = 'Perempuan';
           var checkedInAt = at && at.checked_in_at ? String(at.checked_in_at) : '';
           var arrived = checkedInAt ? 'Sudah sampai' : 'Belum sampai';
           var arrivedClass = checkedInAt ? 'style="color:#1f7a45;font-weight:700;"' : 'style="color:#7a2b2b;font-weight:700;"';
           var arrivedTime = checkedInAt ? (' <span style="color:#5a6b86;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>') : '';
-          li.innerHTML = escapeHtml((pos > 0 ? ('#' + pos + ' - ') : '') + name) + ' <span ' + arrivedClass + '>[' + arrived + ']</span>' + arrivedTime;
+          var genderText = genderLabel ? (' <span style="color:#5a6b86;">(' + escapeHtml(genderLabel) + ')</span>') : '';
+          li.innerHTML = escapeHtml((pos > 0 ? ('#' + pos + ' - ') : '') + name) + genderText + ' <span ' + arrivedClass + '>[' + arrived + ']</span>' + arrivedTime;
           detailAttendees.appendChild(li);
         });
         detailAttendeesEmpty.style.display = attendees.length ? 'none' : 'block';

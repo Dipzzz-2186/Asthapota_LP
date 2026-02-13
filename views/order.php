@@ -20,7 +20,8 @@ if (
 }
 
 $db = get_db();
-$userStmt = $db->prepare('SELECT id, full_name, phone, email, instagram FROM users WHERE id = ?');
+ensure_order_attendee_checkin_schema($db);
+$userStmt = $db->prepare('SELECT id, full_name, phone, email, instagram, gender FROM users WHERE id = ?');
 $userStmt->execute([(int)$_SESSION['user_id']]);
 $user = $userStmt->fetch(PDO::FETCH_ASSOC);
 
@@ -63,10 +64,37 @@ if (!empty($user['instagram'])) {
 $errors = [];
 $additionalAttendeeCount = max(0, $totalTickets - 1);
 $attendeeNames = array_fill(0, $additionalAttendeeCount, '');
+$attendeeGenders = array_fill(0, $additionalAttendeeCount, '');
+$allowedAttendeeGenders = ['Laki-laki', 'Perempuan'];
+
+$normalizeAttendeeGender = static function ($raw) use ($allowedAttendeeGenders): string {
+    $value = trim((string)$raw);
+    if (in_array($value, $allowedAttendeeGenders, true)) {
+        return $value;
+    }
+    $lower = strtolower($value);
+    if (in_array($lower, ['male', 'm', 'laki-laki', 'laki', 'pria'], true)) {
+        return 'Laki-laki';
+    }
+    if (in_array($lower, ['female', 'f', 'perempuan', 'wanita'], true)) {
+        return 'Perempuan';
+    }
+    return '';
+};
+$ownerGender = $normalizeAttendeeGender((string)($user['gender'] ?? ''));
+if ($ownerGender === '') {
+    $ownerGender = 'Laki-laki';
+}
 
 if ($additionalAttendeeCount > 0 && isset($_SESSION['order_draft']['attendee_names']) && is_array($_SESSION['order_draft']['attendee_names'])) {
     for ($i = 0; $i < $additionalAttendeeCount; $i++) {
         $attendeeNames[$i] = trim((string)($_SESSION['order_draft']['attendee_names'][$i] ?? ''));
+    }
+}
+if ($additionalAttendeeCount > 0 && isset($_SESSION['order_draft']['attendee_genders']) && is_array($_SESSION['order_draft']['attendee_genders'])) {
+    for ($i = 0; $i < $additionalAttendeeCount; $i++) {
+        $genderInput = (string)($_SESSION['order_draft']['attendee_genders'][$i] ?? '');
+        $attendeeGenders[$i] = $normalizeAttendeeGender($genderInput);
     }
 }
 
@@ -76,18 +104,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!is_array($rawNames)) {
             $rawNames = [];
         }
+        $rawGenders = $_POST['attendee_genders'] ?? [];
+        if (!is_array($rawGenders)) {
+            $rawGenders = [];
+        }
         for ($i = 0; $i < $additionalAttendeeCount; $i++) {
             $nameInput = trim((string)($rawNames[$i] ?? ''));
             $attendeeNames[$i] = $nameInput;
+            $genderInput = (string)($rawGenders[$i] ?? '');
+            $attendeeGenders[$i] = $normalizeAttendeeGender($genderInput);
             if ($nameInput === '') {
                 $errors[] = 'Please fill in attendee name #' . ($i + 2) . '.';
             } elseif (strlen($nameInput) > 120) {
                 $errors[] = 'Attendee name #' . ($i + 2) . ' is too long (max 120 characters).';
             }
+            if ($attendeeGenders[$i] === '') {
+                $errors[] = 'Please select gender for attendee #' . ($i + 2) . '.';
+            }
         }
     }
 
     $_SESSION['order_draft']['attendee_names'] = $attendeeNames;
+    $_SESSION['order_draft']['attendee_genders'] = $attendeeGenders;
 
     if (!isset($_FILES['payment_proof']) || $_FILES['payment_proof']['error'] !== UPLOAD_ERR_OK) {
         $errors[] = 'Please upload a valid payment proof.';
@@ -134,13 +172,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if ($orderId > 0) {
                         try {
-                            $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, position_no, created_at) VALUES (?, ?, ?, ?)');
-                            $attendeeStmt->execute([$orderId, (string)$user['full_name'], 1, date('Y-m-d H:i:s')]);
+                            $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
+                            $attendeeStmt->execute([$orderId, (string)$user['full_name'], $ownerGender, 1, date('Y-m-d H:i:s')]);
                             foreach ($attendeeNames as $idx => $attendeeName) {
-                                $attendeeStmt->execute([$orderId, $attendeeName, $idx + 2, date('Y-m-d H:i:s')]);
+                                $attendeeStmt->execute([$orderId, $attendeeName, (string)($attendeeGenders[$idx] ?? ''), $idx + 2, date('Y-m-d H:i:s')]);
                             }
                         } catch (Throwable $e) {
-                            // Keep order success even when attendee table does not exist.
+                            // Fallback for older attendee schema with attendee_gender.
+                            try {
+                                $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, attendee_gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
+                                $attendeeStmt->execute([$orderId, (string)$user['full_name'], null, 1, date('Y-m-d H:i:s')]);
+                                foreach ($attendeeNames as $idx => $attendeeName) {
+                                    $attendeeStmt->execute([$orderId, $attendeeName, (string)($attendeeGenders[$idx] ?? ''), $idx + 2, date('Y-m-d H:i:s')]);
+                                }
+                            } catch (Throwable $e) {
+                                // Keep order success even when attendee table does not exist.
+                            }
                         }
 
                         unset($_SESSION['order_draft']);
@@ -409,6 +456,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       font-size: 14px;
     }
 
+    .attendee-row {
+      display: grid;
+      grid-template-columns: 1fr 180px;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .attendee-row select {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.95);
+      color: #1f2d40;
+      font: inherit;
+      font-size: 14px;
+    }
+
     .attendee-hint {
       margin-top: 8px;
       font-size: 13px;
@@ -469,6 +534,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .order-full {
         grid-template-columns: 1fr;
       }
+
+      .attendee-row {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -501,6 +570,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endforeach; ?>
         </div>
 
+        <?php if ($additionalAttendeeCount > 0): ?>
+          <div class="payment-card" style="margin-top:16px;">
+            <div><i class="bi bi-people"></i> <strong>Additional Attendees</strong></div>
+            <div class="attendee-hint">Total tickets: <?= (int)$totalTickets ?>. Please fill names for attendee #2 until #<?= (int)$totalTickets ?>.</div>
+            <div class="attendee-grid">
+              <?php for ($i = 0; $i < $additionalAttendeeCount; $i++): ?>
+                <div class="attendee-row">
+                  <label for="attendee_name_<?= (int)$i ?>">
+                    Attendee #<?= (int)($i + 2) ?> Name
+                    <input
+                      type="text"
+                      id="attendee_name_<?= (int)$i ?>"
+                      name="attendee_names[]"
+                      form="orderSubmitForm"
+                      maxlength="120"
+                      value="<?= h($attendeeNames[$i] ?? '') ?>"
+                      required
+                    >
+                  </label>
+                  <label for="attendee_gender_<?= (int)$i ?>">
+                    Gender
+                    <select id="attendee_gender_<?= (int)$i ?>" name="attendee_genders[]" form="orderSubmitForm" required>
+                      <option value="">Select gender</option>
+                      <option value="Laki-laki"<?= (($attendeeGenders[$i] ?? '') === 'Laki-laki') ? ' selected' : '' ?>>Laki-laki</option>
+                      <option value="Perempuan"<?= (($attendeeGenders[$i] ?? '') === 'Perempuan') ? ' selected' : '' ?>>Perempuan</option>
+                    </select>
+                  </label>
+                </div>
+              <?php endfor; ?>
+            </div>
+          </div>
+        <?php endif; ?>
+
         <div class="total">
           <div><i class="bi bi-wallet2"></i> Total to Pay:</div>
           <div><?= h(rupiah((int)$total)) ?>,-</div>
@@ -527,28 +629,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           </div>
         <?php endif; ?>
 
-        <form method="post" enctype="multipart/form-data">
-          <?php if ($additionalAttendeeCount > 0): ?>
-            <div class="payment-card">
-              <div><i class="bi bi-people"></i> <strong>Additional Attendees</strong></div>
-              <div class="attendee-hint">Total tickets: <?= (int)$totalTickets ?>. Please fill names for attendee #2 until #<?= (int)$totalTickets ?>.</div>
-              <div class="attendee-grid">
-                <?php for ($i = 0; $i < $additionalAttendeeCount; $i++): ?>
-                  <label for="attendee_name_<?= (int)$i ?>">
-                    Attendee #<?= (int)($i + 2) ?>
-                    <input
-                      type="text"
-                      id="attendee_name_<?= (int)$i ?>"
-                      name="attendee_names[]"
-                      maxlength="120"
-                      value="<?= h($attendeeNames[$i] ?? '') ?>"
-                      required
-                    >
-                  </label>
-                <?php endfor; ?>
-              </div>
-            </div>
-          <?php endif; ?>
+        <form method="post" enctype="multipart/form-data" id="orderSubmitForm">
           <div class="upload-box">
             <input type="file" name="payment_proof" id="paymentProofInput" accept="image/*" required>
             <div class="proof-preview" id="proofPreviewWrap" aria-live="polite">
