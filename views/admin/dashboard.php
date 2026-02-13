@@ -307,7 +307,7 @@ if ($orderIds) {
     }
 
     try {
-        $attendeeSql = "SELECT order_id, attendee_name, position_no
+        $attendeeSql = "SELECT order_id, attendee_name, position_no, checked_in_at
             FROM order_attendees
             WHERE order_id IN ($inPlaceholders)
             ORDER BY order_id ASC, position_no ASC, id ASC";
@@ -327,6 +327,7 @@ if ($orderIds) {
             $orderAttendeeMap[$oid][] = [
                 'position_no' => (int)($row['position_no'] ?? 0),
                 'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
+                'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
             ];
         }
     } catch (Throwable $e) {
@@ -1397,6 +1398,15 @@ render_header([
         });
       }
 
+      function countCheckedIn(attendees) {
+        if (!Array.isArray(attendees)) return 0;
+        var count = 0;
+        attendees.forEach(function(at) {
+          if (at && at.checked_in_at) count += 1;
+        });
+        return count;
+      }
+
       function escapeHtml(text) {
         return String(text == null ? '' : text)
           .replace(/&/g, '&amp;')
@@ -1425,10 +1435,14 @@ render_header([
 
         var createdAt = formatDate(payload.created_at);
         var ticketCount = Number(payload.ticket_count || 0);
+        var attendeesForHead = Array.isArray(payload.attendees) ? payload.attendees : [];
+        var arrivedCount = countCheckedIn(attendeesForHead);
+        var arrivalLabel = arrivedCount + '/' + ticketCount;
         detailHead.innerHTML =
           '<div class="detail-chip"><span class="chip-label">User</span><span class="chip-value">' + escapeHtml(payload.user_name || '-') + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Status</span><span class="chip-value">' + escapeHtml(statusLabel(payload.status || '')) + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Tickets</span><span class="chip-value">' + ticketCount + '</span></div>' +
+          '<div class="detail-chip"><span class="chip-label">Kedatangan</span><span class="chip-value">' + escapeHtml(arrivalLabel) + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Total</span><span class="chip-value">' + asCurrency(payload.total || 0) + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Created</span><span class="chip-value">' + escapeHtml(createdAt) + '</span></div>';
 
@@ -1451,7 +1465,11 @@ render_header([
           var li = document.createElement('li');
           var pos = Number(at && at.position_no ? at.position_no : 0);
           var name = at && at.attendee_name ? String(at.attendee_name) : '-';
-          li.textContent = (pos > 0 ? ('#' + pos + ' - ') : '') + name;
+          var checkedInAt = at && at.checked_in_at ? String(at.checked_in_at) : '';
+          var arrived = checkedInAt ? 'Sudah sampai' : 'Belum sampai';
+          var arrivedClass = checkedInAt ? 'style="color:#1f7a45;font-weight:700;"' : 'style="color:#7a2b2b;font-weight:700;"';
+          var arrivedTime = checkedInAt ? (' <span style="color:#5a6b86;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>') : '';
+          li.innerHTML = escapeHtml((pos > 0 ? ('#' + pos + ' - ') : '') + name) + ' <span ' + arrivedClass + '>[' + arrived + ']</span>' + arrivedTime;
           detailAttendees.appendChild(li);
         });
         detailAttendeesEmpty.style.display = attendees.length ? 'none' : 'block';

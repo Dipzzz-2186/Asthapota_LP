@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $stmt = $db->prepare('SELECT o.id, o.status, o.checked_in_at, u.full_name
+    $stmt = $db->prepare('SELECT o.id, o.status, o.checked_in_at, u.full_name, u.gender
         FROM orders o
         JOIN users u ON u.id = o.user_id
         WHERE o.qr_token = ?
@@ -57,6 +57,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $orderId = (int)$row['id'];
     $ownerName = trim((string)($row['full_name'] ?? ''));
+    $orderGender = strtolower(trim((string)($row['gender'] ?? '')));
+    if ($orderGender !== 'male' && $orderGender !== 'female') {
+        $orderGender = 'unknown';
+    }
 
     $attendees = [];
     try {
@@ -154,6 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'ok' => true,
             'order_id' => $orderId,
             'name' => (string)$selected['name'],
+            'gender' => $orderGender,
             'checked_in_at' => $now,
             'message' => 'Check-in berhasil.',
         ]);
@@ -174,6 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'mode' => 'select_attendee',
         'order_id' => $orderId,
         'order_name' => $ownerName,
+        'order_gender' => $orderGender,
         'total_tickets' => $total,
         'checked_in_count' => $checked,
         'remaining_count' => $remaining,
@@ -189,48 +195,98 @@ $prefillToken = extract_qr_token((string)($_GET['token'] ?? ''));
 $extraHead = <<<'HTML'
 <style>
   .scan-wrap {
-    width: min(980px, 94vw);
-    margin: 24px auto 46px;
-    display: grid;
-    gap: 16px;
+    width: min(1220px, 95vw);
+    margin: 24px auto 50px;
   }
 
-  .scan-card {
-    background: var(--surface);
-    border: 1px solid var(--stroke);
-    border-radius: 18px;
-    box-shadow: 0 12px 28px rgba(9, 20, 39, 0.08);
-    padding: 18px;
+  .scan-page-head {
+    margin-bottom: 14px;
+    display: grid;
+    gap: 8px;
   }
 
   .scan-title {
-    margin: 0 0 8px;
-    font-size: 28px;
-    line-height: 1.2;
+    margin: 0;
+    font-size: clamp(28px, 3.1vw, 40px);
+    line-height: 1.1;
   }
 
   .scan-sub {
     margin: 0;
     color: var(--muted);
+    font-weight: 600;
+  }
+
+  .scan-grid {
+    display: grid;
+    grid-template-columns: minmax(320px, 0.95fr) minmax(420px, 1.25fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .scan-pane {
+    background: linear-gradient(160deg, #ffffff 0%, #f8fbff 100%);
+    border: 1px solid var(--stroke);
+    border-radius: 20px;
+    box-shadow: 0 14px 35px rgba(17, 34, 62, 0.08);
+    padding: 16px;
+  }
+
+  .pane-title {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 900;
+    color: #183a66;
+  }
+
+  .pane-sub {
+    margin: 0 0 12px;
+    color: #5a7292;
+    font-size: 13px;
+    font-weight: 700;
   }
 
   #qr-reader {
-    width: min(520px, 100%);
-    margin: 14px auto 0;
-    border: 1px dashed var(--stroke);
+    width: 100%;
+    min-height: 300px;
+    border: 1px dashed #c6d8ef;
     border-radius: 14px;
     overflow: hidden;
+    background: #f3f8ff;
   }
 
   .scan-actions {
-    margin-top: 14px;
+    margin-top: 12px;
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
   }
 
+  .manual-form {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+
+  .manual-form input {
+    min-height: 46px;
+    border: 2px solid #d8e5f5;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font: inherit;
+    font-weight: 600;
+    color: #224161;
+    background: #fff;
+  }
+
+  .manual-form input:focus {
+    outline: none;
+    border-color: #7fb0ff;
+    box-shadow: 0 0 0 3px rgba(56, 130, 255, 0.16);
+  }
+
   .result-box {
-    margin-top: 14px;
     border: 1px solid var(--stroke);
     border-radius: 14px;
     padding: 14px;
@@ -254,7 +310,6 @@ $extraHead = <<<'HTML'
   }
 
   .history-box {
-    margin-top: 14px;
     border: 1px solid var(--stroke);
     border-radius: 14px;
     padding: 14px;
@@ -279,30 +334,153 @@ $extraHead = <<<'HTML'
     gap: 6px;
   }
 
-  .welcome-name {
-    margin: 0 0 6px;
-    font-size: 24px;
+  .gender-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
     font-weight: 800;
+    border: 1px solid transparent;
   }
 
-  .manual-form {
-    margin-top: 10px;
+  .gender-chip.male {
+    color: #0b4e9e;
+    background: #e8f3ff;
+    border-color: #b9d8ff;
+  }
+
+  .gender-chip.female {
+    color: #9a2a66;
+    background: #ffedf5;
+    border-color: #ffc4dc;
+  }
+
+  .gender-chip.unknown {
+    color: #425773;
+    background: #eff3f8;
+    border-color: #d1dbe8;
+  }
+
+  .profile-card {
+    margin: 8px 0 10px;
+    border: 1px solid #d2deee;
+    background: #fff;
+    border-radius: 16px;
+    padding: 12px;
     display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 10px;
+    grid-template-columns: 86px 1fr;
+    gap: 12px;
   }
 
-  .manual-form input {
-    min-height: 46px;
-    border: 2px solid var(--stroke);
-    border-radius: 12px;
-    padding: 10px 12px;
-    font: inherit;
+  .profile-avatar {
+    width: 78px;
+    height: 78px;
+    border-radius: 999px;
+    position: relative;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    animation: floaty 2s ease-in-out infinite;
+    box-shadow: 0 10px 18px rgba(20, 41, 74, 0.2);
+  }
+
+  .profile-avatar .face {
+    font-size: 30px;
+    z-index: 2;
+  }
+
+  .profile-avatar::after {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border: 2px solid rgba(255, 255, 255, 0.55);
+    border-radius: 999px;
+    animation: pulse-ring 2.1s ease-in-out infinite;
+  }
+
+  .profile-avatar.male {
+    background: linear-gradient(160deg, #1d78ff, #66b6ff);
+  }
+
+  .profile-avatar.female {
+    background: linear-gradient(160deg, #f35aa4, #ff95c8);
+  }
+
+  .profile-avatar.unknown {
+    background: linear-gradient(160deg, #8096b5, #acbbcf);
+  }
+
+  .profile-body {
+    display: grid;
+    gap: 7px;
+    align-content: center;
+  }
+
+  .profile-name {
+    margin: 0;
+    font-size: 21px;
+    font-weight: 900;
+    color: #19385f;
+  }
+
+  .profile-role {
+    margin: 0;
+    font-size: 12px;
+    color: #607995;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+  }
+
+  .profile-kpis {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .mini-kpi {
+    border-radius: 10px;
+    background: #f4f8ff;
+    border: 1px solid #d9e6f5;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #33527a;
+  }
+
+  @keyframes floaty {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+
+  @keyframes pulse-ring {
+    0%, 100% { transform: scale(1); opacity: .55; }
+    50% { transform: scale(1.08); opacity: 1; }
+  }
+
+  .result-stack {
+    display: grid;
+    gap: 12px;
+  }
+
+  @media (max-width: 1020px) {
+    .scan-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 700px) {
     .manual-form {
       grid-template-columns: 1fr;
+    }
+    .profile-card {
+      grid-template-columns: 1fr;
+      justify-items: center;
+      text-align: center;
+    }
+    .profile-kpis {
+      justify-content: center;
     }
   }
 </style>
@@ -317,36 +495,47 @@ render_header([
 ]);
 ?>
 <main class="scan-wrap">
-  <section class="scan-card">
+  <section class="scan-page-head">
     <h1 class="scan-title"><i class="bi bi-qr-code-scan"></i> Scan QR Check-In</h1>
-    <p class="scan-sub">1 QR bisa dipakai sesuai jumlah tiket. Setelah scan, pilih dulu nama attendee yang check-in.</p>
+    <p class="scan-sub">1 QR bisa dipakai sesuai jumlah tiket. Scan dulu, lalu pilih nama attendee yang check-in.</p>
+  </section>
 
-    <div id="qr-reader"></div>
+  <section class="scan-grid">
+    <article class="scan-pane">
+      <h2 class="pane-title">Scanner Console</h2>
+      <p class="pane-sub">Dukung kamera browser dan scanner gun (USB HID keyboard).</p>
 
-    <div class="scan-actions">
-      <a class="btn ghost" href="/admin/dashboard"><i class="bi bi-arrow-left-circle"></i> Kembali ke Dashboard</a>
-      <button class="btn primary" id="startScan" type="button"><i class="bi bi-camera-video"></i> Start Scan</button>
-      <button class="btn ghost" id="stopScan" type="button"><i class="bi bi-stop-circle"></i> Stop Scan</button>
-    </div>
+      <div id="qr-reader"></div>
 
-    <form class="manual-form" id="manualForm" method="post" action="/admin/scan">
-      <input
-        id="manualToken"
-        name="token"
-        type="text"
-        placeholder="Paste token atau URL QR di sini"
-        value="<?= h($prefillToken) ?>"
-        autocomplete="off"
-      >
-      <button class="btn ghost" type="submit"><i class="bi bi-keyboard"></i> Verify Manual</button>
-    </form>
+      <div class="scan-actions">
+        <a class="btn ghost" href="/admin/dashboard"><i class="bi bi-arrow-left-circle"></i> Dashboard</a>
+        <button class="btn primary" id="startScan" type="button"><i class="bi bi-camera-video"></i> Start</button>
+        <button class="btn ghost" id="stopScan" type="button"><i class="bi bi-stop-circle"></i> Stop</button>
+      </div>
 
-    <div class="result-box" id="resultBox" aria-live="polite"></div>
-    <div class="history-box" id="historyBox">
-      <p class="history-title"><i class="bi bi-clock-history"></i> Riwayat Scan (Sesi Ini)</p>
-      <p class="history-empty" id="historyEmpty">Belum ada data scan.</p>
-      <ol class="history-list" id="historyList" style="display:none;"></ol>
-    </div>
+      <form class="manual-form" id="manualForm" method="post" action="/admin/scan">
+        <input
+          id="manualToken"
+          name="token"
+          type="text"
+          placeholder="Paste token / URL QR di sini"
+          value="<?= h($prefillToken) ?>"
+          autocomplete="off"
+        >
+        <button class="btn ghost" type="submit"><i class="bi bi-keyboard"></i> Verify</button>
+      </form>
+    </article>
+
+    <article class="scan-pane result-stack">
+      <h2 class="pane-title">Check-In Result</h2>
+      <p class="pane-sub">Panel ini menampilkan profile attendee dan status check-in terbaru.</p>
+      <div class="result-box" id="resultBox" aria-live="polite"></div>
+      <div class="history-box" id="historyBox">
+        <p class="history-title"><i class="bi bi-clock-history"></i> Riwayat Scan (Sesi Ini)</p>
+        <p class="history-empty" id="historyEmpty">Belum ada data scan.</p>
+        <ol class="history-list" id="historyList" style="display:none;"></ol>
+      </div>
+    </article>
   </section>
 </main>
 
@@ -382,6 +571,48 @@ render_header([
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+    }
+
+    function normalizeGender(raw) {
+      var v = String(raw || '').toLowerCase().trim();
+      if (v === 'male' || v === 'm' || v === 'laki-laki' || v === 'laki') return 'male';
+      if (v === 'female' || v === 'f' || v === 'perempuan' || v === 'wanita') return 'female';
+      return 'unknown';
+    }
+
+    function genderLabel(g) {
+      if (g === 'male') return 'Male';
+      if (g === 'female') return 'Female';
+      return 'Unknown';
+    }
+
+    function genderFace(g) {
+      if (g === 'male') return '🧑';
+      if (g === 'female') return '👩';
+      return '🙂';
+    }
+
+    function genderIcon(g) {
+      if (g === 'male') return 'bi-gender-male';
+      if (g === 'female') return 'bi-gender-female';
+      return 'bi-gender-ambiguous';
+    }
+
+    function renderProfileCard(name, role, gender, stats) {
+      var g = normalizeGender(gender);
+      var s = stats || {};
+      return '<div class="profile-card">' +
+        '<div class="profile-avatar ' + g + '"><span class="face">' + genderFace(g) + '</span></div>' +
+        '<div class="profile-body">' +
+          '<p class="profile-name">' + escapeHtml(name || '-') + '</p>' +
+          '<p class="profile-role">' + escapeHtml(role || '') + ' <span class="gender-chip ' + g + '"><i class="bi ' + genderIcon(g) + '"></i> ' + escapeHtml(genderLabel(g)) + '</span></p>' +
+          '<div class="profile-kpis">' +
+            '<span class="mini-kpi">Total: ' + escapeHtml(String(s.total || 0)) + '</span>' +
+            '<span class="mini-kpi">Checked: ' + escapeHtml(String(s.checked || 0)) + '</span>' +
+            '<span class="mini-kpi">Sisa: ' + escapeHtml(String(s.remaining || 0)) + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
     }
 
     function renderHistory() {
@@ -474,7 +705,7 @@ render_header([
         var contentType = res.headers.get('content-type') || '';
         if (contentType.indexOf('application/json') === -1) {
           return res.text().then(function (txt) {
-            var isLoginHtml = txt.indexOf('Admin Login') !== -1 || txt.indexOf('<?= h(admin_login_path()) ?>') !== -1;
+            var isLoginHtml = txt.indexOf('Admin Login') !== -1 || txt.indexOf('/admin/login') !== -1;
             if (isLoginHtml || res.status === 401 || res.status === 403) {
               throw new Error('Sesi admin habis. Silakan login lagi.');
             }
@@ -500,8 +731,9 @@ render_header([
         var total = Number(data.total_tickets || attendees.length || 0);
         var checked = Number(data.checked_in_count || 0);
         var remain = Number(data.remaining_count || 0);
+        var orderGender = normalizeGender(data.order_gender);
         var summary = '<p style="margin:0 0 6px;"><strong>Order #' + escapeHtml(String(data.order_id || '-')) + '</strong></p>' +
-          '<p style="margin:0 0 10px;">Pemesan: ' + escapeHtml(data.order_name || '-') + '</p>' +
+          renderProfileCard(data.order_name || '-', 'Order Owner', orderGender, { total: total, checked: checked, remaining: remain }) +
           '<p style="margin:0 0 12px;">Ticket: ' + escapeHtml(String(total)) + ' | Sudah check-in: ' + escapeHtml(String(checked)) + ' | Sisa: ' + escapeHtml(String(remain)) + '</p>';
 
         if (!attendees.length) {
@@ -556,7 +788,13 @@ render_header([
           showResult('error', '<strong>Gagal:</strong> ' + escapeHtml((data && data.message) || 'Check-in gagal.'));
           return;
         }
-        var title = '<p class="welcome-name">Welcome, ' + escapeHtml(data.name || attendeeName || '-') + '</p>';
+        var checkedGender = normalizeGender(data.gender);
+        var title = renderProfileCard(
+          'Welcome, ' + (data.name || attendeeName || '-'),
+          'Check-In Confirmed',
+          checkedGender,
+          { total: 1, checked: 1, remaining: 0 }
+        );
         var info = '<p style="margin:0;"><strong>Order #</strong> ' + escapeHtml(String(data.order_id || '-')) + '</p>' +
           '<p style="margin:4px 0 0;">' + escapeHtml(data.message || 'Check-in berhasil.') + '</p>' +
           '<p style="margin:4px 0 0;">Check-in: ' + escapeHtml(data.checked_in_at || '-') + '</p>' +

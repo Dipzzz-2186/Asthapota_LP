@@ -540,6 +540,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     (function () {
       var body = document.body;
       var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.addEventListener('pageshow', function () {
+        if (!body) return;
+        body.classList.remove('page-leaving');
+        body.classList.add('page-ready');
+      });
       if (body && !reduceMotion) {
         requestAnimationFrame(function () {
           body.classList.add('page-ready');

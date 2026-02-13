@@ -1268,6 +1268,12 @@ if (!$sponsorItems) {
       var backTopBtn = document.getElementById('backTopBtn');
       var progressTicking = false;
 
+      window.addEventListener('pageshow', function () {
+        if (!body) return;
+        body.classList.remove('page-leaving');
+        body.classList.add('page-ready');
+      });
+
       function updateScrollProgress() {
         if (!scrollProgressBar) return;
         var doc = document.documentElement;
