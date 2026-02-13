@@ -6,6 +6,8 @@ require_once __DIR__ . '/../layout/app.php';
 require_admin();
 
 $db = get_db();
+ensure_order_qr_schema($db);
+ensure_order_attendee_checkin_schema($db);
 $flash = ['success' => '', 'error' => ''];
 $selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
 $selectedOrderId = ctype_digit($selectedOrderIdRaw) ? (int)$selectedOrderIdRaw : 0;
@@ -116,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash['error'] = 'Invalid request.';
         } else {
             // Load order + user for email notification
-            $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
+            $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, o.qr_token, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
             $stmt->execute([$orderId]);
             $orderRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -131,8 +133,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 // Update status + notify user
                 $newStatus = $action === 'accept' ? 'accepted' : 'rejected';
-                $update = $db->prepare('UPDATE orders SET status = ? WHERE id = ?');
-                $update->execute([$newStatus, $orderId]);
+                if ($newStatus === 'accepted') {
+                    $qrToken = extract_qr_token((string)($orderRow['qr_token'] ?? ''));
+                    if ($qrToken === '') {
+                        $qrToken = strtolower(bin2hex(random_bytes(24)));
+                    }
+                    $update = $db->prepare('UPDATE orders SET status = ?, qr_token = ?, qr_sent_at = ?, checked_in_at = NULL WHERE id = ?');
+                    $update->execute([$newStatus, $qrToken, date('Y-m-d H:i:s'), $orderId]);
+                    $orderRow['qr_token'] = $qrToken;
+                    try {
+                        $db->prepare('UPDATE order_attendees SET checked_in_at = NULL WHERE order_id = ?')->execute([$orderId]);
+                    } catch (Throwable $e) {
+                        // Ignore when attendee table/column is unavailable.
+                    }
+                } else {
+                    $update = $db->prepare('UPDATE orders SET status = ?, qr_token = NULL, qr_sent_at = NULL, checked_in_at = NULL WHERE id = ?');
+                    $update->execute([$newStatus, $orderId]);
+                    $orderRow['qr_token'] = null;
+                    try {
+                        $db->prepare('UPDATE order_attendees SET checked_in_at = NULL WHERE order_id = ?')->execute([$orderId]);
+                    } catch (Throwable $e) {
+                        // Ignore when attendee table/column is unavailable.
+                    }
+                }
 
                 $orderRow['status'] = $newStatus;
                 $sent = send_order_status_email($orderRow, $orderRow['email']);
@@ -820,6 +843,9 @@ render_header([
           <p class="admin-sub">Ringkasan pesanan dan status pembayaran</p>
         </div>
         <div class="dashboard-head-actions">
+          <a class="btn ghost" href="/admin/scan">
+            <i class="bi bi-qr-code-scan"></i> Scan QR
+          </a>
           <button class="btn primary" type="button" id="openSponsorModal">
             <i class="bi bi-building-add"></i> Tambah Sponsor
           </button>

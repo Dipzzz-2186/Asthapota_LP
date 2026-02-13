@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 function h(string $v): string {
     return htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
 }
@@ -207,6 +207,125 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
     return smtp_send($toEmail, $subject, $body);
 }
 
+function app_base_url(): string {
+    global $CONFIG;
+    $configured = trim((string)($CONFIG['base_url'] ?? ''));
+    if ($configured !== '') {
+        return rtrim($configured, '/');
+    }
+
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (string)($_SERVER['SERVER_PORT'] ?? '') === '443';
+    $scheme = $https ? 'https' : 'http';
+    $host = (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+    return $scheme . '://' . $host;
+}
+
+function build_qr_checkin_url(string $token): string {
+    return app_base_url() . '/admin/scan?token=' . rawurlencode($token);
+}
+
+function build_qr_image_url(string $payload): string {
+    return 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=8&data=' . rawurlencode($payload);
+}
+
+function extract_qr_token(string $rawValue): string {
+    $rawValue = trim($rawValue);
+    if ($rawValue === '') {
+        return '';
+    }
+
+    if (str_starts_with($rawValue, 'ASTHAPORA:')) {
+        $rawValue = trim(substr($rawValue, strlen('ASTHAPORA:')));
+    }
+
+    if (preg_match('/^https?:\/\//i', $rawValue)) {
+        $query = (string)parse_url($rawValue, PHP_URL_QUERY);
+        if ($query !== '') {
+            parse_str($query, $queryParams);
+            $candidate = trim((string)($queryParams['token'] ?? ''));
+            if ($candidate !== '') {
+                $rawValue = $candidate;
+            }
+        }
+    }
+
+    if (!preg_match('/^[A-Fa-f0-9]{24,64}$/', $rawValue)) {
+        return '';
+    }
+
+    return strtolower($rawValue);
+}
+
+function ensure_order_qr_schema(PDO $db): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $currentDb = (string)$db->query('SELECT DATABASE()')->fetchColumn();
+        if ($currentDb === '') {
+            return;
+        }
+
+        $columns = [
+            'qr_token' => "ALTER TABLE orders ADD COLUMN qr_token VARCHAR(64) NULL AFTER status",
+            'qr_sent_at' => "ALTER TABLE orders ADD COLUMN qr_sent_at DATETIME NULL AFTER qr_token",
+            'checked_in_at' => "ALTER TABLE orders ADD COLUMN checked_in_at DATETIME NULL AFTER qr_sent_at",
+        ];
+
+        $checkStmt = $db->prepare(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'orders' AND COLUMN_NAME = ?"
+        );
+
+        foreach ($columns as $columnName => $alterSql) {
+            $checkStmt->execute([$currentDb, $columnName]);
+            $exists = (int)$checkStmt->fetchColumn() > 0;
+            if (!$exists) {
+                $db->exec($alterSql);
+            }
+        }
+
+        try {
+            $db->exec("CREATE INDEX idx_orders_qr_token ON orders (qr_token)");
+        } catch (Throwable $e) {
+            // Ignore when index already exists.
+        }
+    } catch (Throwable $e) {
+        // Keep app functional even if schema migration fails.
+    }
+}
+
+function ensure_order_attendee_checkin_schema(PDO $db): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $currentDb = (string)$db->query('SELECT DATABASE()')->fetchColumn();
+        if ($currentDb === '') {
+            return;
+        }
+
+        $checkStmt = $db->prepare(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_attendees' AND COLUMN_NAME = 'checked_in_at'"
+        );
+        $checkStmt->execute([$currentDb]);
+        $exists = (int)$checkStmt->fetchColumn() > 0;
+        if (!$exists) {
+            $db->exec("ALTER TABLE order_attendees ADD COLUMN checked_in_at DATETIME NULL AFTER created_at");
+        }
+    } catch (Throwable $e) {
+        // Keep app functional even if attendee schema migration fails.
+    }
+}
+
 function send_order_status_email(array $order, string $toEmail): bool {
     $statusRaw = $order['status'] ?? 'pending';
     $statusLabel = match ($statusRaw) {
@@ -249,6 +368,37 @@ function send_order_status_email(array $order, string $toEmail): bool {
             </table>
             <p style="margin:14px 0 0;font-size:13px;color:#5a6b86;">Silakan hadir 15-30 menit lebih awal untuk proses check-in.</p>'
         : '';
+    $qrSection = '';
+    if ($statusRaw === 'accepted') {
+        $token = extract_qr_token((string)($order['qr_token'] ?? ''));
+        if ($token !== '') {
+            $scanUrl = build_qr_checkin_url($token);
+            $qrImageUrl = build_qr_image_url($scanUrl);
+            $safeScanUrl = htmlspecialchars($scanUrl, ENT_QUOTES, 'UTF-8');
+            $safeQrImageUrl = htmlspecialchars($qrImageUrl, ENT_QUOTES, 'UTF-8');
+            $safeToken = htmlspecialchars($token, ENT_QUOTES, 'UTF-8');
+            $qrSection = '
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:14px;background:#f2f8ff;border:1px solid #cde2ff;border-radius:12px;">
+                <tr>
+                  <td style="padding:14px 14px 10px;font-size:13px;line-height:1.6;color:#24518f;">
+                    <div style="font-weight:700;color:#123e7b;margin-bottom:8px;">QR Ticket Kamu</div>
+                    <div>Tunjukkan QR ini saat check-in di lokasi event.</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding:0 14px 10px;">
+                    <img src="' . $safeQrImageUrl . '" alt="QR Ticket Asthapora" width="220" height="220" style="display:block;width:220px;max-width:100%;height:auto;border:1px solid #b9d5ff;border-radius:10px;background:#ffffff;padding:8px;">
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 14px 12px;font-size:12px;color:#4f6d98;">
+                    Link QR: <a href="' . $safeScanUrl . '" style="color:#1e5ed8;">' . $safeScanUrl . '</a><br>
+                    Token cadangan: <span style="font-family:monospace;">' . $safeToken . '</span>
+                  </td>
+                </tr>
+              </table>';
+        }
+    }
     $rejectNote = $statusRaw === 'rejected'
         ? '<p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#6d3640;">Pesanan ini dinyatakan <strong>ditolak</strong>. Jika kamu butuh bantuan atau ingin melakukan pemesanan ulang, silakan hubungi tim panitia.</p>'
         : '';
@@ -270,6 +420,7 @@ function send_order_status_email(array $order, string $toEmail): bool {
               <div style="font-size:13px;color:#5a6b86;margin-top:6px;">Status: ' . htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') . '</div>
             </div>
             ' . $eventDetails . '
+            ' . $qrSection . '
             ' . $rejectNote . '
             <p style="margin:14px 0 0;font-size:13px;color:#5a6b86;">Terima kasih sudah berpartisipasi di Asthapora.</p>
           </div>

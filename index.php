@@ -26,6 +26,7 @@ $routes = [
     '/admin' => __DIR__ . '/views/admin/login.php',
     '/admin/login' => __DIR__ . '/views/admin/login.php',
     '/admin/dashboard' => __DIR__ . '/views/admin/dashboard.php',
+    '/admin/scan' => __DIR__ . '/views/admin/scan.php',
     '/admin/logout' => __DIR__ . '/views/admin/logout.php',
 ];
 
