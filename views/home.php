@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -35,7 +35,7 @@
       position: fixed;
       inset: 0;
       z-index: -2;
-      background: url('/assets/img/WallpaperHome.jpeg') center center / contain no-repeat;
+      background: url('/assets/img/WallpaperHome.jpeg') center center / cover no-repeat;
     }
 
     body::after {
@@ -98,6 +98,13 @@
       letter-spacing: 2px;
       text-transform: uppercase;
       opacity: 0.9;
+      color: var(--text-white);
+      text-decoration: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .event-series:hover {
+      opacity: 1;
     }
 
     /* Tombol Instagram ala Pill */
@@ -171,7 +178,7 @@
     </div>
 
     <div class="footer-section">
-      <p class="event-series">Bapora Hippi Collaborative Event Series</p>
+      <a href="/events" class="event-series">Bapora Hippi Collaborative Event Series</a>
       
       <a href="https://instagram.com/yourprofile" target="_blank" class="instagram-btn">
         <div class="ig-icon-circle">

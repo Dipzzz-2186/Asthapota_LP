@@ -1245,7 +1245,7 @@ if (!$sponsorItems) {
       <?php if ($isAdmin): ?>
         <a class="cta" data-reveal style="--reveal-delay: 240ms;" href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Go To Admin Dashboard</a>
       <?php else: ?>
-        <a class="cta cta-register" data-reveal style="--reveal-delay: 240ms;" href="/register?from=home"><i class="bi bi-person-plus"></i> Click Here To Register</a>
+        <a class="cta cta-register" data-reveal style="--reveal-delay: 240ms;" href="/register?from=events"><i class="bi bi-person-plus"></i> Click Here To Register</a>
         <a class="cta" data-reveal style="--reveal-delay: 240ms;" href="/packages"><i class="bi bi-box-seam"></i> Click Here To See Packages</a>
       <?php endif; ?>
     </section>

@@ -437,7 +437,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <?php if (!$can_order): ?>
             <a class="btn primary" href="/register?from=packages"><i class="bi bi-person-plus"></i> Register Now</a>
           <?php endif; ?>
-          <a class="btn ghost" href="/"><i class="bi bi-house-door"></i> Back to Home</a>
+          <a class="btn ghost" href="/events"><i class="bi bi-calendar-event"></i> Back to Events</a>
         </div>
       </form>
     </section>

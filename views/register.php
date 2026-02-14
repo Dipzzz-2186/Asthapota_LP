@@ -5,14 +5,17 @@ require_once __DIR__ . '/../app/auth.php';
 ensure_session();
 
 function register_source(?string $source): string {
-    return $source === 'home' ? 'home' : 'packages';
+    if ($source === 'home' || $source === 'events') {
+        return 'events';
+    }
+    return 'packages';
 }
 
 $from = register_source($_GET['from'] ?? $_POST['from'] ?? ($_SESSION['register_from'] ?? 'packages'));
 $_SESSION['register_from'] = $from;
-$backHref = $from === 'home' ? '/' : '/packages';
-$backIcon = $from === 'home' ? 'bi-house-door' : 'bi-box-seam';
-$backLabel = $from === 'home' ? 'Back to Home' : 'Back to Packages';
+$backHref = $from === 'events' ? '/events' : '/packages';
+$backIcon = $from === 'events' ? 'bi-calendar-event' : 'bi-box-seam';
+$backLabel = $from === 'events' ? 'Back to Events' : 'Back to Packages';
 
 if (!empty($_GET['cancel_otp']) && $_GET['cancel_otp'] === '1') {
     unset($_SESSION['reg_pending']);
