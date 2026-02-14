@@ -1196,7 +1196,6 @@ if (!$sponsorItems) {
 
   <main class="landing">
     <section class="panel hero">
-      <img class="hero-logo" data-seq style="--seq-delay: 80ms;" src="<?= h($basePath) ?>/assets/img/lopad.jpg" alt="Astaphora logo">
       <p class="welcome" data-seq style="--seq-delay: 170ms;">Welcome</p>
       <h1 class="title" data-seq style="--seq-delay: 260ms;">TEMU PADEL</h1>
       <p class="subtitle" data-seq style="--seq-delay: 350ms;"><i class="bi bi-stars"></i> A Monkeybar x BAPORA Event</p>
