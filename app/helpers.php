@@ -129,6 +129,26 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
         </tr>';
     }
 
+    $paymentProofButton = '';
+    $paymentProofRaw = trim((string)($order['payment_proof'] ?? ''));
+    if ($paymentProofRaw !== '') {
+        $paymentProofFile = basename(str_replace('\\', '/', $paymentProofRaw));
+        if ($paymentProofFile !== '' && $paymentProofFile !== '.' && $paymentProofFile !== '..') {
+            $proofUrl = app_base_url() . '/uploads/' . rawurlencode($paymentProofFile);
+            $safeProofUrl = htmlspecialchars($proofUrl, ENT_QUOTES, 'UTF-8');
+            $paymentProofButton = '
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:12px;">
+                      <tr>
+                        <td align="left">
+                          <a href="' . $safeProofUrl . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1658ad;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;padding:10px 14px;border-radius:10px;">
+                            Lihat Bukti Pembayaran
+                          </a>
+                        </td>
+                      </tr>
+                    </table>';
+        }
+    }
+
     $body = '
       <div style="margin:0;padding:0;background:#eef3ff;font-family:Arial,Helvetica,sans-serif;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef3ff;padding:24px 12px;">
@@ -194,11 +214,12 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:16px;background:#f8fbff;border:1px dashed #c6d9ff;border-radius:12px;">
                       <tr>
                         <td style="padding:12px 16px;font-size:13px;line-height:1.6;color:#4e5f7b;">
-                          Pembayaran: <strong>BCA 1234567890</strong> a.n. <strong>PT Manifestasi Kehidupan Berlimpah</strong><br>
+                          Pembayaran via QRIS: <strong>Monkeybar Smoothie &amp; Juice, SCBD</strong><br>
                           Simpan email ini sebagai bukti transaksi dan tunjukkan saat diperlukan oleh panitia.
                         </td>
                       </tr>
                     </table>
+                    ' . $paymentProofButton . '
                   </td>
                 </tr>
               </table>

@@ -196,6 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'full_name' => $user['full_name'],
                             'status' => 'paid',
                             'total' => $total,
+                            'payment_proof' => $name,
                         ], $items, (string)$user['email']);
                         redirect('/thankyou?order=' . $orderId);
                     }
