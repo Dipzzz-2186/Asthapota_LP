@@ -18,6 +18,8 @@ if ($path === '') {
 $routes = [
     '/' => __DIR__ . '/views/home.php',
     '/index.php' => __DIR__ . '/views/home.php',
+    '/event' => __DIR__ . '/views/event.php',
+    '/home' => __DIR__ . '/views/event.php',
     '/register' => __DIR__ . '/views/register.php',
     '/packages' => __DIR__ . '/views/packages.php',
     '/order' => __DIR__ . '/views/order.php',
