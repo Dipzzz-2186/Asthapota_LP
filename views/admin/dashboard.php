@@ -183,18 +183,56 @@ if ($selectedStatus === 'accepted' || $selectedStatus === 'rejected') { $wherePa
 elseif ($selectedStatus === 'pending') { $whereParts[] = "o.status IN ('pending', 'paid')"; }
 $whereSql = ' WHERE ' . implode(' AND ', $whereParts);
 
-$summarySql = "SELECT COUNT(*) AS total_orders, COALESCE(SUM(CASE WHEN o.status = 'accepted' THEN o.total ELSE 0 END), 0) AS total_revenue, SUM(CASE WHEN o.status IN ('paid', 'accepted', 'rejected') THEN 1 ELSE 0 END) AS paid_orders, SUM(CASE WHEN o.status NOT IN ('paid', 'accepted', 'rejected') THEN 1 ELSE 0 END) AS pending_orders FROM orders o JOIN users u ON u.id = o.user_id" . $whereSql;
+$summarySql = "SELECT
+    COALESCE(SUM(CASE WHEN o.status = 'accepted' THEN 1 ELSE 0 END), 0) AS accepted_orders,
+    COALESCE(SUM(CASE WHEN o.status = 'accepted' THEN o.total ELSE 0 END), 0) AS total_revenue
+    FROM orders o
+    JOIN users u ON u.id = o.user_id" . $whereSql;
 $summaryStmt = $db->prepare($summarySql);
 $summaryStmt->execute($params);
 $summary = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-$totalOrders = (int)($summary['total_orders'] ?? 0);
-$paidOrders = (int)($summary['paid_orders'] ?? 0);
-$pendingOrders = (int)($summary['pending_orders'] ?? 0);
+$totalOrders = (int)($summary['accepted_orders'] ?? 0);
 $totalRevenue = (int)($summary['total_revenue'] ?? 0);
 
+$packageSalesMap = [];
+foreach ($packages as $pkg) {
+    $packageId = (int)($pkg['id'] ?? 0);
+    if ($packageId <= 0) {
+        continue;
+    }
+    $packageSalesMap[$packageId] = [
+        'name' => (string)($pkg['name'] ?? '-'),
+        'qty' => 0,
+    ];
+}
+
+$packageSalesSql = "SELECT
+    p.id AS package_id,
+    COALESCE(SUM(CASE WHEN o.status = 'accepted' THEN oi.qty ELSE 0 END), 0) AS sold_qty
+    FROM orders o
+    JOIN users u ON u.id = o.user_id
+    JOIN order_items oi ON oi.order_id = o.id
+    JOIN packages p ON p.id = oi.package_id" . $whereSql . "
+    GROUP BY p.id";
+$packageSalesStmt = $db->prepare($packageSalesSql);
+$packageSalesStmt->execute($params);
+foreach ($packageSalesStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $packageId = (int)($row['package_id'] ?? 0);
+    if ($packageId <= 0 || !isset($packageSalesMap[$packageId])) {
+        continue;
+    }
+    $packageSalesMap[$packageId]['qty'] = max(0, (int)($row['sold_qty'] ?? 0));
+}
+$packageSalesStats = array_values($packageSalesMap);
+
+$countSql = "SELECT COUNT(*) AS total_records FROM orders o JOIN users u ON u.id = o.user_id" . $whereSql;
+$countStmt = $db->prepare($countSql);
+$countStmt->execute($params);
+$filteredOrderCount = (int)($countStmt->fetchColumn() ?: 0);
+
 $perPage = 20;
-$totalPages = max(1, (int)ceil($totalOrders / $perPage));
+$totalPages = max(1, (int)ceil($filteredOrderCount / $perPage));
 $currentPage = min($selectedPage, $totalPages);
 $offset = ($currentPage - 1) * $perPage;
 
@@ -241,8 +279,8 @@ if ($orderIds) {
 }
 
 $hasActiveFilters = $selectedPackage > 0 || $selectedOrderId > 0 || $selectedName !== '' || $selectedEmail !== '' || $selectedDate !== '' || $selectedStatus !== '';
-$startRow = $totalOrders > 0 ? ($offset + 1) : 0;
-$endRow = min($offset + count($orders), $totalOrders);
+$startRow = $filteredOrderCount > 0 ? ($offset + 1) : 0;
+$endRow = min($offset + count($orders), $filteredOrderCount);
 $paginationBaseParams = [];
 if ($selectedOrderId > 0) $paginationBaseParams['filter_order_id'] = $selectedOrderId;
 if ($selectedPackage > 0) $paginationBaseParams['package'] = $selectedPackage;
@@ -299,7 +337,7 @@ $extraHead = <<<'HTML'
   /* ─── Stat Grid ──────────────────────────────────────────── */
   .stat-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 12px;
     margin-bottom: 18px;
   }
@@ -966,19 +1004,17 @@ render_header([
       <!-- ── Stat Cards ──────────────────────────────────────── -->
       <div class="stat-grid">
         <div class="stat-card">
-          <div class="stat-label"><i class="bi bi-basket"></i> Total Orders</div>
+          <div class="stat-label"><i class="bi bi-basket"></i> Total Orders Accepted</div>
           <div class="stat-value"><?= (int)$totalOrders ?></div>
         </div>
+        <?php foreach ($packageSalesStats as $packageStat): ?>
+          <div class="stat-card">
+            <div class="stat-label"><i class="bi bi-box-seam"></i> <?= h($packageStat['name']) ?></div>
+            <div class="stat-value"><?= (int)$packageStat['qty'] ?></div>
+          </div>
+        <?php endforeach; ?>
         <div class="stat-card">
-          <div class="stat-label"><i class="bi bi-check-circle"></i> Paid</div>
-          <div class="stat-value"><?= (int)$paidOrders ?></div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label"><i class="bi bi-clock-history"></i> Pending</div>
-          <div class="stat-value"><?= (int)$pendingOrders ?></div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label"><i class="bi bi-cash-stack"></i> Revenue</div>
+          <div class="stat-label"><i class="bi bi-cash-stack"></i> Revenue Accepted</div>
           <div class="stat-value small"><?= h(rupiah($totalRevenue)) ?></div>
         </div>
       </div>
@@ -1061,11 +1097,11 @@ render_header([
       <?php endif; ?>
 
       <!-- ── Pagination Top ──────────────────────────────────── -->
-      <?php if ($totalPages > 1 || $totalOrders > 0): ?>
+      <?php if ($totalPages > 1 || $filteredOrderCount > 0): ?>
       <div class="pagination-wrap">
         <div class="pagination-info">
-          <?php if ($totalOrders > 0): ?>
-            Menampilkan <strong><?= (int)$startRow ?>–<?= (int)$endRow ?></strong> dari <strong><?= (int)$totalOrders ?></strong> data
+          <?php if ($filteredOrderCount > 0): ?>
+            Menampilkan <strong><?= (int)$startRow ?>–<?= (int)$endRow ?></strong> dari <strong><?= (int)$filteredOrderCount ?></strong> data
           <?php endif; ?>
         </div>
         <?php if ($totalPages > 1): ?>
@@ -1229,11 +1265,11 @@ render_header([
       </div>
 
       <!-- ── Pagination Bottom ───────────────────────────────── -->
-      <?php if ($totalPages > 1 || $totalOrders > 0): ?>
+      <?php if ($totalPages > 1 || $filteredOrderCount > 0): ?>
       <div class="pagination-wrap" style="margin-top:14px;">
         <div class="pagination-info">
-          <?php if ($totalOrders > 0): ?>
-            Menampilkan <strong><?= (int)$startRow ?>–<?= (int)$endRow ?></strong> dari <strong><?= (int)$totalOrders ?></strong> data
+          <?php if ($filteredOrderCount > 0): ?>
+            Menampilkan <strong><?= (int)$startRow ?>–<?= (int)$endRow ?></strong> dari <strong><?= (int)$filteredOrderCount ?></strong> data
           <?php endif; ?>
         </div>
         <?php if ($totalPages > 1): ?>
