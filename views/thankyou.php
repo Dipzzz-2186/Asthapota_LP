@@ -25,6 +25,7 @@ unset($_SESSION['order_draft'], $_SESSION['order_id']);
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Thank You - Temu Padel 2026</title>
+  <link rel="icon" type="image/png" href="/assets/img/AsthaporaLogo.png">
   <link rel="stylesheet" href="/assets/css/style.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');

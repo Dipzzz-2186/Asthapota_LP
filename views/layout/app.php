@@ -80,6 +80,7 @@ if (!function_exists('render_header')) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= $safeTitle ?></title>
+  <link rel="icon" type="image/png" href="/assets/img/AsthaporaLogo.png">
   <link rel="stylesheet" href="/assets/css/style.css">
   <?= $extraHead ?>
 </head>
