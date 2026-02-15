@@ -458,7 +458,7 @@
     <div class="footer-section fade-item" style="--delay: 290ms;">
       <a href="/events" class="event-series"><i class="bi bi-calendar-event"></i> Bapora <span class="hippi-word">Hippi</span> Collaborative Event Series <i class="bi bi-arrow-right event-arrow"></i></a>
       
-      <a href="https://www.instagram.com/nadif.y.ramadhan" target="_blank" class="instagram-btn">
+      <a href="https://www.instagram.com" target="_blank" class="instagram-btn">
         <div class="ig-icon-circle">
           <div class="ig-shape"></div>
         </div>
