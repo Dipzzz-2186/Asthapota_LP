@@ -50,7 +50,7 @@ if (!$sponsorItems) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Temu Padel Event</title>
+  <title>Tamu Padel Event</title>
   <link rel="icon" type="image/png" href="/assets/img/LogoTitleAsthapora.png">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
@@ -301,12 +301,37 @@ if (!$sponsorItems) {
       font-size: 0.72em;
     }
 
-    .date-box sup {
-      font-family: var(--font-body);
-      font-size: 0.38em;
-      font-weight: 800;
-      letter-spacing: 0.8px;
-      margin-left: 2px;
+   .date-box sup {
+     font-family: var(--font-body);
+     font-size: 0.38em;
+     font-weight: 800;
+     letter-spacing: 0.8px;
+     margin-left: 2px;
+   }
+
+    .date-box-content {
+      display: inline-flex;
+      flex-direction: row;
+      align-items: baseline;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .date-line {
+      display: inline-flex;
+      align-items: baseline;
+      white-space: nowrap;
+    }
+
+    .date-line--month {
+      font-size: 1em;
+      letter-spacing: inherit;
+    }
+
+    .date-line--detail {
+      font-size: 0.78em;
+      letter-spacing: inherit;
+      opacity: 0.78;
     }
 
     .countdown-wrap {
@@ -1185,6 +1210,124 @@ if (!$sponsorItems) {
       }
 
     }
+    @media (max-width: 480px) {
+      .hero {
+        gap: 10px;
+        padding: clamp(12px, 2.4vh, 18px) clamp(14px, 3vw, 20px) clamp(24px, 4vh, 32px);
+      }
+
+      .welcome {
+        font-size: clamp(42px, 7vw, 64px);
+        letter-spacing: 0.4px;
+      }
+
+      .title {
+        font-size: clamp(48px, 11vw, 82px);
+      }
+
+      .subtitle {
+        font-size: clamp(22px, 5vw, 34px);
+        letter-spacing: 0.5px;
+      }
+
+      .date-box {
+        width: 100%;
+        flex-direction: column;
+        gap: 6px;
+        padding: 14px 18px;
+        font-size: clamp(22px, 5vw, 32px);
+      }
+
+      .date-box-content {
+        flex-direction: column;
+        gap: 4px;
+        align-items: center;
+      }
+
+      .date-line--month {
+        font-size: clamp(24px, 4.8vw, 34px);
+        letter-spacing: 0.32em;
+      }
+
+      .date-line--detail {
+        font-size: clamp(16px, 3.8vw, 24px);
+        letter-spacing: 0.3em;
+      }
+
+      .countdown-wrap {
+        gap: 8px;
+      }
+
+      .countdown {
+        grid-template-columns: repeat(2, minmax(90px, 1fr));
+        width: 100%;
+      }
+
+      .count-item {
+        padding: 10px 6px;
+      }
+
+      .count-value {
+        font-size: clamp(30px, 6vw, 42px);
+      }
+
+      .count-unit {
+        font-size: 14px;
+      }
+
+      .count-status {
+        font-size: 16px;
+      }
+
+      .hero-join {
+        width: 100%;
+        font-size: 20px;
+        padding: 18px 20px;
+      }
+
+      .cta {
+        width: 100%;
+        min-width: 100%;
+      }
+
+      .panel {
+        padding: 0 clamp(8px, 2vw, 12px);
+      }
+    }
+
+    @media (max-width: 420px) {
+      .hero {
+        gap: 8px;
+      }
+
+      .countdown {
+        grid-template-columns: repeat(2, minmax(78px, 1fr));
+        gap: 8px;
+      }
+
+      .count-value {
+        font-size: clamp(26px, 6.5vw, 36px);
+      }
+
+      .hero-join {
+        font-size: 18px;
+        padding: 16px 16px;
+      }
+
+      .hero-join i,
+      .cta i {
+        font-size: 18px;
+      }
+
+      .cta {
+        padding: 16px 18px;
+        font-size: 20px;
+      }
+
+      .support h2 {
+        font-size: clamp(22px, 4vw, 30px);
+      }
+    }
   </style>
 </head>
 <body>
@@ -1198,9 +1341,15 @@ if (!$sponsorItems) {
   <main class="landing">
     <section class="panel hero">
       <p class="welcome" data-seq style="--seq-delay: 170ms;">Welcome</p>
-      <h1 class="title" data-seq style="--seq-delay: 260ms;">TEMU PADEL</h1>
+      <h1 class="title" data-seq style="--seq-delay: 260ms;">Tamu PADEL</h1>
       <p class="subtitle" data-seq style="--seq-delay: 350ms;"><i class="bi bi-stars"></i> A Monkeybar x BAPORA Event</p>
-      <div class="date-box" data-seq style="--seq-delay: 440ms;"><i class="bi bi-calendar-event"></i> FEBRUARY 28<sup>TH</sup>, 2026 | 4 PM - 6 PM</div>
+      <div class="date-box" data-seq style="--seq-delay: 440ms;">
+        <i class="bi bi-calendar-event"></i>
+        <div class="date-box-content">
+          <span class="date-line date-line--month">FEBRUARY 28<sup>TH</sup></span>
+          <span class="date-line date-line--detail">2026 | 4 PM - 6 PM</span>
+        </div>
+      </div>
 
       <div class="countdown-wrap" data-seq style="--seq-delay: 530ms;" aria-live="polite">
         <p class="countdown-label" id="countdownLabel"><i class="bi bi-hourglass-split"></i> Countdown To Event Start</p>
