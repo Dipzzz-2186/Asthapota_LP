@@ -189,7 +189,7 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
                 <tr>
                   <td style="background:linear-gradient(135deg,#1658ad 0%,#1e5ed8 100%);padding:22px 24px;color:#ffffff;">
                     <div style="font-size:12px;letter-spacing:1.2px;text-transform:uppercase;opacity:0.9;">Asthapora Ticketing</div>
-                    <div style="font-size:24px;font-weight:700;line-height:1.25;margin-top:6px;">Invoice Tamu Padel 2026</div>
+                    <div style="font-size:24px;font-weight:700;line-height:1.25;margin-top:6px;">Invoice Temu Padel 2026</div>
                     <div style="font-size:13px;line-height:1.5;margin-top:8px;opacity:0.95;">A Monkeybar x BAPORA Event | 28 Februari 2026, 16:00 - 18:00 WIB</div>
                   </td>
                 </tr>
@@ -219,7 +219,7 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 14px;background:#fff8e8;border:1px solid #ffe2ac;border-radius:12px;">
                       <tr>
                         <td style="padding:12px 16px;font-size:13px;line-height:1.6;color:#6b4d1f;">
-                          <strong>Informasi Event:</strong> Tiket yang kamu pesan berlaku untuk <strong>Tamu Padel 2026</strong> pada <strong>28 Februari 2026</strong> pukul <strong>16:00 - 18:00 WIB</strong>.
+                          <strong>Informasi Event:</strong> Tiket yang kamu pesan berlaku untuk <strong>Temu Padel 2026</strong> pada <strong>28 Februari 2026</strong> pukul <strong>16:00 - 18:00 WIB</strong>.
                         </td>
                       </tr>
                     </table>
@@ -570,8 +570,8 @@ function send_order_status_email(array $order, string $toEmail): bool {
         default => 'Informasi Pesanan Kamu',
     };
     $introText = match ($statusRaw) {
-        'accepted' => 'Selamat, pesanan tiket Tamu Padel 2026 kamu sudah dikonfirmasi panitia.',
-        'rejected' => 'Mohon maaf, pesanan tiket Tamu Padel 2026 kamu belum dapat kami proses.',
+        'accepted' => 'Selamat, pesanan tiket Temu Padel 2026 kamu sudah dikonfirmasi panitia.',
+        'rejected' => 'Mohon maaf, pesanan tiket Temu Padel 2026 kamu belum dapat kami proses.',
         default => 'Ada informasi terbaru terkait pesanan tiket kamu.',
     };
     $statusCardColor = $statusRaw === 'accepted'
@@ -585,7 +585,7 @@ function send_order_status_email(array $order, string $toEmail): bool {
         ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:14px;background:#fff8e8;border:1px solid #ffe2ac;border-radius:12px;">
              <tr>
                <td style="padding:12px 14px;font-size:13px;line-height:1.6;color:#6b4d1f;">
-                 <div style="font-weight:700;color:#4f3a18;margin-bottom:6px;">Detail Event Tamu Padel 2026</div>
+                 <div style="font-weight:700;color:#4f3a18;margin-bottom:6px;">Detail Event Temu Padel 2026</div>
                   <div><strong>Tanggal:</strong> 28 Februari 2026</div>
                   <div><strong>Waktu:</strong> 16:00 - 18:00 WIB</div>
                   <div><strong>Lokasi:</strong> MY PADEL</div>
@@ -637,7 +637,7 @@ function send_order_status_email(array $order, string $toEmail): bool {
       <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
         <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
           <div style="background:#1e5ed8;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">
-            Asthapora - Tamu Padel 2026
+            Asthapora - Temu Padel 2026
           </div>
           <div style="padding:22px;">
             <p style="margin:0 0 10px;font-size:15px;color:#0c1b36;">Halo ' . htmlspecialchars($order['full_name'] ?? '', ENT_QUOTES, 'UTF-8') . ',</p>

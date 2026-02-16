@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/db.php';
 ensure_session();
@@ -50,7 +50,7 @@ if (!$sponsorItems) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tamu Padel Event</title>
+  <title>Temu Padel Event</title>
   <link rel="icon" type="image/png" href="/assets/img/LogoTitleAsthapora.png">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
@@ -1341,7 +1341,7 @@ if (!$sponsorItems) {
   <main class="landing">
     <section class="panel hero">
       <p class="welcome" data-seq style="--seq-delay: 170ms;">Welcome</p>
-      <h1 class="title" data-seq style="--seq-delay: 260ms;">Tamu PADEL</h1>
+      <h1 class="title" data-seq style="--seq-delay: 260ms;">Temu Padel</h1>
       <p class="subtitle" data-seq style="--seq-delay: 350ms;"><i class="bi bi-stars"></i> A Monkeybar x BAPORA Event</p>
       <div class="date-box" data-seq style="--seq-delay: 440ms;">
         <i class="bi bi-calendar-event"></i>

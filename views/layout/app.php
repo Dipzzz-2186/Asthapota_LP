@@ -124,7 +124,7 @@ if (!function_exists('render_footer')) {
         <div class="footer-brand">
           <img class="footer-logo" src="/assets/img/lopad.jpg" alt="Lopad logo">
           <div>
-            <div class="footer-title">Tamu Padel 2026</div>
+            <div class="footer-title">Temu Padel 2026</div>
             <div class="footer-subtitle">A Monkeybar x BAPORA Event</div>
           </div>
         </div>
