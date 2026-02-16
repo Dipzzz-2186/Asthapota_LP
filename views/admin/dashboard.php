@@ -290,7 +290,12 @@ $totalPages = max(1, (int)ceil($filteredOrderCount / $perPage));
 $currentPage = min($selectedPage, $totalPages);
 $offset = ($currentPage - 1) * $perPage;
 
-$sql = "SELECT o.id, u.full_name, u.phone, u.email, u.instagram, o.total, o.status, o.payment_proof, o.created_at, (SELECT GROUP_CONCAT(CONCAT(p.name, ' x', oi.qty) SEPARATOR ', ') FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id) as items FROM orders o JOIN users u ON u.id = o.user_id" . $whereSql . " ORDER BY o.created_at DESC, o.id DESC LIMIT ? OFFSET ?";
+$sql = "SELECT o.id, u.full_name, u.phone, u.email, u.instagram, o.total, o.status, o.payment_proof, o.created_at, (SELECT GROUP_CONCAT(CONCAT(p.name, ' x', oi.qty) SEPARATOR ', ') FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id) as items FROM orders o JOIN users u ON u.id = o.user_id" . $whereSql . " ORDER BY
+    CASE WHEN o.status = 'accepted' THEN 1 ELSE 0 END ASC,
+    CASE WHEN o.status = 'accepted' THEN o.created_at ELSE NULL END DESC,
+    o.created_at DESC,
+    o.id DESC
+    LIMIT ? OFFSET ?";
 
 $stmt = $db->prepare($sql);
 foreach ($params as $index => $value) { $stmt->bindValue($index + 1, $value); }
