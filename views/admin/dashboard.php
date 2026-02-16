@@ -8,6 +8,7 @@ require_admin();
 $db = get_db();
 ensure_order_qr_schema($db);
 ensure_order_attendee_checkin_schema($db);
+ensure_admin_notification_schema($db);
 $flash = ['success' => '', 'error' => ''];
 $selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
 $selectedOrderId = ctype_digit($selectedOrderIdRaw) ? (int)$selectedOrderIdRaw : 0;
@@ -33,7 +34,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $flash = ['success' => '', 'error' => ''];
     $dashboardAction = trim((string)($_POST['dashboard_action'] ?? 'order_decision'));
 
-    if ($dashboardAction === 'change_admin_password') {
+    if ($dashboardAction === 'add_admin_notification_email') {
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
+        $adminNotifyEmail = strtolower(trim((string)($_POST['admin_notify_email'] ?? '')));
+
+        if ($adminId <= 0) {
+            $flash['error'] = 'Session admin tidak valid. Silakan login ulang.';
+        } elseif ($adminNotifyEmail === '' || !filter_var($adminNotifyEmail, FILTER_VALIDATE_EMAIL)) {
+            $flash['error'] = 'Format email admin tidak valid.';
+        } else {
+            try {
+                $check = $db->prepare('SELECT id FROM admin_notification_emails WHERE email = ? LIMIT 1');
+                $check->execute([$adminNotifyEmail]);
+                $exists = $check->fetch(PDO::FETCH_ASSOC);
+                if ($exists) {
+                    $flash['success'] = 'Email admin sudah terdaftar sebagai penerima notifikasi.';
+                } else {
+                    $now = date('Y-m-d H:i:s');
+                    $insert = $db->prepare('INSERT INTO admin_notification_emails (email, verified_at, created_by_admin_id, created_at) VALUES (?, ?, ?, ?)');
+                    $insert->execute([$adminNotifyEmail, $now, $adminId > 0 ? $adminId : null, $now]);
+                    $flash['success'] = 'Email admin berhasil ditambahkan untuk menerima notifikasi order.';
+                }
+            } catch (Throwable $e) {
+                $flash['error'] = 'Gagal memproses email admin.';
+            }
+        }
+    } elseif ($dashboardAction === 'remove_admin_notification_email') {
+        $adminId = (int)($_SESSION['admin_id'] ?? 0);
+        $targetId = (int)($_POST['admin_notification_email_id'] ?? 0);
+
+        if ($adminId <= 0) {
+            $flash['error'] = 'Session admin tidak valid. Silakan login ulang.';
+        } elseif ($targetId <= 0) {
+            $flash['error'] = 'Data email admin tidak valid.';
+        } else {
+            try {
+                $deleteStmt = $db->prepare('DELETE FROM admin_notification_emails WHERE id = ? LIMIT 1');
+                $deleteStmt->execute([$targetId]);
+                if ($deleteStmt->rowCount() > 0) {
+                    $flash['success'] = 'Email admin berhasil dihapus dari daftar notifikasi.';
+                } else {
+                    $flash['error'] = 'Email admin tidak ditemukan.';
+                }
+            } catch (Throwable $e) {
+                $flash['error'] = 'Gagal menghapus email admin.';
+            }
+        }
+    } elseif ($dashboardAction === 'change_admin_password') {
         $currentPassword = (string)($_POST['current_password'] ?? '');
         $newPassword = (string)($_POST['new_password'] ?? '');
         $confirmPassword = (string)($_POST['confirm_password'] ?? '');
@@ -168,6 +215,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $redirectPath = '/admin/dashboard';
     if ($redirectParams) $redirectPath .= '?' . http_build_query($redirectParams);
     redirect($redirectPath);
+}
+
+$adminNotificationEmails = [];
+try {
+    $adminNotificationEmails = $db->query('SELECT id, email, verified_at, created_at FROM admin_notification_emails ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $adminNotificationEmails = [];
 }
 
 $packages = $db->query("SELECT id, name FROM packages ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
@@ -523,6 +577,130 @@ $extraHead = <<<'HTML'
     padding-top: 6px;
     border-top: 1px solid var(--stroke);
     margin-top: 2px;
+  }
+
+  /* ─── Admin Email Modal ──────────────────────────────────── */
+  #adminEmailModal .sponsor-modal-card {
+    width: min(680px, 100%);
+  }
+  #adminEmailModal .admin-email-forms {
+    display: grid;
+    gap: 12px;
+    padding: 16px 18px 18px;
+    max-height: calc(88vh - 74px);
+    overflow-y: auto;
+  }
+  #adminEmailModal .admin-email-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: end;
+  }
+  #adminEmailModal .admin-email-form .sponsor-field {
+    margin: 0;
+  }
+  #adminEmailModal .admin-email-form .btn {
+    height: 46px;
+    min-width: 168px;
+    justify-content: center;
+    border-radius: 12px;
+  }
+  #adminEmailModal .sponsor-field input[type="email"],
+  #adminEmailModal .sponsor-field input[type="text"] {
+    min-height: 46px;
+    border-radius: 12px;
+    padding: 11px 13px;
+  }
+  #adminEmailModal .admin-email-divider {
+    height: 1px;
+    border: 0;
+    margin: 2px 0;
+    background: var(--stroke);
+  }
+  #adminEmailModal .admin-email-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 7px;
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  #adminEmailModal .admin-email-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: var(--surface-2, #f8faff);
+    font-size: 12.5px;
+  }
+  #adminEmailModal .admin-email-item form { margin: 0; }
+  #adminEmailModal .admin-email-remove-btn {
+    height: 34px;
+    min-width: 34px;
+    padding: 0 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(193, 70, 70, 0.28);
+    background: rgba(211, 47, 47, 0.08);
+    color: #b33434;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  #adminEmailModal .admin-email-remove-btn:hover {
+    transform: translateY(-1px);
+    background: rgba(211, 47, 47, 0.13);
+    border-color: rgba(193, 70, 70, 0.4);
+  }
+  #adminEmailModal .admin-email-item-main {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+  #adminEmailModal .admin-email-item-main strong {
+    font-size: 13px;
+    overflow-wrap: anywhere;
+    color: var(--text);
+  }
+  #adminEmailModal .admin-email-item-main span {
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+  #adminEmailModal .admin-email-otp-note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+    line-height: 1.45;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #f7faff;
+    border: 1px solid var(--stroke);
+  }
+  #adminEmailModal .admin-email-empty {
+    border: 1px dashed var(--stroke);
+    border-radius: 12px;
+    padding: 14px 12px;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: center;
+  }
+  #adminEmailModal .sponsor-form-actions {
+    margin-top: 2px;
+    padding-top: 10px;
+  }
+  #adminEmailModal .sponsor-form-actions .btn {
+    min-width: 130px;
   }
 
   /* ─── Flash Messages ─────────────────────────────────────── */
@@ -961,6 +1139,12 @@ $extraHead = <<<'HTML'
     .sponsor-modal-card { border-radius: 16px; max-height: 92vh; }
     .sponsor-form-actions { flex-direction: column; }
     .sponsor-form-actions .btn { width: 100%; justify-content: center; }
+    #adminEmailModal .admin-email-forms { padding: 14px; }
+    #adminEmailModal .admin-email-form { grid-template-columns: 1fr; }
+    #adminEmailModal .admin-email-form .btn { width: 100%; min-width: 0; justify-content: center; }
+    #adminEmailModal .admin-email-item { align-items: flex-start; }
+    #adminEmailModal .admin-email-remove-btn { width: 100%; }
+    #adminEmailModal .admin-email-list { max-height: 190px; }
 
     .order-card-actions .btn { font-size: 12px; }
   }
@@ -992,6 +1176,9 @@ render_header([
         </div>
         <div class="dashboard-head-actions">
           <a class="btn ghost" href="/admin/scan"><i class="bi bi-qr-code-scan"></i> Scan QR</a>
+          <button class="btn ghost" type="button" id="openAdminEmailModal">
+            <i class="bi bi-envelope-check"></i> Email Admin
+          </button>
           <button class="btn ghost" type="button" id="openPasswordModal">
             <i class="bi bi-key"></i> Ganti Password
           </button>
@@ -1361,6 +1548,67 @@ render_header([
     <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
   </form>
 
+  <div class="sponsor-modal" id="adminEmailModal" aria-hidden="true">
+    <div class="sponsor-modal-card" role="dialog" aria-modal="true" aria-labelledby="adminEmailModalTitle">
+      <div class="sponsor-modal-head">
+        <h2 class="sponsor-modal-title" id="adminEmailModalTitle"><i class="bi bi-envelope-check"></i> Email Notifikasi Admin</h2>
+        <button class="sponsor-modal-close" type="button" id="closeAdminEmailModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <div class="admin-email-forms">
+        <p class="admin-email-otp-note">Total email aktif: <strong><?= (int)count($adminNotificationEmails) ?></strong></p>
+        <form class="admin-email-form" method="post" action="/admin/dashboard">
+          <input type="hidden" name="dashboard_action" value="add_admin_notification_email">
+          <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+          <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+          <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+          <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+          <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+          <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+          <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+          <div class="sponsor-field">
+            <label for="adminNotifyEmail">Tambah Email Admin</label>
+            <input id="adminNotifyEmail" type="email" name="admin_notify_email" placeholder="contoh: admin2@domain.com" required>
+          </div>
+          <button class="btn primary" type="submit"><i class="bi bi-plus-circle"></i> Tambah Email</button>
+        </form>
+
+        <hr class="admin-email-divider">
+        <?php if ($adminNotificationEmails): ?>
+          <ul class="admin-email-list">
+            <?php foreach ($adminNotificationEmails as $row): ?>
+              <li class="admin-email-item">
+                <div class="admin-email-item-main">
+                  <strong><?= h((string)($row['email'] ?? '')) ?></strong>
+                  <span>Verified: <?= h((string)($row['verified_at'] ?? '-')) ?></span>
+                </div>
+                <form method="post" action="/admin/dashboard" onsubmit="return confirm('Hapus email admin ini dari daftar notifikasi?');">
+                  <input type="hidden" name="dashboard_action" value="remove_admin_notification_email">
+                  <input type="hidden" name="admin_notification_email_id" value="<?= (int)($row['id'] ?? 0) ?>">
+                  <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+                  <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+                  <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+                  <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+                  <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+                  <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+                  <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+                  <button class="admin-email-remove-btn" type="submit" aria-label="Hapus email admin">
+                    <i class="bi bi-trash3"></i> Hapus
+                  </button>
+                </form>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php else: ?>
+          <div class="admin-email-empty">Belum ada email notifikasi admin. Tambahkan email agar notifikasi order otomatis dikirim.</div>
+        <?php endif; ?>
+
+        <div class="sponsor-form-actions">
+          <button class="btn ghost" type="button" id="cancelAdminEmailModal"><i class="bi bi-x-circle"></i> Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="sponsor-modal" id="sponsorModal" aria-hidden="true">
     <div class="sponsor-modal-card" role="dialog" aria-modal="true" aria-labelledby="sponsorModalTitle">
       <div class="sponsor-modal-head">
@@ -1523,6 +1771,34 @@ render_header([
         el.addEventListener('keyup', function () { saveTypingState(el); });
         el.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); if (textTimer) clearTimeout(textTimer); submitNow(); } });
       });
+    })();
+  </script>
+
+  <script>
+    // ── Admin Email Modal ────────────────────────────────────
+    (function () {
+      var modal = document.getElementById('adminEmailModal');
+      var openBtn = document.getElementById('openAdminEmailModal');
+      var closeBtn = document.getElementById('closeAdminEmailModal');
+      var cancelBtn = document.getElementById('cancelAdminEmailModal');
+      if (!modal || !openBtn || !closeBtn || !cancelBtn) return;
+      function openModal() {
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('sponsor-modal-open');
+        var emailInput = document.getElementById('adminNotifyEmail');
+        if (emailInput) setTimeout(function () { emailInput.focus(); }, 20);
+      }
+      function closeModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('sponsor-modal-open');
+      }
+      openBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      cancelBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
     })();
   </script>
 

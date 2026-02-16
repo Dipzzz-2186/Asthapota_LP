@@ -194,10 +194,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         send_invoice_email([
                             'id' => $orderId,
                             'full_name' => $user['full_name'],
+                            'email' => $user['email'],
+                            'phone' => $user['phone'],
+                            'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
                             'status' => 'paid',
                             'total' => $total,
                             'payment_proof' => $name,
+                            'created_at' => date('Y-m-d H:i:s'),
                         ], $items, (string)$user['email']);
+                        notify_admins_new_paid_order($db, [
+                            'id' => $orderId,
+                            'full_name' => $user['full_name'],
+                            'email' => $user['email'],
+                            'phone' => $user['phone'],
+                            'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
+                            'status' => 'paid',
+                            'total' => $total,
+                            'payment_proof' => $name,
+                            'created_at' => date('Y-m-d H:i:s'),
+                        ], $items);
                         redirect('/thankyou?order=' . $orderId);
                     }
                 }

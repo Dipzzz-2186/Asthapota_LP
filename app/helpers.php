@@ -114,6 +114,37 @@ function send_otp_email(string $email, string $otp): bool {
     return smtp_send($email, $subject, $body);
 }
 
+function send_admin_email_link_otp(string $email, string $otp): bool {
+    $subject = 'Asthapora - Verifikasi Email Admin';
+    $safeOtp = htmlspecialchars($otp, ENT_QUOTES, 'UTF-8');
+    $safeEmail = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+    $body = '
+      <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
+        <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
+          <div style="background:#1e5ed8;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">
+            Asthapora - Admin Verification
+          </div>
+          <div style="padding:22px;">
+            <p style="margin:0 0 10px;font-size:15px;color:#0c1b36;">Halo Admin,</p>
+            <p style="margin:0 0 12px;font-size:14px;color:#5a6b86;line-height:1.6;">
+              Gunakan kode OTP berikut untuk mengaitkan email ini sebagai <strong>email notifikasi admin</strong> di dashboard Asthapora.
+            </p>
+            <p style="margin:0 0 12px;font-size:13px;color:#5a6b86;">
+              Email target: <strong style="color:#0c1b36;">' . $safeEmail . '</strong>
+            </p>
+            <div style="font-size:26px;letter-spacing:6px;font-weight:700;color:#1e5ed8;background:#eef4ff;border:1px solid #cfe0ff;padding:12px 16px;border-radius:12px;text-align:center;">
+              ' . $safeOtp . '
+            </div>
+            <p style="margin:16px 0 0;font-size:13px;color:#5a6b86;">
+              Kode ini berlaku 10 menit. Jika kamu tidak merasa menambahkan email admin, abaikan email ini.
+            </p>
+          </div>
+        </div>
+      </div>
+    ';
+    return smtp_send($email, $subject, $body);
+}
+
 function send_invoice_email(array $order, array $items, string $toEmail): bool {
     $subject = 'Asthapora - Invoice Order #' . (int)$order['id'];
 
@@ -403,6 +434,126 @@ function ensure_order_attendee_checkin_schema(PDO $db): void {
     } catch (Throwable $e) {
         // Keep app functional even if attendee schema migration fails.
     }
+}
+
+function ensure_admin_notification_schema(PDO $db): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $db->exec(
+            "CREATE TABLE IF NOT EXISTS admin_notification_emails (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email VARCHAR(190) NOT NULL,
+                verified_at DATETIME NOT NULL,
+                created_by_admin_id INT NULL,
+                created_at DATETIME NOT NULL,
+                UNIQUE KEY uniq_admin_notification_email (email)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+    } catch (Throwable $e) {
+        // Keep app functional if migration fails.
+    }
+}
+
+function send_admin_order_paid_email(array $order, array $items, string $toEmail): bool {
+    $subject = 'Asthapora - Order Paid #' . (int)($order['id'] ?? 0);
+    $safeName = htmlspecialchars((string)($order['full_name'] ?? '-'), ENT_QUOTES, 'UTF-8');
+    $safeEmail = htmlspecialchars((string)($order['email'] ?? '-'), ENT_QUOTES, 'UTF-8');
+    $safePhone = htmlspecialchars((string)($order['phone'] ?? '-'), ENT_QUOTES, 'UTF-8');
+    $safeInstagram = htmlspecialchars((string)($order['instagram'] ?? '-'), ENT_QUOTES, 'UTF-8');
+    $safeCreatedAt = htmlspecialchars((string)($order['created_at'] ?? '-'), ENT_QUOTES, 'UTF-8');
+    $safeOrderId = (int)($order['id'] ?? 0);
+    $safeTotal = htmlspecialchars(rupiah((int)($order['total'] ?? 0)), ENT_QUOTES, 'UTF-8');
+
+    $rows = '';
+    foreach ($items as $it) {
+        $qty = max(0, (int)($it['qty'] ?? 0));
+        $name = htmlspecialchars((string)($it['name'] ?? '-'), ENT_QUOTES, 'UTF-8');
+        $price = htmlspecialchars(rupiah((int)($it['price'] ?? 0)), ENT_QUOTES, 'UTF-8');
+        $rows .= '<tr>
+            <td style="padding:8px 0;border-bottom:1px solid #e6ecf8;">' . $name . '</td>
+            <td style="padding:8px 0;border-bottom:1px solid #e6ecf8;text-align:center;">' . $qty . '</td>
+            <td style="padding:8px 0;border-bottom:1px solid #e6ecf8;text-align:right;">' . $price . '</td>
+          </tr>';
+    }
+
+    $paymentProofHtml = '<span style="color:#5a6b86;">Tidak ada</span>';
+    $paymentProofRaw = trim((string)($order['payment_proof'] ?? ''));
+    if ($paymentProofRaw !== '') {
+        $paymentProofFile = basename(str_replace('\\', '/', $paymentProofRaw));
+        if ($paymentProofFile !== '' && $paymentProofFile !== '.' && $paymentProofFile !== '..') {
+            $proofUrl = app_base_url() . '/uploads/' . rawurlencode($paymentProofFile);
+            $safeProofUrl = htmlspecialchars($proofUrl, ENT_QUOTES, 'UTF-8');
+            $paymentProofHtml = '<a href="' . $safeProofUrl . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1658ad;color:#fff;text-decoration:none;font-weight:700;font-size:12px;padding:9px 12px;border-radius:9px;">Lihat Bukti Pembayaran</a>';
+        }
+    }
+
+    $body = '
+      <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
+        <div style="max-width:580px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
+          <div style="background:#1e5ed8;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">
+            Order Baru Status Paid
+          </div>
+          <div style="padding:22px;">
+            <p style="margin:0 0 14px;font-size:14px;color:#405372;line-height:1.6;">Ada order baru yang sudah upload pembayaran dan masuk status <strong>paid</strong>.</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 14px;background:#f7faff;border:1px solid #dbe6ff;border-radius:12px;">
+              <tr>
+                <td style="padding:12px 14px;font-size:13px;line-height:1.6;color:#1f3559;">
+                  <div><strong>Order ID:</strong> #' . $safeOrderId . '</div>
+                  <div><strong>Nama:</strong> ' . $safeName . '</div>
+                  <div><strong>Email:</strong> ' . $safeEmail . '</div>
+                  <div><strong>Phone:</strong> ' . $safePhone . '</div>
+                  <div><strong>Instagram:</strong> ' . $safeInstagram . '</div>
+                  <div><strong>Waktu Order:</strong> ' . $safeCreatedAt . '</div>
+                  <div><strong>Total:</strong> ' . $safeTotal . '</div>
+                </td>
+              </tr>
+            </table>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;font-size:14px;color:#0c1b36;">
+              <thead>
+                <tr>
+                  <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Item</th>
+                  <th align="center" style="text-align:center;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Qty</th>
+                  <th align="right" style="text-align:right;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Harga</th>
+                </tr>
+              </thead>
+              <tbody>' . $rows . '</tbody>
+            </table>
+            <div style="margin-top:16px;">' . $paymentProofHtml . '</div>
+          </div>
+        </div>
+      </div>
+    ';
+
+    return smtp_send($toEmail, $subject, $body);
+}
+
+function notify_admins_new_paid_order(PDO $db, array $order, array $items): array {
+    ensure_admin_notification_schema($db);
+    $result = ['total' => 0, 'sent' => 0];
+
+    try {
+        $rows = $db->query('SELECT email FROM admin_notification_emails ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return $result;
+    }
+
+    foreach ($rows as $row) {
+        $email = strtolower(trim((string)($row['email'] ?? '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            continue;
+        }
+        $result['total']++;
+        if (send_admin_order_paid_email($order, $items, $email)) {
+            $result['sent']++;
+        }
+    }
+
+    return $result;
 }
 
 function send_order_status_email(array $order, string $toEmail): bool {
