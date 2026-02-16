@@ -18,7 +18,7 @@ $selectedEmail = trim((string)($_REQUEST['email'] ?? ''));
 $selectedDate = trim((string)($_REQUEST['created_date'] ?? ''));
 $selectedStatusRaw = trim((string)($_REQUEST['status'] ?? ''));
 $selectedPage = isset($_REQUEST['page']) ? max(1, (int)$_REQUEST['page']) : 1;
-$allowedStatusFilters = ['pending', 'accepted', 'rejected'];
+$allowedStatusFilters = ['pending', 'paid', 'accepted', 'rejected'];
 $selectedStatus = in_array($selectedStatusRaw, $allowedStatusFilters, true) ? $selectedStatusRaw : '';
 if ($selectedDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)) {
     $selectedDate = '';
@@ -233,8 +233,8 @@ if ($selectedPackage > 0) { $whereParts[] = "EXISTS (SELECT 1 FROM order_items o
 if ($selectedName !== '') { $whereParts[] = "u.full_name LIKE ?"; $params[] = '%' . $selectedName . '%'; }
 if ($selectedEmail !== '') { $whereParts[] = "u.email LIKE ?"; $params[] = '%' . $selectedEmail . '%'; }
 if ($selectedDate !== '') { $whereParts[] = "DATE(o.created_at) = ?"; $params[] = $selectedDate; }
-if ($selectedStatus === 'accepted' || $selectedStatus === 'rejected') { $whereParts[] = "o.status = ?"; $params[] = $selectedStatus; }
-elseif ($selectedStatus === 'pending') { $whereParts[] = "o.status IN ('pending', 'paid')"; }
+if ($selectedStatus === 'paid' || $selectedStatus === 'accepted' || $selectedStatus === 'rejected') { $whereParts[] = "o.status = ?"; $params[] = $selectedStatus; }
+elseif ($selectedStatus === 'pending') { $whereParts[] = "o.status = 'pending'"; }
 $whereSql = ' WHERE ' . implode(' AND ', $whereParts);
 
 $summarySql = "SELECT
@@ -1390,6 +1390,7 @@ render_header([
             <select id="filterStatus" name="status">
               <option value="">Semua Status</option>
               <option value="pending" <?= $selectedStatus === 'pending' ? 'selected' : '' ?>>Pending</option>
+              <option value="paid" <?= $selectedStatus === 'paid' ? 'selected' : '' ?>>Paid</option>
               <option value="accepted" <?= $selectedStatus === 'accepted' ? 'selected' : '' ?>>Accepted</option>
               <option value="rejected" <?= $selectedStatus === 'rejected' ? 'selected' : '' ?>>Rejected</option>
             </select>
@@ -1868,6 +1869,11 @@ render_header([
       var focusKey = 'adminDashboardFilterFocus';
       var textTimer = null;
       var textDelayMs = 600;
+      var desktopAutoMedia = window.matchMedia('(min-width: 901px)');
+
+      function isDesktopAutoSubmit() {
+        return desktopAutoMedia.matches;
+      }
 
       function saveTypingState(el) {
         if (!el || !el.name) return;
@@ -1894,19 +1900,40 @@ render_header([
         } catch (err) {}
       }
 
-      function submitNow() {
+      function submitNow(options) {
+        var allowOnMobile = !!(options && options.allowOnMobile);
+        if (!isDesktopAutoSubmit() && !allowOnMobile) return;
         var active = document.activeElement;
         if (active && form.contains(active)) saveTypingState(active);
         form.submit();
       }
 
-      restoreTypingState();
-      form.querySelectorAll('select,input[type="date"]').forEach(function (el) { el.addEventListener('change', submitNow); });
+      if (isDesktopAutoSubmit()) restoreTypingState();
+      form.querySelectorAll('select,input[type="date"]').forEach(function (el) {
+        el.addEventListener('change', function () {
+          submitNow({ allowOnMobile: true });
+        });
+      });
       form.querySelectorAll('input[type="text"],input[type="email"]').forEach(function (el) {
-        el.addEventListener('input', function () { saveTypingState(el); if (textTimer) clearTimeout(textTimer); textTimer = setTimeout(submitNow, textDelayMs); });
+        el.addEventListener('input', function () {
+          saveTypingState(el);
+          if (!isDesktopAutoSubmit()) return;
+          if (textTimer) clearTimeout(textTimer);
+          textTimer = setTimeout(submitNow, textDelayMs);
+        });
         el.addEventListener('click', function () { saveTypingState(el); });
         el.addEventListener('keyup', function () { saveTypingState(el); });
-        el.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); if (textTimer) clearTimeout(textTimer); submitNow(); } });
+        el.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter') return;
+          if (!isDesktopAutoSubmit()) return;
+          e.preventDefault();
+          if (textTimer) clearTimeout(textTimer);
+          submitNow();
+        });
+      });
+      window.addEventListener('resize', function () {
+        if (isDesktopAutoSubmit()) return;
+        if (textTimer) clearTimeout(textTimer);
       });
     })();
   </script>
