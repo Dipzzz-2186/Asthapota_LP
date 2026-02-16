@@ -291,8 +291,11 @@ $currentPage = min($selectedPage, $totalPages);
 $offset = ($currentPage - 1) * $perPage;
 
 $sql = "SELECT o.id, u.full_name, u.phone, u.email, u.instagram, o.total, o.status, o.payment_proof, o.created_at, (SELECT GROUP_CONCAT(CONCAT(p.name, ' x', oi.qty) SEPARATOR ', ') FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id) as items FROM orders o JOIN users u ON u.id = o.user_id" . $whereSql . " ORDER BY
-    CASE WHEN o.status = 'accepted' THEN 1 ELSE 0 END ASC,
-    CASE WHEN o.status = 'accepted' THEN o.created_at ELSE NULL END DESC,
+    CASE
+      WHEN LOWER(TRIM(o.status)) = 'accepted' THEN 1
+      WHEN LOWER(TRIM(o.status)) = 'rejected' THEN 2
+      ELSE 0
+    END ASC,
     o.created_at DESC,
     o.id DESC
     LIMIT ? OFFSET ?";
