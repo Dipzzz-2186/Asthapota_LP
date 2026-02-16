@@ -24,7 +24,7 @@ unset($_SESSION['order_draft'], $_SESSION['order_id']);
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Thank You - Temu Padel 2026</title>
+  <title>Thank You - Asthapora</title>
   <link rel="icon" type="image/png" href="/assets/img/LogoTitleAsthapora.png">
   <link rel="stylesheet" href="/assets/css/style.css">
   <style>

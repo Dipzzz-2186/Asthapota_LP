@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Order Details - Temu Padel 2026</title>
+  <title>Order Details - Asthapora</title>
   <link rel="icon" type="image/png" href="/assets/img/LogoTitleAsthapora.png">
   <link rel="stylesheet" href="/assets/css/style.css">
   <style>

@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Packages - Temu Padel 2026</title>
+  <title>Packages - Asthapora</title>
   <link rel="icon" type="image/png" href="/assets/img/LogoTitleAsthapora.png">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
