@@ -37,7 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $instagram = ltrim($instagram, '@');
 
         if ($full_name === '') $errors[] = 'Full name is required.';
-        if ($phone === '') $errors[] = 'Phone number is required.';
+        if ($phone === '') {
+            $errors[] = 'Phone number is required.';
+        } elseif (!preg_match('/^\d+$/', $phone)) {
+            $errors[] = 'Phone number must contain digits only.';
+        }
         if ($email === '') $errors[] = 'Email is required.';
         if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Email format is invalid.';
         if (!in_array($gender, ['Laki-laki', 'Perempuan'], true)) $errors[] = 'Gender is required.';
@@ -472,7 +476,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <label>
           <span class="label-text"><i class="bi bi-telephone"></i> Phone Number*</span>
-          <input type="text" name="phone" required>
+          <input type="tel" name="phone" required inputmode="numeric" pattern="\d+" title="Digits only">
         </label>
 
         <label>
