@@ -14,7 +14,7 @@ if (!function_exists('render_navbar')) {
     <div class="container admin-container-wide">
       <div class="topbar admin-topbar">
         <div class="brand">
-          <img class="brand-badge" src="/assets/img/lopad.jpg" alt="Lopad logo">
+          <img class="brand-badge" src="/assets/img/LogoTitleAsthapora.png" alt="Asthapora logo">
           <div>
             <div>Asthapora Admin</div>
             <small style="color:var(--muted);"><?= $brandSubtitle ?></small>
