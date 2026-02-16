@@ -149,10 +149,10 @@
       font-size: clamp(20px, 3vw, 42px);
       letter-spacing: clamp(0.6px, 0.12vw, 1.6px);
       text-transform: uppercase;
-      opacity: 0.9;
+      opacity: 1;
       color: var(--text-white);
       text-decoration: none;
-      transition: opacity 0.16s ease, transform 0.16s ease, text-shadow 0.16s ease, color 0.1s linear;
+      transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.1s linear;
       display: inline-flex;
       flex-wrap: wrap;
       align-items: center;
@@ -162,15 +162,24 @@
       line-height: 1.2;
       text-wrap: balance;
       max-width: 100%;
-      animation: text-glow-soft 3.8s ease-in-out infinite;
-      padding: clamp(8px, 1.5vh, 16px) clamp(12px, 2vw, 24px);
+      padding: clamp(10px, 1.8vh, 18px) clamp(16px, 2.4vw, 30px);
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.52);
+      background: linear-gradient(135deg, rgba(255, 204, 96, 0.24), rgba(255, 255, 255, 0.08));
+      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.16);
     }
 
     .event-series:hover {
-      opacity: 1;
-      transform: translateY(-2px);
-      text-shadow: 0 6px 14px rgba(0, 0, 0, 0.36);
+      transform: translateY(-2px) scale(1.01);
+      box-shadow: 0 16px 30px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      border-color: rgba(255, 255, 255, 0.74);
+      background: linear-gradient(135deg, rgba(255, 214, 130, 0.3), rgba(255, 255, 255, 0.12));
       color: #ffd36b;
+    }
+
+    .event-series:focus-visible {
+      outline: 2px solid rgba(255, 211, 107, 0.95);
+      outline-offset: 4px;
     }
 
     .event-series .hippi-word {
