@@ -26,6 +26,8 @@ $errors = [];
 $otp_errors = [];
 $step = $_POST['step'] ?? '';
 $pending = $_SESSION['reg_pending'] ?? null;
+$phoneDigitsMin = 10;
+$phoneDigitsMax = 14;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($step === 'send_otp') {
@@ -41,6 +43,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Phone number is required.';
         } elseif (!preg_match('/^\d+$/', $phone)) {
             $errors[] = 'Phone number must contain digits only.';
+        } else {
+            $phoneLength = strlen($phone);
+            if ($phoneLength < $phoneDigitsMin || $phoneLength > $phoneDigitsMax) {
+                $errors[] = 'Phone number must be ' . $phoneDigitsMin . '-' . $phoneDigitsMax . ' digits.';
+            }
         }
         if ($email === '') $errors[] = 'Email is required.';
         if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Email format is invalid.';
@@ -476,7 +483,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <label>
           <span class="label-text"><i class="bi bi-telephone"></i> Phone Number*</span>
-          <input type="tel" name="phone" required inputmode="numeric" pattern="\d+" title="Digits only">
+          <input
+            type="tel"
+            name="phone"
+            id="phoneInput"
+            required
+            inputmode="numeric"
+            autocomplete="tel"
+            pattern="[0-9]{<?= (int)$phoneDigitsMin ?>,<?= (int)$phoneDigitsMax ?>}"
+            minlength="<?= (int)$phoneDigitsMin ?>"
+            maxlength="<?= (int)$phoneDigitsMax ?>"
+            title="Phone number must be <?= (int)$phoneDigitsMin ?>-<?= (int)$phoneDigitsMax ?> digits."
+            placeholder="08xxxxxxxxxx"
+          >
         </label>
 
         <label>
@@ -607,6 +626,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       var form = document.getElementById('registerForm');
       var input = document.getElementById('instagramInput');
+      var phoneInput = document.getElementById('phoneInput');
       if (form && input) {
         var normalize = function () {
           var val = (input.value || '').trim();
@@ -615,6 +635,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         input.addEventListener('blur', normalize);
         form.addEventListener('submit', normalize);
+      }
+      if (phoneInput) {
+        var minPhoneLen = <?= (int)$phoneDigitsMin ?>;
+        var maxPhoneLen = <?= (int)$phoneDigitsMax ?>;
+        var normalizePhone = function () {
+          var digits = (phoneInput.value || '').replace(/\D+/g, '');
+          phoneInput.value = digits.slice(0, maxPhoneLen);
+          if (phoneInput.value.length === 0 || (phoneInput.value.length >= minPhoneLen && phoneInput.value.length <= maxPhoneLen)) {
+            phoneInput.setCustomValidity('');
+          } else {
+            phoneInput.setCustomValidity('Phone number must be ' + minPhoneLen + '-' + maxPhoneLen + ' digits.');
+          }
+        };
+        phoneInput.addEventListener('input', normalizePhone);
+        phoneInput.addEventListener('blur', normalizePhone);
+        if (form) form.addEventListener('submit', normalizePhone);
       }
     })();
   </script>
