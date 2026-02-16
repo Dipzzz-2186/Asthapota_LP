@@ -387,6 +387,30 @@ $extraHead = <<<'HTML'
     gap: 8px;
     flex-wrap: wrap;
   }
+  .dashboard-head-actions .btn {
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 12px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .dashboard-head-actions .btn i { font-size: 14px; }
+
+  .admin-topbar .brand {
+    min-width: 0;
+  }
+  .admin-topbar .brand > div {
+    min-width: 0;
+  }
+  .admin-topbar .brand small {
+    display: block;
+    max-width: 34ch;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   /* ─── Stat Grid ──────────────────────────────────────────── */
   .stat-grid {
@@ -1117,21 +1141,120 @@ $extraHead = <<<'HTML'
 
   /* Mobile */
   @media (max-width: 640px) {
-    .stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-    .stat-card { padding: 14px 16px; }
-    .stat-value { font-size: 22px; }
-    .stat-value.small { font-size: 16px; }
+    .admin-shell {
+      padding-top: 18px;
+      padding-bottom: 42px;
+    }
+    .admin-container-wide {
+      padding-inline: 12px;
+    }
+    .admin-header.spaced {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 0 12px;
+      margin-bottom: 14px;
+    }
+    .admin-title {
+      font-size: 24px;
+      letter-spacing: -0.4px;
+      margin-bottom: 2px;
+    }
+    .admin-sub {
+      font-size: 13px;
+      line-height: 1.45;
+    }
 
-    .filter-card { padding: 14px 14px; }
+    .admin-header-shell .admin-topbar {
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .admin-header-shell .admin-topbar .brand {
+      gap: 10px;
+      font-size: 18px;
+    }
+    .admin-header-shell .admin-topbar .brand-badge {
+      width: 44px;
+      height: 44px;
+    }
+    .admin-header-shell .admin-topbar .brand small {
+      max-width: 24ch;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      line-height: 1.25;
+      font-size: 12px;
+    }
+    .admin-header-shell .topbar-actions .btn {
+      min-height: 42px;
+      padding: 0 13px;
+      border-radius: 12px;
+    }
+
+    .dashboard-head-actions {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+    }
+    .dashboard-head-actions .btn {
+      width: 100%;
+      min-height: 50px;
+      justify-content: center;
+      text-align: center;
+      white-space: normal;
+      line-height: 1.2;
+      padding: 8px 10px;
+    }
+
+    .stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-card {
+      border-radius: 14px;
+      padding: 14px;
+      min-height: 102px;
+    }
+    .stat-label {
+      font-size: 10px;
+      letter-spacing: 0.55px;
+      margin-bottom: 7px;
+    }
+    .stat-value { font-size: 24px; }
+    .stat-value.small {
+      font-size: 17px;
+      line-height: 1.15;
+    }
+
+    .filter-card {
+      padding: 13px;
+      border-radius: 14px;
+      margin-bottom: 14px;
+    }
+    .filter-toggle-btn {
+      padding: 2px 1px;
+    }
+    .filter-toggle-left {
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
     .dashboard-filter-form { grid-template-columns: 1fr; gap: 10px; }
     .filter-field-status,
     .filter-field-package { padding: 0; }
+    .field-label {
+      font-size: 10.5px;
+      letter-spacing: 0.45px;
+    }
+    .dashboard-filter-form input,
+    .dashboard-filter-form select {
+      min-height: 46px;
+      font-size: 14px;
+      border-radius: 11px;
+    }
     .dashboard-filter-form .filter-actions { flex-direction: column; align-items: stretch; }
-    .dashboard-filter-form .filter-actions .btn { width: 100%; justify-content: center; }
-
-    .admin-header.spaced { flex-direction: column; align-items: flex-start; gap: 10px; }
-    .dashboard-head-actions { width: 100%; }
-    .dashboard-head-actions .btn { flex: 1; justify-content: center; }
+    .dashboard-filter-form .filter-actions .btn {
+      width: 100%;
+      min-height: 44px;
+      justify-content: center;
+    }
 
     .pagination-wrap { flex-direction: column; align-items: flex-start; gap: 8px; }
     .pagination { width: 100%; justify-content: center; }
@@ -1147,6 +1270,15 @@ $extraHead = <<<'HTML'
     #adminEmailModal .admin-email-list { max-height: 190px; }
 
     .order-card-actions .btn { font-size: 12px; }
+  }
+
+  @media (max-width: 460px) {
+    .dashboard-head-actions {
+      grid-template-columns: 1fr;
+    }
+    .dashboard-head-actions .btn {
+      min-height: 46px;
+    }
   }
 
   /* Extra small */
