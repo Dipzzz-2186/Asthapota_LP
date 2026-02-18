@@ -9,1144 +9,1061 @@ $db = get_db();
 ensure_order_qr_schema($db);
 ensure_order_attendee_checkin_schema($db);
 
-function normalize_gender_value($rawGender)
-{
+$scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/'));
+$basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, '/');
+
+$sponsorItems = [];
+try {
+    $sponsorStmt = $db->query('SELECT name, website_url, logo_path FROM sponsors ORDER BY id DESC');
+    foreach ($sponsorStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $logoPath = trim((string)($row['logo_path'] ?? ''));
+        if ($logoPath === '') continue;
+        if (preg_match('/^https?:\\/\\//i', $logoPath)) { $logoSrc = $logoPath; }
+        else { $logoSrc = $basePath . '/' . ltrim($logoPath, '/'); }
+        $sponsorItems[] = [
+            'name' => trim((string)($row['name'] ?? 'Sponsor')),
+            'logo' => $logoSrc,
+            'url'  => filter_var(trim((string)($row['website_url'] ?? '')), FILTER_VALIDATE_URL) ? trim((string)($row['website_url'] ?? '')) : '',
+        ];
+    }
+} catch (Throwable $e) { $sponsorItems = []; }
+
+if (!$sponsorItems) {
+    $sponsorItems = [
+        ['name' => 'HIPPI',    'logo' => $basePath . '/assets/img/hippi.png',   'url' => 'https://www.hippi.or.id/'],
+        ['name' => 'BAPORA',   'logo' => $basePath . '/assets/img/logo.webp',   'url' => 'https://www.hippi.or.id/'],
+        ['name' => 'FCOM',     'logo' => $basePath . '/assets/img/fcom.png',    'url' => 'https://fcom.co.id/'],
+        ['name' => 'MY Padel', 'logo' => $basePath . '/assets/img/mypadel.png', 'url' => 'https://ayo.co.id/v/mypadel'],
+    ];
+}
+
+$adsTableSql = <<<SQL
+CREATE TABLE IF NOT EXISTS ads (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(150) NOT NULL,
+  video_path VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+
+$adVideoSrc = '';
+try {
+    $db->exec($adsTableSql);
+} catch (Throwable $e) {
+    // ignore
+}
+
+try {
+    $adRow = $db->query('SELECT video_path FROM ads ORDER BY id DESC LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+    if ($adRow) {
+        $temp = trim((string)($adRow['video_path'] ?? ''));
+        if ($temp !== '' && !preg_match('/^https?:\\/\\//i', $temp)) {
+            $temp = '/' . ltrim($temp, '/');
+        }
+        $adVideoSrc = $temp;
+    }
+} catch (Throwable $e) {
+    $adVideoSrc = '';
+}
+
+function normalize_gender_value($rawGender) {
     $gender = strtolower(trim((string)$rawGender));
-    if (in_array($gender, ['male', 'm', 'laki-laki', 'laki', 'pria'], true)) return 'male';
-    if (in_array($gender, ['female', 'f', 'perempuan', 'wanita'], true)) return 'female';
+    if (in_array($gender, ['male','m','laki-laki','laki','pria'], true)) return 'male';
+    if (in_array($gender, ['female','f','perempuan','wanita'], true)) return 'female';
     return 'unknown';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json; charset=UTF-8');
-
     $rawInput = file_get_contents('php://input');
     $json = json_decode((string)$rawInput, true);
-    $mode = is_array($json) ? trim((string)($json['mode'] ?? 'resolve')) : trim((string)($_POST['mode'] ?? 'resolve'));
-    $scanRaw = '';
-    if (is_array($json) && isset($json['token'])) {
-        $scanRaw = (string)$json['token'];
-    } else {
-        $scanRaw = (string)($_POST['token'] ?? '');
-    }
+    $mode    = is_array($json) ? trim((string)($json['mode'] ?? 'resolve')) : trim((string)($_POST['mode'] ?? 'resolve'));
+    $scanRaw = is_array($json) && isset($json['token']) ? (string)$json['token'] : (string)($_POST['token'] ?? '');
+    $token   = extract_qr_token($scanRaw);
+    if ($token === '') { echo json_encode(['ok'=>false,'message'=>'QR tidak valid. Coba scan ulang.']); exit; }
 
-    $token = extract_qr_token($scanRaw);
-    if ($token === '') {
-        echo json_encode(['ok' => false, 'message' => 'QR tidak valid. Coba scan ulang.']);
-        exit;
-    }
-
-    $stmt = $db->prepare('SELECT o.id, o.status, o.checked_in_at, u.full_name, u.gender
-        FROM orders o JOIN users u ON u.id = o.user_id
-        WHERE o.qr_token = ? LIMIT 1');
+    $stmt = $db->prepare('SELECT o.id, o.status, o.checked_in_at, u.full_name, u.gender FROM orders o JOIN users u ON u.id = o.user_id WHERE o.qr_token = ? LIMIT 1');
     $stmt->execute([$token]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) { echo json_encode(['ok'=>false,'message'=>'QR token tidak ditemukan.']); exit; }
+    if ((string)($row['status'] ?? '') !== 'accepted') { echo json_encode(['ok'=>false,'message'=>'Order ini belum berstatus accepted.']); exit; }
 
-    if (!$row) { echo json_encode(['ok' => false, 'message' => 'QR token tidak ditemukan.']); exit; }
-    if ((string)($row['status'] ?? '') !== 'accepted') { echo json_encode(['ok' => false, 'message' => 'Order ini belum status accepted.']); exit; }
-
-    $orderId = (int)$row['id'];
-    $ownerName = trim((string)($row['full_name'] ?? ''));
+    $orderId     = (int)$row['id'];
+    $ownerName   = trim((string)($row['full_name'] ?? ''));
     $orderGender = normalize_gender_value($row['gender'] ?? '');
+    $packagePool = [];
+    try {
+        $packageStmt = $db->prepare('SELECT p.name, oi.qty FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = ? ORDER BY p.name ASC');
+        $packageStmt->execute([$orderId]);
+        foreach ($packageStmt->fetchAll(PDO::FETCH_ASSOC) as $pr) {
+            $qty = max(1, (int)($pr['qty'] ?? 0));
+            $label = trim((string)($pr['name'] ?? 'Package'));
+            for ($i = 0; $i < $qty; $i++) $packagePool[] = $label;
+        }
+    } catch (Throwable $e) { $packagePool = []; }
 
     $attendees = [];
     try {
         $attendeeStmt = $db->prepare('SELECT id, attendee_name, gender, position_no, checked_in_at FROM order_attendees WHERE order_id = ? ORDER BY position_no ASC, id ASC');
         $attendeeStmt->execute([$orderId]);
-        foreach ($attendeeStmt->fetchAll(PDO::FETCH_ASSOC) as $attendeeRow) {
-            $attendeeId = (int)($attendeeRow['id'] ?? 0);
-            if ($attendeeId <= 0) continue;
-            $attendeeName = trim((string)($attendeeRow['attendee_name'] ?? ''));
-            if ($attendeeName === '') $attendeeName = 'Attendee #' . (int)($attendeeRow['position_no'] ?? 0);
-            $attendees[] = ['id' => $attendeeId, 'name' => $attendeeName, 'gender' => normalize_gender_value($attendeeRow['gender'] ?? ''),  'position_no' => (int)($attendeeRow['position_no'] ?? 0), 'checked_in_at' => (string)($attendeeRow['checked_in_at'] ?? '')];
+        $packIdx = 0;
+        foreach ($attendeeStmt->fetchAll(PDO::FETCH_ASSOC) as $ar) {
+            $aid = (int)($ar['id'] ?? 0);
+            if ($aid <= 0) continue;
+            $aname = trim((string)($ar['attendee_name'] ?? ''));
+            if ($aname === '') $aname = 'Attendee #' . (int)($ar['position_no'] ?? 0);
+            $attendees[] = ['id'=>$aid,'name'=>$aname,'gender'=>normalize_gender_value($ar['gender']??''),'position_no'=>(int)($ar['position_no']??0),'checked_in_at'=>(string)($ar['checked_in_at']??''),'package'=>(string)($packagePool[$packIdx]??'')];
+            $packIdx++;
         }
     } catch (Throwable $e) { $attendees = []; }
 
     if (!$attendees) {
-        $attendees[] = ['id' => 0, 'name' => $ownerName !== '' ? $ownerName : 'Pemesan', 'gender' => $orderGender, 'position_no' => 1, 'checked_in_at' => (string)($row['checked_in_at'] ?? '')];
+        $attendees[] = ['id'=>0,'name'=>$ownerName!==''?$ownerName:'Pemesan','gender'=>$orderGender,'position_no'=>1,'checked_in_at'=>(string)($row['checked_in_at']??''),'package'=>(string)($packagePool[0]??'')];
     }
 
     if ($mode === 'checkin') {
-        $attendeeId = is_array($json) ? (int)($json['attendee_id'] ?? 0) : (int)($_POST['attendee_id'] ?? 0);
-        if ($attendeeId <= 0) { echo json_encode(['ok' => false, 'message' => 'Pilih nama attendee dulu.']); exit; }
+        $attendeeId = is_array($json) ? (int)($json['attendee_id']??0) : (int)($_POST['attendee_id']??0);
+        if ($attendeeId <= 0) { echo json_encode(['ok'=>false,'message'=>'Pilih nama attendee dulu.']); exit; }
         $selected = null;
-        foreach ($attendees as $attendee) { if ((int)$attendee['id'] === $attendeeId) { $selected = $attendee; break; } }
-        if (!$selected) { echo json_encode(['ok' => false, 'message' => 'Attendee tidak valid untuk QR ini.']); exit; }
-        if (!empty($selected['checked_in_at'])) { echo json_encode(['ok' => false, 'message' => 'Attendee ini sudah check-in sebelumnya.']); exit; }
-
+        foreach ($attendees as $a) { if ((int)$a['id']===$attendeeId){$selected=$a;break;} }
+        if (!$selected) { echo json_encode(['ok'=>false,'message'=>'Attendee tidak valid.']); exit; }
+        if (!empty($selected['checked_in_at'])) { echo json_encode(['ok'=>false,'message'=>'Attendee ini sudah check-in sebelumnya.']); exit; }
         $now = date('Y-m-d H:i:s');
+        try { if ((int)$selected['id']>0){ $db->prepare('UPDATE order_attendees SET checked_in_at=? WHERE id=? AND order_id=?')->execute([$now,(int)$selected['id'],$orderId]); } } catch(Throwable $e){}
         try {
-            if ((int)$selected['id'] > 0) {
-                $updAttendee = $db->prepare('UPDATE order_attendees SET checked_in_at = ? WHERE id = ? AND order_id = ?');
-                $updAttendee->execute([$now, (int)$selected['id'], $orderId]);
-            }
-        } catch (Throwable $e) {}
-
-        try {
-            $remainStmt = $db->prepare('SELECT COUNT(*) FROM order_attendees WHERE order_id = ? AND checked_in_at IS NULL');
-            $remainStmt->execute([$orderId]);
-            $remainingAfter = (int)$remainStmt->fetchColumn();
-            if ($remainingAfter <= 0) {
-                $db->prepare('UPDATE orders SET checked_in_at = ? WHERE id = ?')->execute([$now, $orderId]);
-            } else {
-                $db->prepare('UPDATE orders SET checked_in_at = NULL WHERE id = ?')->execute([$orderId]);
-            }
-        } catch (Throwable $e) {}
-
-        echo json_encode(['ok' => true, 'order_id' => $orderId, 'name' => (string)$selected['name'], 'gender' => normalize_gender_value($selected['gender'] ?? $orderGender), 'checked_in_at' => $now, 'message' => 'Check-in berhasil.']);
+            $rs = $db->prepare('SELECT COUNT(*) FROM order_attendees WHERE order_id=? AND checked_in_at IS NULL');
+            $rs->execute([$orderId]); $rc=(int)$rs->fetchColumn();
+            if ($rc<=0){ $db->prepare('UPDATE orders SET checked_in_at=? WHERE id=?')->execute([$now,$orderId]); }
+            else { $db->prepare('UPDATE orders SET checked_in_at=NULL WHERE id=?')->execute([$orderId]); }
+        } catch(Throwable $e){}
+        echo json_encode(['ok'=>true,'order_id'=>$orderId,'name'=>(string)$selected['name'],'gender'=>normalize_gender_value($selected['gender']??$orderGender),'checked_in_at'=>$now,'package'=>(string)($selected['package']??''),'message'=>'Check-in berhasil.']);
         exit;
     }
 
-    $checked = 0;
-    foreach ($attendees as $attendee) { if (!empty($attendee['checked_in_at'])) $checked++; }
-    $total = count($attendees);
-    $remaining = max(0, $total - $checked);
-
-    echo json_encode(['ok' => true, 'mode' => 'select_attendee', 'order_id' => $orderId, 'order_name' => $ownerName, 'order_gender' => $orderGender, 'total_tickets' => $total, 'checked_in_count' => $checked, 'remaining_count' => $remaining, 'attendees' => $attendees, 'message' => $remaining > 0 ? 'Pilih nama attendee yang mau check-in.' : 'Semua attendee pada QR ini sudah check-in.']);
+    $checked=0; foreach($attendees as $a){if(!empty($a['checked_in_at']))$checked++;}
+    $total=count($attendees);
+    echo json_encode(['ok'=>true,'mode'=>'select_attendee','order_id'=>$orderId,'order_name'=>$ownerName,'order_gender'=>$orderGender,'total_tickets'=>$total,'checked_in_count'=>$checked,'remaining_count'=>max(0,$total-$checked),'attendees'=>$attendees]);
     exit;
 }
 
 $prefillToken = extract_qr_token((string)($_GET['token'] ?? ''));
 
 $extraHead = <<<'HTML'
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-  /* ─── Scan Page Layout ───────────────────────────────────── */
-  .scan-wrap {
-    width: min(1240px, 95vw);
-    margin: 28px auto 56px;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  /* ─── Page Header ────────────────────────────────────────── */
-  .scan-page-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-    padding-bottom: 18px;
-    border-bottom: 1px solid var(--stroke);
-  }
-
-  .scan-head-left { display: grid; gap: 4px; }
-
-  .scan-title {
-    margin: 0;
-    font-size: clamp(24px, 3vw, 34px);
-    font-weight: 800;
-    letter-spacing: -0.6px;
-    line-height: 1.1;
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .scan-title .bi {
-    font-size: 0.85em;
-    color: var(--primary);
-    opacity: 0.8;
-  }
-
-  .scan-sub {
-    margin: 0;
-    color: var(--muted);
-    font-size: 13.5px;
-    font-weight: 500;
-  }
-
-  .scan-head-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 14px;
-    border-radius: 999px;
-    background: rgba(0, 102, 255, 0.07);
-    border: 1.5px solid rgba(0, 102, 255, 0.18);
-    color: var(--primary);
-    font-size: 12.5px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-  }
-
-  @keyframes livePulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.7); }
-  }
-
-  /* ─── Grid ───────────────────────────────────────────────── */
-  .scan-grid {
-    display: grid;
-    grid-template-columns: 380px 1fr;
-    gap: 16px;
-    align-items: start;
-  }
-
-  /* ─── Pane Base ──────────────────────────────────────────── */
-  .scan-pane {
-    background: var(--surface);
-    border: 1px solid var(--stroke);
-    border-radius: 20px;
-    padding: 20px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .scan-pane::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--primary) 0%, rgba(0,102,255,0.3) 60%, transparent 100%);
-    opacity: 0.6;
-    pointer-events: none;
-  }
-
-  .pane-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 16px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid var(--stroke);
-  }
-
-  .pane-title-wrap { display: grid; gap: 2px; }
-
-  .pane-title {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 800;
-    letter-spacing: -0.2px;
-    color: var(--text);
-  }
-
-  .pane-sub {
-    margin: 0;
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  .pane-icon {
-    width: 38px; height: 38px;
-    border-radius: 12px;
-    background: rgba(0, 102, 255, 0.08);
-    border: 1px solid rgba(0, 102, 255, 0.15);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 17px;
-    color: var(--primary);
-    flex-shrink: 0;
-  }
-
-  /* ─── QR Reader ──────────────────────────────────────────── */
-  .qr-reader-wrap {
-    border-radius: 14px;
-    overflow: hidden;
-    border: 1.5px solid var(--stroke);
-    background: #f4f8ff;
-    min-height: 260px;
-    position: relative;
-  }
-
-  #qr-reader {
-    width: 100%;
-    min-height: 260px;
-  }
-
-  .qr-idle-placeholder {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: var(--muted);
-    pointer-events: none;
-  }
-
-  .qr-idle-icon {
-    font-size: 48px;
-    opacity: 0.2;
-    animation: idleFloat 2.5s ease-in-out infinite;
-  }
-
-  .qr-idle-text {
-    font-size: 13px;
-    font-weight: 600;
-    opacity: 0.45;
-  }
-
-  @keyframes idleFloat {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
-  }
-
-  /* ─── Scan Action Buttons ────────────────────────────────── */
-  .scan-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px solid var(--stroke);
-  }
-
-  .scan-actions .btn {
-    height: 40px;
-    font-size: 13px;
-    border-radius: 10px;
-    font-weight: 700;
-  }
-
-  /* ─── Manual Input ───────────────────────────────────────── */
-  .manual-section {
-    margin-top: 14px;
-  }
-
-  .manual-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 7px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .manual-form {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
-  }
-
-  .manual-form input {
-    height: 44px;
-    border: 1.5px solid var(--stroke);
-    border-radius: 10px;
-    padding: 10px 13px;
-    font: inherit;
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--text);
-    background: var(--surface);
-    transition: border-color 0.18s, box-shadow 0.18s;
-  }
-
-  .manual-form input:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
-  }
-
-  .manual-form input::placeholder { color: var(--muted); opacity: 0.65; }
-
-  .manual-form .btn {
-    height: 44px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  /* ─── Result Pane ────────────────────────────────────────── */
-  .result-stack {
-    display: grid;
-    gap: 14px;
-  }
-
-  .result-box {
-    border-radius: 16px;
-    padding: 16px;
-    display: none;
-    border: 1.5px solid var(--stroke);
-    background: var(--surface);
-    animation: resultIn 0.28s ease-out;
-  }
-
-  .result-box.show { display: block; }
-
-  .result-box.success {
-    background: #f0faf4;
-    border-color: #8ed4a8;
-  }
-
-  .result-box.error {
-    background: #fff5f5;
-    border-color: #f5b8b8;
-  }
-
-  @keyframes resultIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  /* ─── Profile Card ───────────────────────────────────────── */
-  .profile-card {
-    display: grid;
-    grid-template-columns: 80px 1fr;
-    gap: 14px;
-    padding: 14px;
-    border-radius: 14px;
-    background: #fff;
-    border: 1px solid #dce8f5;
-    margin: 10px 0 14px;
-    box-shadow: 0 4px 14px rgba(20, 41, 74, 0.07);
-    transition: box-shadow 0.2s ease;
-  }
-
-  .profile-card:hover { box-shadow: 0 8px 22px rgba(20, 41, 74, 0.12); }
-
-  .profile-avatar {
-    width: 76px; height: 76px;
-    border-radius: 999px;
-    position: relative;
-    overflow: hidden;
-    flex-shrink: 0;
-    animation: floaty 2.4s ease-in-out infinite;
-    box-shadow: 0 8px 20px rgba(20, 41, 74, 0.18);
-  }
-
-  .profile-avatar .avatar-img {
-    width: 100%; height: 100%;
-    object-fit: cover;
-    border-radius: 999px;
-    position: relative;
-    z-index: 2;
-  }
-
-  .profile-avatar::after {
-    content: '';
-    position: absolute;
-    inset: 4px;
-    border: 2px solid rgba(255, 255, 255, 0.6);
-    border-radius: 999px;
-    animation: pulse-ring 2.2s ease-in-out infinite;
-    z-index: 3;
-    pointer-events: none;
-  }
-
-  .profile-avatar.male   { background: linear-gradient(145deg, #1d78ff, #66b6ff); }
-  .profile-avatar.female { background: linear-gradient(145deg, #f35aa4, #ff95c8); }
-  .profile-avatar.unknown { background: linear-gradient(145deg, #7a8fa6, #aebdcc); }
-
-  @keyframes floaty {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
-  }
-
-  @keyframes pulse-ring {
-    0%, 100% { transform: scale(1); opacity: 0.5; }
-    50% { transform: scale(1.08); opacity: 1; }
-  }
-
-  .profile-body {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    justify-content: center;
-  }
-
-  .profile-name {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 900;
-    letter-spacing: -0.3px;
-    color: #18375f;
-    line-height: 1.2;
-  }
-
-  .profile-role {
-    margin: 0;
-    font-size: 12px;
-    font-weight: 600;
-    color: #5e7a96;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    flex-wrap: wrap;
-  }
-
-  .profile-kpis {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-top: 2px;
-  }
-
-  .mini-kpi {
-    padding: 4px 9px;
-    border-radius: 8px;
-    background: #eef4ff;
-    border: 1px solid #d0e0f7;
-    font-size: 11px;
-    font-weight: 800;
-    color: #2c4d7a;
-    letter-spacing: 0.1px;
-  }
-
-  /* ─── Gender Chip ────────────────────────────────────────── */
-  .gender-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    border-radius: 999px;
-    padding: 3px 9px;
-    font-size: 11.5px;
-    font-weight: 700;
-    border: 1.5px solid transparent;
-    letter-spacing: 0.1px;
-  }
-
-  .gender-chip.male    { color: #0b4e9e; background: #e8f3ff; border-color: #b9d8ff; }
-  .gender-chip.female  { color: #9a2a66; background: #ffedf5; border-color: #ffc4dc; }
-  .gender-chip.unknown { color: #425773; background: #eff3f8; border-color: #d1dbe8; }
-
-  /* ─── Attendee List ──────────────────────────────────────── */
-  .attendee-list {
-    display: grid;
-    gap: 7px;
-    margin-top: 2px;
-  }
-
-  .attendee-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 10px 13px;
-    border-radius: 11px;
-    border: 1.5px solid;
-    font-size: 13.5px;
-    font-weight: 600;
-  }
-
-  .attendee-item.checked {
-    background: #edfaf3;
-    border-color: #92d8ae;
-    color: #185c33;
-  }
-
-  .attendee-item-left {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-  }
-
-  .attendee-item-left .bi { font-size: 15px; opacity: 0.65; }
-
-  .checked-stamp {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 999px;
-    background: #c6f0d6;
-    color: #1a6636;
-    border: 1px solid #8ed4ab;
-    white-space: nowrap;
-  }
-
-  .btn-attendee-checkin {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 14px;
-    border-radius: 9px;
-    border: 1.5px solid rgba(0, 102, 255, 0.25);
-    background: rgba(0, 102, 255, 0.07);
-    color: var(--primary);
-    font: inherit;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.17s ease;
-    white-space: nowrap;
-  }
-
-  .btn-attendee-checkin:hover {
-    background: var(--primary);
-    color: #fff;
-    border-color: var(--primary);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 102, 255, 0.3);
-  }
-
-  /* ─── Result Meta ────────────────────────────────────────── */
-  .result-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-bottom: 12px;
-  }
-
-  .result-meta-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 700;
-    background: #fff;
-    border: 1px solid #d4e3f5;
-    color: #2c4d7a;
-  }
-
-  .result-error-msg {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: #fff5f5;
-    border: 1px solid #f5b8b8;
-    color: #8f2e2e;
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  .result-error-msg .bi { font-size: 17px; flex-shrink: 0; margin-top: 1px; }
-
-  .section-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.7px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0 0 8px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  /* ─── History Box ────────────────────────────────────────── */
-  .history-box {
-    border: 1px solid var(--stroke);
-    border-radius: 16px;
-    padding: 16px 18px;
-    background: var(--surface);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-  }
-
-  .history-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 14px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--stroke);
-  }
-
-  .history-title {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 800;
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .history-title .bi { color: var(--primary); opacity: 0.7; }
-
-  .history-count-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 24px;
-    height: 24px;
-    border-radius: 999px;
-    background: rgba(0, 102, 255, 0.1);
-    border: 1px solid rgba(0, 102, 255, 0.2);
-    color: var(--primary);
-    font-size: 12px;
-    font-weight: 800;
-    padding: 0 7px;
-  }
-
-  .history-empty {
-    margin: 0;
-    color: var(--muted);
-    font-size: 13.5px;
-    font-weight: 500;
-    text-align: center;
-    padding: 14px 0;
-  }
-
-  .history-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 7px;
-  }
-
-  .history-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--stroke);
-    background: #f8fbff;
-    font-size: 13px;
-    transition: background 0.15s;
-  }
-
-  .history-item:hover { background: #eef4ff; }
-
-  .history-item-num {
-    width: 22px; height: 22px;
-    border-radius: 999px;
-    background: rgba(0, 102, 255, 0.1);
-    border: 1px solid rgba(0, 102, 255, 0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 800;
-    color: var(--primary);
-    flex-shrink: 0;
-  }
-
-  .history-item-body { flex: 1; min-width: 0; }
-
-  .history-item-name {
-    font-weight: 700;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .history-item-meta {
-    font-size: 11.5px;
-    color: var(--muted);
-    font-weight: 500;
-  }
-
-  /* ─── Responsive ─────────────────────────────────────────── */
-  @media (max-width: 1060px) {
-    .scan-grid { grid-template-columns: 340px 1fr; }
-  }
-
-  @media (max-width: 900px) {
-    .scan-grid { grid-template-columns: 1fr; }
-    .scan-page-head { flex-direction: column; align-items: flex-start; }
-  }
-
-  @media (max-width: 640px) {
-    .manual-form { grid-template-columns: 1fr; }
-    .profile-card { grid-template-columns: 64px 1fr; gap: 10px; }
-    .profile-avatar { width: 60px; height: 60px; }
-    .profile-name { font-size: 15px; }
-    .scan-wrap { margin: 16px auto 40px; }
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #08091a; }
+
+body.admin-page {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  /* ── Overlay lebih gelap — cukup kontras tapi wallpaper masih keliatan ── */
+  background:
+    radial-gradient(ellipse 100% 80% at 50% 45%,
+      rgba(3,4,14,0.38) 0%,
+      rgba(3,4,14,0.60) 55%,
+      rgba(3,4,14,0.82) 100%),
+    url('/assets/img/wallpapeh3.jpg') center/cover fixed;
+  color: #f8fafc;
+  font-size: 15px;
+}
+body.admin-page .page-header,
+body.admin-page footer,
+body.admin-page nav,
+body.admin-page .admin-nav,
+body.admin-page .sidebar,
+body.admin-page::before,
+body.admin-page::after { display: none !important; }
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse 100% 80% at 50% 45%,
+      rgba(3,4,14,0.38) 0%,
+      rgba(3,4,14,0.60) 55%,
+      rgba(3,4,14,0.82) 100%),
+    url('/assets/img/wallpapeh3.jpg') center/cover fixed;
+  background-color: #07091a;
+}
+
+/* ─── Top Bar ────────────────────────────────── */
+#topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 36px; min-height: 70px;
+  background: transparent; flex-shrink: 0;
+  position: sticky; top: 0; z-index: 50;
+}
+.topbar-left { display:flex; flex-direction:column; align-items:flex-start; gap:6px; margin-top:-4px; }
+.topbar-icon, .topbar-title { display: none; }
+.topbar-right { display:flex; align-items:center; gap:12px; }
+.clock-block { display:flex; flex-direction:column; gap:4px; }
+
+#clock {
+  font-size: 44px; font-weight: 800; color: #fff;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.7), 0 0 40px rgba(0,0,0,0.4);
+}
+#clockDate {
+  font-size: 13px; letter-spacing: 0.3em; text-transform: uppercase;
+  color: rgba(255,255,255,0.75); font-weight: 700;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.6);
+}
+
+.btn-back {
+  display:inline-flex; align-items:center; gap:6px; padding:6px 12px;
+  border-radius:8px; font-family:inherit; font-size:13px; font-weight:600;
+  color:rgba(241,245,249,0.5); background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.09); text-decoration:none; transition:0.15s;
+}
+.btn-back:hover { color:#f1f5f9; background:rgba(255,255,255,0.1); }
+
+.btn-fs {
+  width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.09);
+  color:rgba(241,245,249,0.45); font-size:14px; cursor:pointer; transition:0.15s; flex-shrink:0;
+}
+.btn-fs:hover { background:rgba(255,255,255,0.1); color:#f1f5f9; }
+
+/* ─── Stage ──────────────────────────────────── */
+#stage {
+  flex: 1; display:flex; align-items:center; justify-content:center;
+  position:relative; overflow:hidden; min-height:0;
+  padding-bottom: 96px; /* ruang logo strip */
+}
+
+/* ─── Idle Screen ────────────────────────────── */
+#idle-screen {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap: 22px; text-align:center; padding:40px 24px;
+  animation: fadeUp 0.5s ease-out; position:relative; z-index:1;
+}
+
+.idle-qr-ring {
+  width:96px; height:96px; border-radius:22px;
+  background:rgba(56,189,248,0.07); border:1.5px dashed rgba(56,189,248,0.3);
+  display:flex; align-items:center; justify-content:center;
+  font-size:40px; color:rgba(56,189,248,0.5); animation:bob 3s ease-in-out infinite; position:relative;
+}
+.idle-qr-ring::before {
+  content:''; position:absolute; inset:-10px; border-radius:28px;
+  border:1px dashed rgba(56,189,248,0.12);
+}
+
+/* ═══ TEMU PADEL — diperkuat kontrasnya ══════ */
+.idle-title {
+  font-size: clamp(38px, 5.5vw, 68px);
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  /*
+   * Multi-layer shadow: layer tebal → blur → spread
+   * Ini "menghitamkan" area di bawah teks tanpa kotak,
+   * jadi teks selalu terbaca di atas background warna apapun.
+   */
+  text-shadow:
+    0 1px 0   rgba(0,0,0,1),
+    0 2px 4px rgba(0,0,0,0.95),
+    0 4px 12px rgba(0,0,0,0.9),
+    0 8px 28px rgba(0,0,0,0.75),
+    0 16px 52px rgba(0,0,0,0.45);
+}
+
+.idle-subtitle {
+  font-size: clamp(13px, 1.8vw, 17px);
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.7);
+  font-weight: 600;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.8), 0 4px 16px rgba(0,0,0,0.5);
+}
+
+.idle-hint {
+  font-size: 13px; color: rgba(255,255,255,0.38); font-weight: 500;
+  display:flex; align-items:center; gap:10px;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+}
+.idle-hint::before, .idle-hint::after {
+  content:''; width:28px; height:1px; background:rgba(255,255,255,0.14);
+}
+
+@keyframes bob    { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-6px);} }
+@keyframes fadeUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+@keyframes floaty { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-12px);} }
+
+/* ─── Welcome Screen ─────────────────────────── */
+#welcome-screen {
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; position:absolute; inset:0;
+  padding:40px clamp(24px,10vw,180px);
+  animation: welcomeIn 0.6s cubic-bezier(0.22,1,0.36,1);
+}
+@keyframes welcomeIn { from{opacity:0;transform:scale(0.96) translateY(30px);} to{opacity:1;transform:scale(1) translateY(0);} }
+.welcome-avatar { width:clamp(140px,18vw,220px); height:clamp(140px,18vw,220px); margin-bottom:clamp(24px,3vw,40px); position:relative; animation:floaty 2.8s ease-in-out infinite; flex-shrink:0; }
+.welcome-avatar img { width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 8px 40px rgba(0,0,0,0.5)); }
+.welcome-greeting { font-size:clamp(22px,3vw,48px); font-weight:600; color:rgba(241,245,249,0.45); letter-spacing:0.06em; margin-bottom:16px; line-height:1.2; text-shadow:0 2px 12px rgba(0,0,0,0.6); }
+.welcome-name {
+  font-size:clamp(48px,10vw,140px); font-weight:900; color:#fff;
+  letter-spacing:-0.04em; line-height:0.95; margin-bottom:0; max-width:1200px;
+  text-shadow:0 2px 4px rgba(0,0,0,1),0 8px 30px rgba(0,0,0,0.9),0 20px 60px rgba(0,0,0,0.5);
+  word-wrap:break-word; hyphens:auto;
+}
+.welcome-package { font-size:clamp(16px,2.4vw,20px); font-weight:600; letter-spacing:0.35em; text-transform:uppercase; color:rgba(56,189,248,0.9); margin-top:10px; text-shadow:0 2px 12px rgba(0,0,0,0.6); }
+.welcome-badge,.welcome-time,.welcome-tags { display:none!important; }
+
+/* ─── Picker Screen ──────────────────────────── */
+#picker-screen {
+  display:none; flex-direction:column; align-items:center; justify-content:flex-start;
+  position:absolute;
+  top:0; left:0; right:0;
+  /* batas bawah = tinggi logo strip supaya tidak nabrak */
+  bottom: 88px;
+  padding:clamp(20px,4vh,44px) clamp(20px,7vw,110px) 16px;
+  gap:14px; animation:fadeUp 0.35s ease-out;
+  overflow-y:auto; overflow-x:hidden;
+  scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.12) transparent;
+  scroll-behavior:smooth;
+  -webkit-overflow-scrolling:touch;
+}
+#picker-screen::-webkit-scrollbar{width:5px;}
+#picker-screen::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.14);border-radius:999px;}
+#picker-screen::-webkit-scrollbar-track{background:transparent;}
+.picker-order { width:100%; max-width:700px; display:flex; align-items:center; gap:16px; padding:18px 22px; border-radius:16px; background:rgba(4,5,16,0.7); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); border:1px solid rgba(255,255,255,0.12); box-shadow:0 8px 32px rgba(0,0,0,0.5); flex-shrink:0; }
+.picker-avatar { width:60px; height:60px; border-radius:999px; flex-shrink:0; overflow:hidden; animation:bob 2.6s ease-in-out infinite; }
+.picker-avatar img{width:100%;height:100%;object-fit:cover;border-radius:999px;}
+.picker-avatar.male{background:linear-gradient(135deg,#1d78ff,#66b6ff);box-shadow:0 4px 16px rgba(29,120,255,0.35);}
+.picker-avatar.female{background:linear-gradient(135deg,#f35aa4,#ff95c8);box-shadow:0 4px 16px rgba(243,90,164,0.35);}
+.picker-avatar.unknown{background:linear-gradient(135deg,#7a8fa6,#aebdcc);}
+.picker-order-info{flex:1;min-width:0;}
+.picker-order-name{font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-0.03em;margin-bottom:6px;}
+.picker-order-meta{display:flex;gap:7px;flex-wrap:wrap;}
+.picker-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(241,245,249,0.35);display:flex;align-items:center;gap:10px;width:100%;max-width:700px;margin-top:4px;flex-shrink:0;}
+.picker-label::after{content:'';flex:1;height:1px;background:rgba(255,255,255,0.08);}
+.picker-list{display:flex;flex-direction:column;gap:10px;width:100%;max-width:700px;flex-shrink:0;padding-bottom:16px;}
+.picker-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 20px;border-radius:14px;border:1px solid;transition:0.15s;}
+.picker-row.pending{background:rgba(4,5,16,0.65);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-color:rgba(255,255,255,0.11);}
+.picker-row.pending:hover{background:rgba(56,189,248,0.08);border-color:rgba(56,189,248,0.3);}
+.picker-row.done{background:rgba(34,197,94,0.08);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-color:rgba(34,197,94,0.2);}
+.picker-row-left{display:flex;align-items:center;gap:14px;min-width:0;flex:1;}
+.picker-num{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;}
+.picker-num.pending{background:rgba(255,255,255,0.07);color:rgba(241,245,249,0.45);border:1px solid rgba(255,255,255,0.1);}
+.picker-num.done{background:rgba(34,197,94,0.18);color:#4ade80;border:1px solid rgba(34,197,94,0.3);}
+.picker-name{font-size:17px;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.picker-name.done{color:#4ade80;}
+.picker-package{font-size:11px;letter-spacing:0.35em;text-transform:uppercase;color:rgba(56,189,248,0.7);margin-top:2px;display:block;}
+.done-badge{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:999px;background:rgba(34,197,94,0.14);border:1px solid rgba(34,197,94,0.25);font-size:13px;font-weight:700;color:#4ade80;white-space:nowrap;flex-shrink:0;}
+.btn-checkin{display:inline-flex;align-items:center;gap:7px;padding:10px 22px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:700;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;cursor:pointer;transition:0.15s;white-space:nowrap;flex-shrink:0;}
+.btn-checkin:hover{background:#38bdf8;color:#050611;border-color:#38bdf8;box-shadow:0 4px 16px rgba(56,189,248,0.4);transform:translateY(-1px);}
+
+/* ─── Error Screen ───────────────────────────── */
+#err-screen{display:none;flex-direction:column;align-items:center;justify-content:center;position:absolute;inset:0;gap:14px;padding:40px 24px;text-align:center;animation:fadeUp 0.3s ease-out;}
+.err-icon{font-size:48px;color:rgba(248,113,113,0.55);}
+.err-title{font-size:24px;font-weight:800;color:#f87171;}
+.err-msg{font-size:15px;color:rgba(241,245,249,0.4);max-width:380px;}
+
+/* ─── Tag util ───────────────────────────────── */
+.tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);color:rgba(241,245,249,0.55);}
+.tag.male{background:rgba(56,189,248,0.1);border-color:rgba(56,189,248,0.2);color:#7dd3fc;}
+.tag.female{background:rgba(244,114,182,0.1);border-color:rgba(244,114,182,0.2);color:#f9a8d4;}
+.tag.ok{background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.2);color:#4ade80;}
+
+/* ─── Scanner Widget ─────────────────────────── */
+#scanner-widget{position:fixed;left:16px;bottom:96px;width:168px;background:rgba(4,5,16,0.8);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.11);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,0.65);z-index:40;overflow:hidden;transition:0.25s cubic-bezier(0.4,0,0.2,1);}
+.widget-head{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;user-select:none;}
+.widget-head-left{display:flex;align-items:center;gap:6px;}
+.widget-head-icon{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#38bdf8,#818cf8);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex-shrink:0;}
+.widget-head-title{font-size:11px;font-weight:700;color:#f1f5f9;}
+.widget-toggle{font-size:11px;color:rgba(241,245,249,0.35);transition:0.2s;}
+.widget-body{padding:8px;}
+.mini-qr-box{border-radius:8px;overflow:hidden;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.07);position:relative;width:100%;aspect-ratio:1;max-height:150px;}
+#qr-reader{width:100%;height:100%;}
+.qr-idle{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;pointer-events:none;}
+.qr-idle-icon{font-size:22px;color:rgba(56,189,248,0.22);animation:bob 2.6s ease-in-out infinite;}
+.qr-idle-label{font-size:10px;font-weight:600;color:rgba(241,245,249,0.2);text-align:center;}
+.scan-line{position:absolute;left:6px;right:6px;height:1.5px;background:linear-gradient(90deg,transparent,#38bdf8,transparent);border-radius:2px;box-shadow:0 0 6px rgba(56,189,248,0.6);animation:scanMove 1.8s ease-in-out infinite;opacity:0;pointer-events:none;z-index:3;}
+.scan-line.on{opacity:1;}
+@keyframes scanMove{0%{top:6px;}50%{top:calc(100% - 8px);}100%{top:6px;}}
+.corner{position:absolute;width:10px;height:10px;z-index:3;pointer-events:none;}
+.corner::before,.corner::after{content:'';position:absolute;background:#38bdf8;border-radius:1px;}
+.corner::before{width:1.5px;height:100%;}
+.corner::after{width:100%;height:1.5px;}
+.corner.tl{top:5px;left:5px;}.corner.tr{top:5px;right:5px;transform:scaleX(-1);}.corner.bl{bottom:5px;left:5px;transform:scaleY(-1);}.corner.br{bottom:5px;right:5px;transform:scale(-1);}
+.widget-controls{display:flex;gap:5px;margin-top:6px;}
+.wbtn{flex:1;height:28px;border-radius:7px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;border:1px solid;display:flex;align-items:center;justify-content:center;gap:4px;transition:0.15s;}
+.wbtn.primary{background:#38bdf8;border-color:#38bdf8;color:#050611;}
+.wbtn.primary:hover{background:#7dd3fc;}
+.wbtn.ghost{background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.1);color:rgba(241,245,249,0.55);}
+.wbtn.ghost:hover{background:rgba(255,255,255,0.08);color:#f1f5f9;}
+.widget-divider{display:flex;align-items:center;gap:5px;margin:6px 0;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(241,245,249,0.18);}
+.widget-divider::before,.widget-divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,0.05);}
+.widget-input-row{display:flex;gap:4px;}
+.widget-input{flex:1;height:28px;border-radius:7px;border:1px solid rgba(255,255,255,0.09);background:rgba(4,5,16,0.65);padding:0 8px;font-family:inherit;font-size:11px;font-weight:500;color:#f1f5f9;transition:0.15s;min-width:0;}
+.widget-input:focus{outline:none;border-color:rgba(56,189,248,0.4);box-shadow:0 0 0 2px rgba(56,189,248,0.07);}
+.widget-input::placeholder{color:rgba(241,245,249,0.18);}
+.widget-submit{width:28px;height:28px;border-radius:7px;padding:0;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;border:1px solid rgba(56,189,248,0.22);background:rgba(56,189,248,0.1);color:#38bdf8;display:flex;align-items:center;justify-content:center;transition:0.15s;}
+.widget-submit:hover{background:rgba(56,189,248,0.2);}
+#scanner-widget.collapsed .widget-body{display:none;}
+#scanner-widget.collapsed .widget-toggle{transform:rotate(180deg);}
+
+/* ════════════════════════════════════════════════════
+   LOGO STRIP — versi bersih
+   • Tidak ada kotak/card
+   • Logo float langsung di atas wallpaper
+   • Ground gradient gelap tipis di bawah
+   • Edge fade kiri-kanan
+   • Separator titik tipis antar logo
+   ════════════════════════════════════════════════════ */
+.logo-strip {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 88px;
+  overflow: hidden;
+  z-index: 30; /* di atas picker-screen agar tidak tertimpa konten */
+  /* gradien gelap dari bawah = "ground" untuk logo */
+  background: linear-gradient(
+    to top,
+    rgba(2,3,10,0.65) 0%,
+    rgba(2,3,10,0.30) 55%,
+    transparent 100%
+  );
+  /* fade kiri dan kanan */
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0,0,0,0.7) 8%,
+    #000 18%,
+    #000 82%,
+    rgba(0,0,0,0.7) 92%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0,0,0,0.7) 8%,
+    #000 18%,
+    #000 82%,
+    rgba(0,0,0,0.7) 92%,
+    transparent 100%
+  );
+  display: flex;
+  align-items: center;
+}
+
+.logo-track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  animation: logo-scroll 38s linear infinite;
+  /* pause saat hover */
+}
+.logo-track:hover { animation-play-state: paused; }
+
+/* logo-slide: satu logo + separator-nya */
+.logo-slide {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.logo-slide-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 116px;
+  padding: 0 10px;
+}
+
+/* separator vertikal tipis antar logo */
+.logo-sep {
+  width: 1px;
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.18), transparent);
+  flex-shrink: 0;
+}
+
+.logo-slide img {
+  max-width: 96px;
+  max-height: 42px;
+  width: auto; height: auto;
+  object-fit: contain;
+  filter: brightness(1.15) contrast(1.0) saturate(1.0)
+          drop-shadow(0 1px 8px rgba(0,0,0,0.65));
+  opacity: 0.72;
+  transition: opacity 0.4s ease, filter 0.4s ease, transform 0.3s ease;
+}
+.logo-slide:hover img {
+  opacity: 1;
+  filter: brightness(1.35) saturate(1.2)
+          drop-shadow(0 2px 16px rgba(56,189,248,0.25));
+  transform: translateY(-3px) scale(1.06);
+}
+
+@keyframes logo-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* Override: clean, wrap-free logos */
+.logo-strip {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 88px;
+  overflow: hidden;
+  z-index: 30;
+  padding: 12px 0 20px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.8) 14%, rgba(0,0,0,0.8) 86%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.8) 14%, rgba(0,0,0,0.8) 86%, transparent 100%);
+}
+
+.logo-strip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(1,4,13,0.75), rgba(1,4,13,0.25) 40%, transparent 100%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.logo-track {
+  display: flex;
+  gap: 42px;
+  align-items: center;
+  min-width: 100%;
+  width: max-content;
+  animation: logo-scroll 30s linear infinite;
+  padding: 0 32px;
+}
+.logo-track:hover {
+  animation-play-state: paused;
+}
+
+.logo-slide {
+  flex: 0 0 auto;
+  width: 120px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.logo-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  text-decoration: none;
+}
+
+.logo-link img {
+  max-width: 96px;
+  max-height: 42px;
+  object-fit: contain;
+  filter: brightness(1.15) contrast(1.0) saturate(1.0);
+  opacity: 0.72;
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+.logo-link:hover img {
+  opacity: 1;
+  filter: brightness(1.35) saturate(1.2) drop-shadow(0 2px 20px rgba(0,0,0,0.35));
+}
+
+#adOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3,4,12,0.85);
+  backdrop-filter: blur(12px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+#adOverlay.is-visible {
+  display: flex;
+}
+
+.ad-overlay-inner {
+  width: min(92vw, 1100px);
+  max-width: 1100px;
+  padding: 20px;
+  border-radius: 20px;
+  background: rgba(4,5,16,0.9);
+  box-shadow: 0 40px 60px rgba(0,0,0,0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ad-media {
+  width: 100%;
+  position: relative;
+  padding-top: 56.25%;
+}
+
+.ad-media iframe,
+.ad-media video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 16px;
+  object-fit: cover;
+  background: #000;
+}
+
+.ad-overlay-note {
+  font-size: 13px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.7);
+  text-align: center;
+}
 </style>
 HTML;
 
 render_header([
-    'title' => 'Admin Scan QR - Asthapora',
-    'isAdmin' => true,
-    'showNav' => false,
-    'brandSubtitle' => 'QR Check-In',
+    'title'     => 'Scan QR - Asthapora',
+    'isAdmin'   => true,
+    'showNav'   => false,
     'extraHead' => $extraHead,
 ]);
 ?>
 
-<main class="scan-wrap">
+<div id="app">
 
-  <!-- ── Page Header ───────────────────────────────────────── -->
-  <div class="scan-page-head">
-    <div class="scan-head-left">
-      <h1 class="scan-title"><i class="bi bi-qr-code-scan"></i> QR Check-In</h1>
-      <p class="scan-sub">Scan QR tiket → pilih nama attendee → konfirmasi. 1 QR bisa dipakai sesuai jumlah tiket.</p>
+  <header id="topbar">
+    <div class="topbar-left">
+      <div class="clock-block">
+        <span id="clock"></span>
+        <span id="clockDate"></span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn-fs" id="btnFs" type="button" title="Fullscreen">
+        <i class="bi bi-fullscreen" id="fsIcon"></i>
+      </button>
+      <a class="btn-back" href="/admin/dashboard"><i class="bi bi-arrow-left"></i> Dashboard</a>
+    </div>
+  </header>
+
+  <div id="stage">
+    <!-- 1. Idle -->
+    <div id="idle-screen">
+      <div class="idle-qr-ring"><i class="bi bi-qr-code"></i></div>
+      <div>
+        <div class="idle-title">Temu Padel</div>
+        <div class="idle-subtitle">Welcome</div>
+      </div>
+      <div class="idle-hint">Scan QR tiket di pojok kiri bawah</div>
+    </div>
+    <!-- 2. Picker -->
+    <div id="picker-screen">
+      <div class="picker-order" id="pickerOrder"></div>
+      <div class="picker-label"><i class="bi bi-people"></i> Pilih attendee</div>
+      <div class="picker-list"  id="pickerList"></div>
+    </div>
+    <!-- 3. Welcome -->
+    <div id="welcome-screen">
+      <div class="welcome-avatar" id="welcomeAvatar"><img id="welcomeImg" src="" alt=""></div>
+      <div class="welcome-greeting">Selamat Datang</div>
+      <div class="welcome-name" id="welcomeName">—</div>
+      <div class="welcome-package" id="welcomePackage" style="display:none;"></div>
+    </div>
+    <!-- 4. Error -->
+    <div id="err-screen">
+      <div class="err-icon"><i class="bi bi-exclamation-circle"></i></div>
+      <div class="err-title">Gagal</div>
+      <div class="err-msg" id="errMsg">—</div>
     </div>
   </div>
-  <div class="scan-grid">
 
-    <!-- ── Left: Scanner Console ──────────────────────────── -->
-    <article class="scan-pane">
-      <div class="pane-header">
-        <div class="pane-title-wrap">
-          <h2 class="pane-title">Scanner Console</h2>
-          <p class="pane-sub">Kamera browser &amp; scanner gun (USB HID)</p>
-        </div>
-        <div class="pane-icon"><i class="bi bi-camera-video"></i></div>
+  <!-- Scanner widget -->
+  <div id="scanner-widget">
+    <div class="widget-head" id="widgetToggleBtn">
+      <div class="widget-head-left">
+        <div class="widget-head-icon"><i class="bi bi-qr-code-scan"></i></div>
+        <span class="widget-head-title">Scanner</span>
       </div>
-
-      <div class="qr-reader-wrap">
+      <i class="bi bi-chevron-up widget-toggle"></i>
+    </div>
+    <div class="widget-body">
+      <div class="mini-qr-box">
         <div id="qr-reader"></div>
-        <div class="qr-idle-placeholder" id="qrIdlePlaceholder">
+        <div class="qr-idle" id="qrIdle">
           <div class="qr-idle-icon"><i class="bi bi-qr-code"></i></div>
-          <div class="qr-idle-text">Klik Start untuk aktifkan kamera</div>
+          <div class="qr-idle-label">Klik Start</div>
         </div>
+        <div class="scan-line" id="scanLine"></div>
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
       </div>
-
-      <div class="scan-actions">
-        <a class="btn ghost" href="/admin/dashboard"><i class="bi bi-arrow-left-circle"></i> Dashboard</a>
-        <button class="btn primary" id="startScan" type="button"><i class="bi bi-camera-video"></i> Start</button>
-        <button class="btn ghost" id="stopScan" type="button"><i class="bi bi-stop-circle"></i> Stop</button>
+      <div class="widget-controls">
+        <button class="wbtn primary" id="btnStart" type="button"><i class="bi bi-camera-video"></i> Start</button>
+        <button class="wbtn ghost"   id="btnStop"  type="button"><i class="bi bi-stop-circle"></i> Stop</button>
       </div>
-
-      <div class="manual-section">
-        <div class="manual-label"><i class="bi bi-keyboard"></i> Manual Input</div>
-        <form class="manual-form" id="manualForm" method="post" action="/admin/scan">
-          <input
-            id="manualToken"
-            name="token"
-            type="text"
-            placeholder="Paste token / URL QR..."
-            value="<?= h($prefillToken) ?>"
-            autocomplete="off"
-          >
-          <button class="btn ghost" type="submit"><i class="bi bi-search"></i> Verify</button>
-        </form>
-      </div>
-    </article>
-
-    <!-- ── Right: Result + History ────────────────────────── -->
-    <div class="result-stack">
-
-      <!-- Result Panel -->
-      <article class="scan-pane" style="padding-bottom: 18px;">
-        <div class="pane-header">
-          <div class="pane-title-wrap">
-            <h2 class="pane-title">Check-In Result</h2>
-            <p class="pane-sub">Profil attendee &amp; status check-in terbaru</p>
-          </div>
-          <div class="pane-icon"><i class="bi bi-person-check"></i></div>
+      <div class="widget-divider">manual</div>
+      <form id="manualForm" method="post" action="/admin/scan">
+        <div class="widget-input-row">
+          <input class="widget-input" id="manualToken" name="token" type="text"
+            placeholder="Token / URL..." value="<?= h($prefillToken) ?>" autocomplete="off">
+          <button class="widget-submit" type="submit"><i class="bi bi-search"></i></button>
         </div>
-        <div class="result-box" id="resultBox" aria-live="polite"></div>
-        <div id="resultPlaceholder" style="text-align:center;padding:30px 0;color:var(--muted);">
-          <div style="font-size:38px;opacity:0.15;margin-bottom:8px;"><i class="bi bi-person-badge"></i></div>
-          <div style="font-size:13px;font-weight:600;opacity:0.5;">Hasil scan akan muncul di sini</div>
-        </div>
-      </article>
-
-      <!-- History Panel -->
-      <article class="scan-pane history-box" style="border-radius:20px;">
-        <div class="history-header">
-          <h2 class="history-title"><i class="bi bi-clock-history"></i> Riwayat Sesi Ini</h2>
-          <span class="history-count-badge" id="historyCount">0</span>
-        </div>
-        <p class="history-empty" id="historyEmpty">Belum ada data scan.</p>
-        <ol class="history-list" id="historyList" style="display:none;"></ol>
-      </article>
-
+      </form>
     </div>
   </div>
-</main>
+
+  <!-- Logo strip — dibangun JS -->
+  <section class="logo-strip" aria-label="Sponsor logos">
+    <div class="logo-track" id="logoTrack">
+      <?php foreach ($sponsorItems as $idx => $sp): ?>
+        <?php if ($idx > 0): ?><div class="logo-sep" aria-hidden="true"></div><?php endif; ?>
+        <div class="logo-slide">
+          <?php $hasUrl = !empty($sp['url']); ?>
+          <?php if ($hasUrl): ?>
+            <a class="logo-link" href="<?= h($sp['url']) ?>" target="_blank" rel="noopener noreferrer">
+              <img src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>">
+            </a>
+          <?php else: ?>
+            <div class="logo-link">
+              <img src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>">
+            </div>
+          <?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </section>
+  <div id="adOverlay" class="ad-overlay" aria-hidden="true">
+    <div class="ad-overlay-inner">
+      <div class="ad-media">
+        <video id="adVideoPlayer" playsinline muted loop></video>
+        <iframe id="adIframePlayer" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+      </div>
+      <div class="ad-overlay-note">Tekan atau gerakkan kursor untuk kembali ke check-in.</div>
+    </div>
+  </div>
+
+</div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
-  (function () {
-    var resultBox = document.getElementById('resultBox');
-    var resultPlaceholder = document.getElementById('resultPlaceholder');
-    var startBtn = document.getElementById('startScan');
-    var stopBtn = document.getElementById('stopScan');
-    var manualForm = document.getElementById('manualForm');
-    var manualToken = document.getElementById('manualToken');
-    var historyEmpty = document.getElementById('historyEmpty');
-    var historyList = document.getElementById('historyList');
-    var historyCount = document.getElementById('historyCount');
-    var qrIdlePlaceholder = document.getElementById('qrIdlePlaceholder');
-    var scanner = null;
-    var scanning = false;
-    var submitting = false;
-    var scanHistory = [];
-    var hwBuffer = '';
-    var hwLastTs = 0;
-    var hwMaxGapMs = 70;
-    var hwMinLen = 10;
+(function(){
+  var idle    = document.getElementById('idle-screen');
+  var picker  = document.getElementById('picker-screen');
+  var welcome = document.getElementById('welcome-screen');
+  var err     = document.getElementById('err-screen');
+  var pOrder  = document.getElementById('pickerOrder');
+  var pList   = document.getElementById('pickerList');
+  var wName   = document.getElementById('welcomeName');
+  var wPkg    = document.getElementById('welcomePackage');
+  var errMsg  = document.getElementById('errMsg');
+  var btnStart= document.getElementById('btnStart');
+  var btnStop = document.getElementById('btnStop');
+  var mForm   = document.getElementById('manualForm');
+  var mInput  = document.getElementById('manualToken');
+  var qrIdle  = document.getElementById('qrIdle');
+  var scanLine= document.getElementById('scanLine');
+  var clock   = document.getElementById('clock');
+  var clockD  = document.getElementById('clockDate');
+  var wToggle = document.getElementById('widgetToggleBtn');
+  var widget  = document.getElementById('scanner-widget');
+  var screens = [idle,picker,welcome,err];
+  var scanner=null,scanning=false,busy=false,hwBuf='',hwTs=0;
+  var DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  var MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
-    function showResult(type, html) {
-      resultBox.classList.remove('success', 'error');
-      resultBox.classList.add('show', type);
-      resultBox.innerHTML = html;
-      if (resultPlaceholder) resultPlaceholder.style.display = 'none';
+  function show(el){ screens.forEach(function(s){s.style.display='none';}); el.style.display='flex'; }
+  function pad(n){ return String(n).padStart(2,'0'); }
+
+  /* Clock */
+  function tick(){
+    var d=new Date();
+    if(clock) clock.textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+    if(clockD) clockD.textContent=DAYS[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+  }
+  tick(); setInterval(tick,1000);
+
+  /* Fullscreen */
+  var btnFs=document.getElementById('btnFs'),fsIcon=document.getElementById('fsIcon');
+  function isFs(){return!!(document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement);}
+  function enterFs(){var e=document.documentElement;if(e.requestFullscreen)e.requestFullscreen();else if(e.webkitRequestFullscreen)e.webkitRequestFullscreen();else if(e.mozRequestFullScreen)e.mozRequestFullScreen();}
+  function exitFs(){if(document.exitFullscreen)document.exitFullscreen();else if(document.webkitExitFullscreen)document.webkitExitFullscreen();else if(document.mozCancelFullScreen)document.mozCancelFullScreen();}
+  function syncFs(){fsIcon.className=isFs()?'bi bi-fullscreen-exit':'bi bi-fullscreen';btnFs.title=isFs()?'Exit Fullscreen':'Fullscreen';}
+  (function(){if(document.readyState==='complete'||document.readyState==='interactive'){enterFs();}else{document.addEventListener('DOMContentLoaded',enterFs);}})();
+  btnFs.addEventListener('click',function(){if(isFs())exitFs();else enterFs();});
+  document.addEventListener('fullscreenchange',syncFs);document.addEventListener('webkitfullscreenchange',syncFs);
+  window.addEventListener('pagehide',function(){if(isFs())exitFs();});
+  window.addEventListener('beforeunload',function(){if(isFs())exitFs();});
+
+  /* ── Logo marquee ──────────────────────────── */
+  function buildMarquee(){
+    var track=document.getElementById('logoTrack');
+    if(!track) return;
+    /* hapus clone lama */
+    Array.prototype.slice.call(track.querySelectorAll('[data-clone]')).forEach(function(n){n.parentNode.removeChild(n);});
+    var origNodes=Array.prototype.slice.call(track.childNodes).filter(function(n){return n.nodeType===1;});
+    if(!origNodes.length) return;
+    var strip=track.parentElement;
+    var needed=(strip?strip.clientWidth:window.innerWidth)*2.5;
+    var iter=0;
+    while(track.scrollWidth<needed&&iter<10){
+      var sep=document.createElement('div');
+      sep.className='logo-sep';sep.setAttribute('aria-hidden','true');sep.setAttribute('data-clone','1');
+      track.appendChild(sep);
+      origNodes.forEach(function(n){
+        var c=n.cloneNode(true);c.setAttribute('data-clone','1');c.setAttribute('aria-hidden','true');
+        if(c.classList&&!c.classList.contains('logo-sep')){c.querySelectorAll('img').forEach(function(img){img.alt='';});}
+        track.appendChild(c);
+      });
+      iter++;
     }
+  }
+  buildMarquee();
+  window.addEventListener('load',buildMarquee);
+  window.addEventListener('resize',function(){
+    var t=document.getElementById('logoTrack');
+    if(t){t.style.animation='none';void t.offsetWidth;t.style.animation='';}
+    buildMarquee();
+  });
 
-    function escapeHtml(text) {
-      return String(text == null ? '' : text)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-        .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-    }
+  /* Widget */
+  wToggle.addEventListener('click',function(){widget.classList.toggle('collapsed');});
 
-    function normalizeGender(raw) {
-      var v = String(raw || '').toLowerCase().trim();
-      if (['male','m','laki-laki','laki'].indexOf(v) !== -1) return 'male';
-      if (['female','f','perempuan','wanita'].indexOf(v) !== -1) return 'female';
-      return 'unknown';
-    }
+  /* Utils */
+  function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
+  function gN(r){var v=String(r||'').toLowerCase().trim();return['male','m','laki-laki','laki'].indexOf(v)!==-1?'male':['female','f','perempuan','wanita'].indexOf(v)!==-1?'female':'unknown';}
+  function gL(g){return g==='male'?'Laki-laki':g==='female'?'Perempuan':'Unknown';}
+  function gI(g){return g==='male'?'bi-gender-male':g==='female'?'bi-gender-female':'bi-gender-ambiguous';}
+  function gA(g){return g==='female'?'/assets/img/perempuan.png':'/assets/img/laki.png';}
+  function showErr(m){errMsg.textContent=m||'Terjadi kesalahan.';show(err);}
 
-    function genderLabel(g) {
-      return g === 'male' ? 'Male' : g === 'female' ? 'Female' : 'Unknown';
-    }
+  function showPicker(data,token){
+    var att=Array.isArray(data.attendees)?data.attendees:[];
+    var total=Number(data.total_tickets||att.length||0),checked=Number(data.checked_in_count||0),remain=Number(data.remaining_count||0);
+    var g=gN(data.order_gender);
+    pOrder.innerHTML='<div class="picker-avatar '+g+'"><img src="'+gA(g)+'" alt=""></div>'+
+      '<div class="picker-order-info"><div class="picker-order-name">'+esc(data.order_name||'-')+'</div>'+
+      '<div class="picker-order-meta"><span class="tag">#'+esc(String(data.order_id||'-'))+'</span>'+
+      '<span class="tag '+g+'"><i class="bi '+gI(g)+'"></i> '+esc(gL(g))+'</span>'+
+      '<span class="tag"><i class="bi bi-ticket-perforated"></i> '+total+'</span>'+
+      '<span class="tag"><i class="bi bi-check-circle"></i> '+checked+' hadir</span>'+
+      (remain>0?'<span class="tag"><i class="bi bi-hourglass-split"></i> '+remain+' sisa</span>':'')+
+      '</div></div>';
+    pList.innerHTML=att.map(function(a,i){
+      var done=!!a.checked_in_at,pkg=a.package?'<span class="picker-package">'+esc(a.package)+'</span>':'';
+      if(done) return '<div class="picker-row done"><div class="picker-row-left"><div class="picker-num done">'+(i+1)+'</div><div class="picker-name done">'+esc(a.name||'-')+'</div>'+pkg+'</div><span class="done-badge"><i class="bi bi-check-lg"></i> Sudah hadir</span></div>';
+      return '<div class="picker-row pending"><div class="picker-row-left"><div class="picker-num pending">'+(i+1)+'</div><div class="picker-name">'+esc(a.name||'-')+'</div>'+pkg+'</div>'+
+        '<button type="button" class="btn-checkin do-checkin" data-id="'+Number(a.id||0)+'" data-token="'+esc(token)+'" data-name="'+esc(a.name||'-')+'"><i class="bi bi-person-check"></i> Check-in</button></div>';
+    }).join('');
+    pList.querySelectorAll('.do-checkin').forEach(function(b){
+      b.addEventListener('click',function(){doCheckin(b.getAttribute('data-token'),Number(b.getAttribute('data-id')),b.getAttribute('data-name'));});
+    });
+    picker.scrollTop=0;
+    show(picker);
+  }
 
-    function genderAvatarSrc(g) {
-      return g === 'female' ? '/assets/img/padelpr..png' : '/assets/img/padellaki.png';
-    }
+  function showWelcome(data,fb){
+    var name=data.name||fb||'-',g=gN(data.gender);
+    welcome.style.animation='none';void welcome.offsetWidth;welcome.style.animation='';
+    var wa=document.getElementById('welcomeAvatar'),wi=document.getElementById('welcomeImg');
+    if(wa) wa.className='welcome-avatar '+g;
+    if(wi) wi.src=gA(g);
+    wName.textContent=name;
+    if(wPkg){if(data.package){wPkg.textContent=data.package;wPkg.style.display='block';}else{wPkg.textContent='';wPkg.style.display='none';}}
+    show(welcome);
+    clearTimeout(window._wt);
+    window._wt=setTimeout(function(){show(idle);},60000);
+  }
 
-    function genderIconClass(g) {
-      return g === 'male' ? 'bi-gender-male' : g === 'female' ? 'bi-gender-female' : 'bi-gender-ambiguous';
-    }
-
-    function renderProfileCard(name, role, gender, stats) {
-      var g = normalizeGender(gender);
-      var s = stats || {};
-      return '<div class="profile-card">' +
-        '<div class="profile-avatar ' + g + '"><img class="avatar-img" src="' + genderAvatarSrc(g) + '" alt="' + escapeHtml(genderLabel(g)) + '"></div>' +
-        '<div class="profile-body">' +
-          '<p class="profile-name">' + escapeHtml(name || '-') + '</p>' +
-          '<p class="profile-role">' + escapeHtml(role || '') +
-            ' <span class="gender-chip ' + g + '"><i class="bi ' + genderIconClass(g) + '"></i> ' + escapeHtml(genderLabel(g)) + '</span>' +
-          '</p>' +
-          '<div class="profile-kpis">' +
-            '<span class="mini-kpi"><i class="bi bi-ticket-perforated"></i> ' + escapeHtml(String(s.total || 0)) + ' tiket</span>' +
-            '<span class="mini-kpi"><i class="bi bi-check-circle"></i> ' + escapeHtml(String(s.checked || 0)) + ' hadir</span>' +
-            '<span class="mini-kpi"><i class="bi bi-hourglass-split"></i> ' + escapeHtml(String(s.remaining || 0)) + ' sisa</span>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-    }
-
-    function renderAttendeeList(attendees, cleanToken) {
-      if (!attendees || !attendees.length) return '<p style="color:var(--muted);font-size:13px;margin:0;">Tidak ada data attendee.</p>';
-      return '<div class="attendee-list">' + attendees.map(function(a) {
-        var isChecked = !!(a.checked_in_at);
-        if (isChecked) {
-          return '<div class="attendee-item checked">' +
-            '<div class="attendee-item-left"><i class="bi bi-person-check-fill"></i><span>' + escapeHtml(a.name || '-') + '</span></div>' +
-            '<span class="checked-stamp"><i class="bi bi-check-lg"></i> Sudah hadir</span>' +
-          '</div>';
-        }
-        return '<div class="attendee-item" style="background:#f5f9ff;border-color:#c8d9f0;color:var(--text);">' +
-          '<div class="attendee-item-left"><i class="bi bi-person"></i><span>' + escapeHtml(a.name || '-') + '</span></div>' +
-          '<button type="button" class="btn-attendee-checkin attendee-checkin-btn"' +
-            ' data-attendee-id="' + Number(a.id || 0) + '"' +
-            ' data-token="' + escapeHtml(cleanToken) + '"' +
-            ' data-name="' + escapeHtml(a.name || '-') + '">' +
-            '<i class="bi bi-person-check"></i> Check-in' +
-          '</button>' +
-        '</div>';
-      }).join('') + '</div>';
-    }
-
-    function renderHistory() {
-      if (!historyEmpty || !historyList) return;
-      var count = scanHistory.length;
-      if (historyCount) historyCount.textContent = count;
-      if (!count) {
-        historyEmpty.style.display = '';
-        historyList.style.display = 'none';
-        historyList.innerHTML = '';
-        return;
-      }
-      historyEmpty.style.display = 'none';
-      historyList.style.display = 'grid';
-      historyList.innerHTML = scanHistory.map(function(item, idx) {
-        return '<li class="history-item">' +
-          '<div class="history-item-num">' + (count - idx) + '</div>' +
-          '<div class="history-item-body">' +
-            '<div class="history-item-name">' + escapeHtml(item.name || '-') + '</div>' +
-            '<div class="history-item-meta">Order #' + escapeHtml(String(item.order_id || '-')) + ' &bull; ' + escapeHtml(item.time || '-') + '</div>' +
-          '</div>' +
-          '<i class="bi bi-check-circle-fill" style="color:#2ea85a;font-size:15px;flex-shrink:0;"></i>' +
-        '</li>';
-      }).join('');
-    }
-
-    function processHardwareScan(raw) {
-      var value = String(raw || '').trim();
-      if (!value) return;
-      if (manualToken) manualToken.value = value;
-      verifyToken(value);
-    }
-
-    function setupHardwareScannerCapture() {
-      document.addEventListener('keydown', function (e) {
-        var key = e.key || '';
-        var now = Date.now();
-        if (['Shift','Control','Alt','Meta','CapsLock'].indexOf(key) !== -1) return;
-        if (now - hwLastTs > hwMaxGapMs) hwBuffer = '';
-        hwLastTs = now;
-        if (key === 'Enter') {
-          var isLikelyScanner = hwBuffer.length >= hwMinLen;
-          var fallbackInput = manualToken ? String(manualToken.value || '').trim() : '';
-          if (isLikelyScanner) { e.preventDefault(); processHardwareScan(hwBuffer); hwBuffer = ''; return; }
-          if (fallbackInput) { e.preventDefault(); processHardwareScan(fallbackInput); hwBuffer = ''; return; }
-          hwBuffer = ''; return;
-        }
-        if (key === 'Backspace') { hwBuffer = hwBuffer.slice(0, -1); return; }
-        if (key.length === 1) hwBuffer += key;
-      }, true);
-    }
-
-    function stopScanner() {
-      if (!scanner || !scanning) return Promise.resolve();
-      scanning = false;
-      if (qrIdlePlaceholder) qrIdlePlaceholder.style.display = '';
-      return scanner.stop().catch(function(){}).then(function() { return scanner.clear().catch(function(){}); });
-    }
-
-    function postJson(payload) {
-      var endpoint = manualForm.getAttribute('action') || window.location.pathname || '/admin/scan';
-      return fetch(endpoint, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload || {})
-      }).then(function(res) {
-        var ct = res.headers.get('content-type') || '';
-        if (ct.indexOf('application/json') === -1) {
-          return res.text().then(function(txt) {
-            var isLogin = txt.indexOf('Admin Login') !== -1 || txt.indexOf('/admin/login') !== -1;
-            if (isLogin || res.status === 401 || res.status === 403) throw new Error('Sesi admin habis. Silakan login lagi.');
-            throw new Error('Server balas non-JSON (HTTP ' + res.status + ').');
+  function post(payload){
+    var url=(mForm&&mForm.getAttribute('action'))||'/admin/scan';
+    return fetch(url,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+      .then(function(r){
+        var ct=r.headers.get('content-type')||'';
+        if(!ct.includes('application/json')){
+          return r.text().then(function(t){
+            if(t.includes('Admin Login')||r.status===401||r.status===403) throw new Error('Sesi admin habis. Silakan login ulang.');
+            throw new Error('Server error (HTTP '+r.status+').');
           });
         }
-        return res.json();
+        return r.json();
       });
+  }
+
+  function verify(raw){
+    if(busy)return;busy=true;
+    post({mode:'resolve',token:String(raw||'').trim()})
+      .then(function(d){
+        if(!d||!d.ok){showErr((d&&d.message)||'Token tidak valid.');return;}
+        var att=Array.isArray(d.attendees)?d.attendees:[];
+        if(!att.length){showErr('Data attendee tidak ditemukan.');return;}
+        showPicker(d,String(raw||'').trim());
+      })
+      .catch(function(e){showErr(e&&e.message?e.message:'Gagal koneksi ke server.');})
+      .finally(function(){busy=false;});
+  }
+
+  function doCheckin(token,id,name){
+    if(busy)return;busy=true;
+    post({mode:'checkin',token:token||'',attendee_id:id||0})
+      .then(function(d){
+        if(!d||!d.ok){showErr((d&&d.message)||'Check-in gagal.');return;}
+        showWelcome(d,name);if(mInput)mInput.value='';
+      })
+      .catch(function(e){showErr(e&&e.message?e.message:'Gagal koneksi ke server.');})
+      .finally(function(){busy=false;});
+  }
+
+  function stopCam(){
+    if(!scanner||!scanning)return Promise.resolve();
+    scanning=false;if(scanLine)scanLine.classList.remove('on');if(qrIdle)qrIdle.style.display='';
+    return scanner.stop().catch(function(){}).then(function(){return scanner.clear().catch(function(){});});
+  }
+
+  btnStart.addEventListener('click',function(){
+    if(scanning)return;
+    if(typeof Html5Qrcode==='undefined'){showErr('Library scanner gagal dimuat.');return;}
+    if(qrIdle)qrIdle.style.display='none';if(scanLine)scanLine.classList.add('on');
+    scanner=new Html5Qrcode('qr-reader');
+    scanner.start({facingMode:'environment'},{fps:10,qrbox:160},
+      function(text){stopCam().finally(function(){verify(text);});},
+      function(){}
+    ).then(function(){scanning=true;})
+    .catch(function(){if(qrIdle)qrIdle.style.display='';if(scanLine)scanLine.classList.remove('on');showErr('Izinkan akses kamera atau gunakan input manual.');});
+  });
+  btnStop.addEventListener('click',stopCam);
+  mForm.addEventListener('submit',function(e){e.preventDefault();verify(mInput.value||'');});
+
+  /* Barcode gun */
+  document.addEventListener('keydown',function(e){
+    var k=e.key||'',now=Date.now();
+    if(['Shift','Control','Alt','Meta','CapsLock'].indexOf(k)!==-1)return;
+    if(now-hwTs>70)hwBuf='';hwTs=now;
+    if(k==='Enter'){
+      if(hwBuf.length>=10){e.preventDefault();verify(hwBuf);hwBuf='';return;}
+      var v=mInput?mInput.value.trim():'';
+      if(v){e.preventDefault();verify(v);hwBuf='';return;}
+      hwBuf='';return;
     }
+    if(k==='Backspace'){hwBuf=hwBuf.slice(0,-1);return;}
+    if(k.length===1)hwBuf+=k;
+  },true);
 
-    function verifyToken(rawToken) {
-      if (submitting) return;
-      submitting = true;
-      var cleanToken = rawToken || '';
-      postJson({ mode: 'resolve', token: cleanToken })
-      .then(function(data) {
-        if (!data || !data.ok) {
-          showResult('error',
-            '<div class="result-error-msg">' +
-              '<i class="bi bi-exclamation-triangle-fill"></i>' +
-              '<div><strong>Verifikasi Gagal</strong><br>' + escapeHtml((data && data.message) || 'Token tidak valid.') + '</div>' +
-            '</div>'
-          );
-          return;
-        }
+  if(mInput&&mInput.value)verify(mInput.value);
+})();
+</script>
 
-        var attendees = Array.isArray(data.attendees) ? data.attendees : [];
-        var total = Number(data.total_tickets || attendees.length || 0);
-        var checked = Number(data.checked_in_count || 0);
-        var remain = Number(data.remaining_count || 0);
-        var orderGender = normalizeGender(data.order_gender);
+<script>
+(function () {
+  var adVideoSrc = <?= json_encode($adVideoSrc) ?>;
+  if (!adVideoSrc) return;
 
-        var metaHtml = '<div class="result-meta">' +
-          '<span class="result-meta-chip"><i class="bi bi-hash"></i> Order #' + escapeHtml(String(data.order_id || '-')) + '</span>' +
-          '<span class="result-meta-chip"><i class="bi bi-ticket"></i> ' + total + ' tiket</span>' +
-          '<span class="result-meta-chip"><i class="bi bi-check-circle"></i> ' + checked + ' hadir</span>' +
-          '<span class="result-meta-chip"><i class="bi bi-hourglass-split"></i> ' + remain + ' sisa</span>' +
-        '</div>';
+  var adOverlay = document.getElementById('adOverlay');
+  var adVideoPlayer = document.getElementById('adVideoPlayer');
+  var adIframePlayer = document.getElementById('adIframePlayer');
+  var idleDelay = 25000;
+  var idleTimer = null;
 
-        var profileHtml = renderProfileCard(data.order_name || '-', 'Order Owner', orderGender, { total: total, checked: checked, remaining: remain });
+  function isRemoteVideo(url) {
+    return typeof url === 'string' && /^https?:\\/\\//i.test(url);
+  }
 
-        if (!attendees.length) {
-          showResult('error', metaHtml + profileHtml + '<p style="margin:0;font-size:13px;color:#8f2e2e;">Data attendee tidak ditemukan.</p>');
-          return;
-        }
+  function appendQuery(url, params) {
+    if (!params) return url;
+    return url + (url.indexOf('?') === -1 ? '?' : '&') + params;
+  }
 
-        var attendeeSection = '<div class="section-label"><i class="bi bi-people"></i> Pilih Attendee</div>' +
-          renderAttendeeList(attendees, cleanToken);
-
-        showResult('success', metaHtml + profileHtml + attendeeSection);
-
-        resultBox.querySelectorAll('.attendee-checkin-btn').forEach(function(btn) {
-          btn.addEventListener('click', function() {
-            submitCheckin(
-              btn.getAttribute('data-token') || '',
-              Number(btn.getAttribute('data-attendee-id') || 0),
-              btn.getAttribute('data-name') || '-'
-            );
-          });
-        });
-      })
-      .catch(function(err) {
-        showResult('error',
-          '<div class="result-error-msg"><i class="bi bi-wifi-off"></i><div><strong>Koneksi Error</strong><br>' + escapeHtml(err && err.message ? err.message : 'Gagal koneksi ke server.') + '</div></div>'
-        );
-      })
-      .finally(function() { submitting = false; });
+  function buildEmbedUrl(url) {
+    if (!url) return '';
+    var ytMatch = url.match(/(?:youtu\\.be\\/|youtube\\.com\\/(?:watch\\?(?:.*&)?v=|embed\\/))([A-Za-z0-9_-]{11})/i);
+    if (ytMatch && ytMatch[1]) {
+      return appendQuery('https://www.youtube.com/embed/' + ytMatch[1], 'autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&playsinline=1');
     }
-
-    function submitCheckin(token, attendeeId, attendeeName) {
-      if (submitting) return;
-      submitting = true;
-      postJson({ mode: 'checkin', token: token || '', attendee_id: attendeeId || 0 })
-      .then(function(data) {
-        if (!data || !data.ok) {
-          showResult('error',
-            '<div class="result-error-msg"><i class="bi bi-exclamation-triangle-fill"></i><div><strong>Check-in Gagal</strong><br>' + escapeHtml((data && data.message) || 'Gagal.') + '</div></div>'
-          );
-          return;
-        }
-        var checkedGender = normalizeGender(data.gender);
-        var successBanner = '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:#c6f0d6;border:1px solid #6dc996;margin-bottom:12px;">' +
-          '<i class="bi bi-check-circle-fill" style="font-size:22px;color:#1a6636;flex-shrink:0;"></i>' +
-          '<div><div style="font-size:15px;font-weight:800;color:#1a6636;">Check-In Berhasil!</div>' +
-          '<div style="font-size:12.5px;color:#2a7a45;font-weight:500;">' + escapeHtml(data.checked_in_at || '') + '</div></div>' +
-        '</div>';
-        var profileHtml = renderProfileCard('Welcome, ' + (data.name || attendeeName || '-'), 'Confirmed Attendee', checkedGender, { total: 1, checked: 1, remaining: 0 });
-        var nextAction = '<div style="margin-top:12px;padding:11px 14px;border-radius:11px;background:#eef4ff;border:1px solid #c8d9f5;font-size:13px;font-weight:600;color:var(--primary);display:flex;align-items:center;gap:8px;">' +
-          '<i class="bi bi-qr-code-scan"></i> Scan ulang QR untuk attendee berikutnya' +
-        '</div>';
-
-        showResult('success', successBanner + profileHtml + nextAction);
-
-        scanHistory.unshift({ order_id: data.order_id || '-', name: data.name || attendeeName || '-', time: data.checked_in_at || '-' });
-        renderHistory();
-        if (manualToken) manualToken.value = '';
-      })
-      .catch(function(err) {
-        showResult('error',
-          '<div class="result-error-msg"><i class="bi bi-wifi-off"></i><div><strong>Koneksi Error</strong><br>' + escapeHtml(err && err.message ? err.message : 'Gagal koneksi ke server.') + '</div></div>'
-        );
-      })
-      .finally(function() { submitting = false; });
+    var igMatch = url.match(/instagram\\.com\\/reel\\/([^/?#&]+)/i);
+    if (igMatch && igMatch[1]) {
+      return appendQuery('https://www.instagram.com/reel/' + igMatch[1] + '/embed/', 'autoplay=1&mute=1');
     }
+    return appendQuery(url, 'autoplay=1&mute=1');
+  }
 
-    function startScanner() {
-      if (scanning) return;
-      if (typeof Html5Qrcode === 'undefined') {
-        showResult('error', '<div class="result-error-msg"><i class="bi bi-exclamation-triangle-fill"></i><div><strong>Error</strong><br>Library scanner gagal dimuat.</div></div>');
-        return;
+  function showAdOverlay() {
+    if (!adOverlay) return;
+    if (isRemoteVideo(adVideoSrc)) {
+      if (adIframePlayer) {
+        adIframePlayer.src = buildEmbedUrl(adVideoSrc);
+        adIframePlayer.style.display = '';
       }
-      if (qrIdlePlaceholder) qrIdlePlaceholder.style.display = 'none';
-      scanner = new Html5Qrcode('qr-reader');
-      scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: 240 },
-        function(decodedText) {
-          stopScanner().finally(function() { verifyToken(decodedText || ''); });
-        },
-        function() {}
-      ).then(function() {
-        scanning = true;
-      }).catch(function() {
-        if (qrIdlePlaceholder) qrIdlePlaceholder.style.display = '';
-        showResult('error', '<div class="result-error-msg"><i class="bi bi-camera-video-off"></i><div><strong>Kamera Error</strong><br>Izinkan akses kamera atau gunakan verify manual.</div></div>');
-      });
+      if (adVideoPlayer) adVideoPlayer.style.display = 'none';
+    } else {
+      if (adVideoPlayer) {
+        adVideoPlayer.src = adVideoSrc;
+        adVideoPlayer.style.display = '';
+        adVideoPlayer.pause();
+        adVideoPlayer.load();
+        adVideoPlayer.play().catch(function () {});
+      }
+      if (adIframePlayer) {
+        adIframePlayer.src = '';
+        adIframePlayer.style.display = 'none';
+      }
     }
+    adOverlay.classList.add('is-visible');
+    adOverlay.setAttribute('aria-hidden', 'false');
+  }
 
-    startBtn.addEventListener('click', startScanner);
-    stopBtn.addEventListener('click', stopScanner);
-    manualForm.addEventListener('submit', function(e) { e.preventDefault(); verifyToken(manualToken.value || ''); });
+  function hideAdOverlay() {
+    if (!adOverlay) return;
+    adOverlay.classList.remove('is-visible');
+    adOverlay.setAttribute('aria-hidden', 'true');
+    if (adVideoPlayer) {
+      adVideoPlayer.pause();
+      adVideoPlayer.removeAttribute('src');
+      adVideoPlayer.load();
+      adVideoPlayer.style.display = 'none';
+    }
+    if (adIframePlayer) {
+      adIframePlayer.src = '';
+      adIframePlayer.style.display = 'none';
+    }
+  }
 
-    if (manualToken.value) verifyToken(manualToken.value);
-    setupHardwareScannerCapture();
-    renderHistory();
-  })();
+  function scheduleAd() {
+    if (idleTimer) window.clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(showAdOverlay, idleDelay);
+  }
+
+  function handleUserActivity() {
+    if (adOverlay && adOverlay.classList.contains('is-visible')) {
+      hideAdOverlay();
+    }
+    scheduleAd();
+  }
+
+  ['mousemove', 'mousedown', 'touchstart', 'keydown'].forEach(function (evt) {
+    document.addEventListener(evt, handleUserActivity, { passive: true });
+  });
+
+  if (adOverlay) {
+    adOverlay.addEventListener('click', function () {
+      hideAdOverlay();
+      scheduleAd();
+    });
+  }
+
+  scheduleAd();
+})();
 </script>
 
 <?php render_footer(['isAdmin' => true]); ?>
