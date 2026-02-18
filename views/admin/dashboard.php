@@ -237,17 +237,17 @@ if ($selectedStatus === 'paid' || $selectedStatus === 'accepted' || $selectedSta
 elseif ($selectedStatus === 'pending') { $whereParts[] = "o.status = 'pending'"; }
 $whereSql = ' WHERE ' . implode(' AND ', $whereParts);
 
-$summarySql = "SELECT
-    COALESCE(SUM(CASE WHEN o.status = 'accepted' THEN 1 ELSE 0 END), 0) AS accepted_orders,
-    COALESCE(SUM(CASE WHEN o.status = 'accepted' THEN o.total ELSE 0 END), 0) AS total_revenue
+$acceptedSummaryStmt = $db->prepare("SELECT
+    COUNT(*) AS accepted_orders,
+    COALESCE(SUM(o.total), 0) AS total_revenue
     FROM orders o
-    JOIN users u ON u.id = o.user_id" . $whereSql;
-$summaryStmt = $db->prepare($summarySql);
-$summaryStmt->execute($params);
-$summary = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    JOIN users u ON u.id = o.user_id
+    WHERE o.status = 'accepted'");
+$acceptedSummaryStmt->execute();
+$acceptedSummary = $acceptedSummaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-$totalOrders = (int)($summary['accepted_orders'] ?? 0);
-$totalRevenue = (int)($summary['total_revenue'] ?? 0);
+$totalOrders = (int)($acceptedSummary['accepted_orders'] ?? 0);
+$totalRevenue = (int)($acceptedSummary['total_revenue'] ?? 0);
 
 $packageSalesMap = [];
 foreach ($packages as $pkg) {

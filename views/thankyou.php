@@ -217,7 +217,7 @@ unset($_SESSION['order_draft'], $_SESSION['order_id']);
     <section class="thankyou-card fade-up">
       <div class="pill"><i class="bi bi-check-circle"></i> Registration Complete</div>
       <div class="thankyou-title">Thank You for Registering</div>
-      <div class="thankyou-copy">We will contact you via WhatsApp to confirm your spot.</div>
+      <div class="thankyou-copy">We will contact you via WhatsApp and Gmail to confirm your spot.</div>
       <div class="venue-card">
         <div><i class="bi bi-geo-alt-fill"></i> <strong>Venue</strong></div>
         <div><i class="bi bi-building"></i> MY PADEL</div>
