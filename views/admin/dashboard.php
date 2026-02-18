@@ -23,6 +23,19 @@ $selectedStatus = in_array($selectedStatusRaw, $allowedStatusFilters, true) ? $s
 if ($selectedDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)) {
     $selectedDate = '';
 }
+$sponsorsTableSql = "CREATE TABLE IF NOT EXISTS sponsors (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    website_url VARCHAR(255) NULL,
+    logo_path VARCHAR(255) NOT NULL,
+    created_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+$adsTableSql = "CREATE TABLE IF NOT EXISTS ads (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    video_path VARCHAR(255) NOT NULL,
+    created_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 ensure_session();
 if (!empty($_SESSION['dashboard_flash']) && is_array($_SESSION['dashboard_flash'])) {
@@ -153,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $flash['error'] = 'Failed to upload sponsor logo.';
                     } else {
                         try {
-                            $db->exec("CREATE TABLE IF NOT EXISTS sponsors (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL, website_url VARCHAR(255) NULL, logo_path VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                            $db->exec($sponsorsTableSql);
                             $insertSponsor = $db->prepare('INSERT INTO sponsors (name, website_url, logo_path, created_at) VALUES (?, ?, ?, ?)');
                             $insertSponsor->execute([$sponsorName, $sponsorLink !== '' ? $sponsorLink : null, $storedLogoPath, date('Y-m-d H:i:s')]);
                             $flash['success'] = 'Sponsor added successfully.';
@@ -163,6 +176,148 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                 }
+            }
+        }
+    } elseif ($dashboardAction === 'remove_sponsor') {
+        $sponsorId = (int)($_POST['sponsor_id'] ?? 0);
+
+        if ($sponsorId <= 0) {
+            $flash['error'] = 'Data sponsor tidak valid.';
+        } else {
+            try {
+                $db->exec($sponsorsTableSql);
+                $findSponsor = $db->prepare('SELECT logo_path FROM sponsors WHERE id = ? LIMIT 1');
+                $findSponsor->execute([$sponsorId]);
+                $sponsorRow = $findSponsor->fetch(PDO::FETCH_ASSOC);
+                if (!$sponsorRow) {
+                    $flash['error'] = 'Sponsor tidak ditemukan.';
+                } else {
+                    $deleteSponsor = $db->prepare('DELETE FROM sponsors WHERE id = ? LIMIT 1');
+                    $deleteSponsor->execute([$sponsorId]);
+                    if ($deleteSponsor->rowCount() > 0) {
+                        $logoPath = trim((string)($sponsorRow['logo_path'] ?? ''));
+                        if (preg_match('#^/uploads/sponsors/[A-Za-z0-9._-]+$#', $logoPath)) {
+                            $logoFilePath = __DIR__ . '/../../' . ltrim($logoPath, '/');
+                            if (is_file($logoFilePath)) {
+                                @unlink($logoFilePath);
+                            }
+                        }
+                        $flash['success'] = 'Sponsor berhasil dihapus.';
+                    } else {
+                        $flash['error'] = 'Sponsor tidak ditemukan.';
+                    }
+                }
+            } catch (Throwable $e) {
+                $flash['error'] = 'Gagal menghapus sponsor.';
+            }
+        }
+    } elseif ($dashboardAction === 'create_ad') {
+        $adTitle = trim((string)($_POST['ad_title'] ?? ''));
+        $adUrl = trim((string)($_POST['ad_url'] ?? ''));
+        $videoFile = $_FILES['ad_video'] ?? null;
+
+        if ($adTitle === '') {
+            $flash['error'] = 'Judul iklan wajib diisi.';
+        } elseif (mb_strlen($adTitle) > 150) {
+            $flash['error'] = 'Judul iklan terlalu panjang.';
+        } elseif ($adUrl === '' && (!is_array($videoFile) || (int)($videoFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK)) {
+            $flash['error'] = 'Isi link YouTube/Reels IG atau upload file video.';
+        } else {
+            $storedVideoPath = '';
+            if ($adUrl !== '') {
+                if (!filter_var($adUrl, FILTER_VALIDATE_URL)) {
+                    $flash['error'] = 'Link iklan tidak valid.';
+                } else {
+                    $urlHost = strtolower((string)(parse_url($adUrl, PHP_URL_HOST) ?? ''));
+                    $urlPath = strtolower((string)(parse_url($adUrl, PHP_URL_PATH) ?? ''));
+                    $isYoutube = in_array($urlHost, ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtu.be'], true);
+                    $isInstagramReel = in_array($urlHost, ['instagram.com', 'www.instagram.com', 'm.instagram.com'], true)
+                        && (strpos($urlPath, '/reel/') === 0 || strpos($urlPath, '/reels/') === 0);
+                    if (!$isYoutube && !$isInstagramReel) {
+                        $flash['error'] = 'Link harus dari YouTube atau Instagram Reels.';
+                    } else {
+                        $storedVideoPath = $adUrl;
+                    }
+                }
+            } else {
+                $tmpPath = (string)($videoFile['tmp_name'] ?? '');
+                $mime = '';
+                if ($tmpPath !== '' && is_file($tmpPath)) {
+                    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                    if ($finfo) { $mime = (string)finfo_file($finfo, $tmpPath); finfo_close($finfo); }
+                }
+                $allowedMimes = [
+                    'video/mp4' => 'mp4',
+                    'video/webm' => 'webm',
+                    'video/ogg' => 'ogv',
+                    'video/quicktime' => 'mov',
+                ];
+                if (!isset($allowedMimes[$mime])) {
+                    $flash['error'] = 'Video harus format MP4, WEBM, OGV, atau MOV.';
+                } elseif ((int)($videoFile['size'] ?? 0) > 52428800) {
+                    $flash['error'] = 'Ukuran video maksimal 50MB.';
+                } else {
+                    $uploadDir = __DIR__ . '/../../uploads/ads';
+                    if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+                        $flash['error'] = 'Gagal menyiapkan folder upload iklan.';
+                    } else {
+                        $newFileName = 'ad-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.' . $allowedMimes[$mime];
+                        $targetPath = $uploadDir . '/' . $newFileName;
+                        $storedVideoPath = '/uploads/ads/' . $newFileName;
+                        if (!move_uploaded_file($tmpPath, $targetPath)) {
+                            $flash['error'] = 'Gagal upload video iklan.';
+                            $storedVideoPath = '';
+                        }
+                    }
+                }
+            }
+
+            if ($flash['error'] === '' && $storedVideoPath !== '') {
+                try {
+                    $db->exec($adsTableSql);
+                    $insertAd = $db->prepare('INSERT INTO ads (title, video_path, created_at) VALUES (?, ?, ?)');
+                    $insertAd->execute([$adTitle, $storedVideoPath, date('Y-m-d H:i:s')]);
+                    $flash['success'] = 'Iklan berhasil ditambahkan.';
+                } catch (Throwable $e) {
+                    if (strpos($storedVideoPath, '/uploads/ads/') === 0) {
+                        $uploadedFilePath = __DIR__ . '/../../' . ltrim($storedVideoPath, '/');
+                        if (is_file($uploadedFilePath)) @unlink($uploadedFilePath);
+                    }
+                    $flash['error'] = 'Gagal menyimpan data iklan.';
+                }
+            }
+        }
+    } elseif ($dashboardAction === 'remove_ad') {
+        $adId = (int)($_POST['ad_id'] ?? 0);
+
+        if ($adId <= 0) {
+            $flash['error'] = 'Data iklan tidak valid.';
+        } else {
+            try {
+                $db->exec($adsTableSql);
+                $findAd = $db->prepare('SELECT video_path FROM ads WHERE id = ? LIMIT 1');
+                $findAd->execute([$adId]);
+                $adRow = $findAd->fetch(PDO::FETCH_ASSOC);
+                if (!$adRow) {
+                    $flash['error'] = 'Iklan tidak ditemukan.';
+                } else {
+                    $deleteAd = $db->prepare('DELETE FROM ads WHERE id = ? LIMIT 1');
+                    $deleteAd->execute([$adId]);
+                    if ($deleteAd->rowCount() > 0) {
+                        $videoPath = trim((string)($adRow['video_path'] ?? ''));
+                        if (preg_match('#^/uploads/ads/[A-Za-z0-9._-]+$#', $videoPath)) {
+                            $videoFilePath = __DIR__ . '/../../' . ltrim($videoPath, '/');
+                            if (is_file($videoFilePath)) {
+                                @unlink($videoFilePath);
+                            }
+                        }
+                        $flash['success'] = 'Iklan berhasil dihapus.';
+                    } else {
+                        $flash['error'] = 'Iklan tidak ditemukan.';
+                    }
+                }
+            } catch (Throwable $e) {
+                $flash['error'] = 'Gagal menghapus iklan.';
             }
         }
     } else {
@@ -222,6 +377,22 @@ try {
     $adminNotificationEmails = $db->query('SELECT id, email, verified_at, created_at FROM admin_notification_emails ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     $adminNotificationEmails = [];
+}
+
+$dashboardSponsors = [];
+try {
+    $db->exec($sponsorsTableSql);
+    $dashboardSponsors = $db->query('SELECT id, name, website_url, logo_path, created_at FROM sponsors ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $dashboardSponsors = [];
+}
+
+$dashboardAds = [];
+try {
+    $db->exec($adsTableSql);
+    $dashboardAds = $db->query('SELECT id, title, video_path, created_at FROM ads ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $dashboardAds = [];
 }
 
 $packages = $db->query("SELECT id, name FROM packages ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
@@ -733,6 +904,326 @@ $extraHead = <<<'HTML'
   }
   #adminEmailModal .sponsor-form-actions .btn {
     min-width: 130px;
+  }
+
+  /* ─── Sponsor Modal (Manage List) ───────────────────────── */
+  #sponsorModal .sponsor-modal-card {
+    width: min(760px, 100%);
+  }
+  #sponsorModal .sponsor-manage-wrap {
+    display: grid;
+    gap: 12px;
+    padding: 16px 18px 18px;
+    max-height: calc(88vh - 74px);
+    overflow-y: auto;
+  }
+  #sponsorModal .sponsor-form {
+    padding: 0;
+    overflow: visible;
+    gap: 12px;
+  }
+  #sponsorModal .sponsor-manage-note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+    line-height: 1.45;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #f7faff;
+    border: 1px solid var(--stroke);
+  }
+  #sponsorModal .sponsor-manage-divider {
+    height: 1px;
+    border: 0;
+    margin: 2px 0;
+    background: var(--stroke);
+  }
+  #sponsorModal .sponsor-manage-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  #sponsorModal .sponsor-manage-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: var(--surface-2, #f8faff);
+  }
+  #sponsorModal .sponsor-manage-item-main {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #sponsorModal .sponsor-manage-logo {
+    width: 64px;
+    height: 42px;
+    border-radius: 8px;
+    border: 1px solid var(--stroke);
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex: 0 0 auto;
+  }
+  #sponsorModal .sponsor-manage-logo img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  #sponsorModal .sponsor-manage-meta {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+  #sponsorModal .sponsor-manage-meta strong {
+    font-size: 13px;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  #sponsorModal .sponsor-manage-meta span {
+    color: var(--muted);
+    font-size: 11.5px;
+    overflow-wrap: anywhere;
+  }
+  #sponsorModal .sponsor-manage-item form { margin: 0; }
+  #sponsorModal .sponsor-remove-btn {
+    height: 34px;
+    min-width: 34px;
+    padding: 0 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(193, 70, 70, 0.28);
+    background: rgba(211, 47, 47, 0.08);
+    color: #b33434;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  #sponsorModal .sponsor-remove-btn:hover {
+    transform: translateY(-1px);
+    background: rgba(211, 47, 47, 0.13);
+    border-color: rgba(193, 70, 70, 0.4);
+  }
+  #sponsorModal .sponsor-empty {
+    border: 1px dashed var(--stroke);
+    border-radius: 12px;
+    padding: 14px 12px;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* ─── Ads Modal (Manage List) ───────────────────────────── */
+  #adModal .sponsor-modal-card {
+    width: min(760px, 100%);
+  }
+  #adModal .ad-manage-wrap {
+    display: grid;
+    gap: 12px;
+    padding: 16px 18px 18px;
+    max-height: calc(88vh - 74px);
+    overflow-y: auto;
+  }
+  #adModal .sponsor-form {
+    padding: 0;
+    overflow: visible;
+    gap: 12px;
+  }
+  #adModal .ad-manage-note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+    line-height: 1.45;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #f7faff;
+    border: 1px solid var(--stroke);
+  }
+  #adModal .ad-manage-divider {
+    height: 1px;
+    border: 0;
+    margin: 2px 0;
+    background: var(--stroke);
+  }
+  #adModal .ad-manage-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  #adModal .ad-manage-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: var(--surface-2, #f8faff);
+  }
+  #adModal .ad-manage-item-main {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #adModal .ad-manage-video {
+    width: 84px;
+    height: 48px;
+    border-radius: 8px;
+    border: 1px solid var(--stroke);
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex: 0 0 auto;
+  }
+  #adModal .ad-manage-video video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  #adModal .ad-manage-link-preview {
+    width: 100%;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 4px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0d3f98;
+    text-decoration: none;
+    background: #eef4ff;
+  }
+  #adModal .ad-manage-link-preview:hover {
+    background: #dfeaff;
+  }
+  #adModal .ad-preview-box {
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    padding: 10px;
+    background: #f9fbff;
+    display: grid;
+    gap: 8px;
+  }
+  #adModal .ad-preview-head {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #adModal .ad-preview-media {
+    width: 100%;
+    border: 1px dashed var(--stroke);
+    border-radius: 10px;
+    background: #fff;
+    min-height: 170px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  #adModal .ad-preview-media iframe,
+  #adModal .ad-preview-media video {
+    width: 100%;
+    height: 100%;
+    min-height: 170px;
+    border: 0;
+    display: block;
+    background: #000;
+  }
+  #adModal .ad-preview-empty {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    padding: 16px 14px;
+    line-height: 1.45;
+  }
+  #adModal .ad-preview-note {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  #adModal .ad-preview-note.is-error {
+    color: #b33434;
+  }
+  #adModal .ad-manage-meta {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+  #adModal .ad-manage-meta strong {
+    font-size: 13px;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  #adModal .ad-manage-meta span {
+    color: var(--muted);
+    font-size: 11.5px;
+    overflow-wrap: anywhere;
+  }
+  #adModal .ad-manage-item form { margin: 0; }
+  #adModal .ad-remove-btn {
+    height: 34px;
+    min-width: 34px;
+    padding: 0 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(193, 70, 70, 0.28);
+    background: rgba(211, 47, 47, 0.08);
+    color: #b33434;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  #adModal .ad-remove-btn:hover {
+    transform: translateY(-1px);
+    background: rgba(211, 47, 47, 0.13);
+    border-color: rgba(193, 70, 70, 0.4);
+  }
+  #adModal .ad-empty {
+    border: 1px dashed var(--stroke);
+    border-radius: 12px;
+    padding: 14px 12px;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: center;
   }
 
   /* ─── Flash Messages ─────────────────────────────────────── */
@@ -1276,6 +1767,12 @@ $extraHead = <<<'HTML'
     #adminEmailModal .admin-email-item { align-items: flex-start; }
     #adminEmailModal .admin-email-remove-btn { width: 100%; }
     #adminEmailModal .admin-email-list { max-height: 190px; }
+    #sponsorModal .sponsor-manage-wrap { padding: 14px; }
+    #sponsorModal .sponsor-manage-item { align-items: flex-start; flex-direction: column; }
+    #sponsorModal .sponsor-remove-btn { width: 100%; }
+    #adModal .ad-manage-wrap { padding: 14px; }
+    #adModal .ad-manage-item { align-items: flex-start; flex-direction: column; }
+    #adModal .ad-remove-btn { width: 100%; }
 
     .order-card-actions .btn { font-size: 12px; }
   }
@@ -1324,6 +1821,9 @@ render_header([
           </button>
           <button class="btn primary" type="button" id="openSponsorModal">
             <i class="bi bi-building-add"></i> Tambah Sponsor
+          </button>
+          <button class="btn primary" type="button" id="openAdModal">
+            <i class="bi bi-badge-ad"></i> Tambah Iklan
           </button>
         </div>
       </div>
@@ -1756,33 +2256,190 @@ render_header([
         <h2 class="sponsor-modal-title" id="sponsorModalTitle"><i class="bi bi-building-add"></i> Tambah Sponsor</h2>
         <button class="sponsor-modal-close" type="button" id="closeSponsorModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
       </div>
-      <form class="sponsor-form" method="post" action="/admin/dashboard" enctype="multipart/form-data" id="sponsorForm">
-        <input type="hidden" name="dashboard_action" value="create_sponsor">
-        <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
-        <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
-        <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
-        <input type="hidden" name="name" value="<?= h($selectedName) ?>">
-        <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
-        <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
-        <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
-        <div class="sponsor-field">
-          <label for="sponsorName">Nama Sponsor</label>
-          <input id="sponsorName" type="text" name="sponsor_name" placeholder="Contoh: FCOM" required>
-        </div>
-        <div class="sponsor-field">
-          <label for="sponsorLink">Link Website <span style="font-weight:400;text-transform:none;">(opsional)</span></label>
-          <input id="sponsorLink" type="url" name="sponsor_link" placeholder="https://example.com">
-        </div>
-        <div class="sponsor-field">
-          <label for="sponsorLogo">Logo Sponsor</label>
-          <input id="sponsorLogo" type="file" name="sponsor_logo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
-          <p class="sponsor-help"><i class="bi bi-info-circle"></i> Format: JPG, PNG, WEBP</p>
-        </div>
+      <div class="sponsor-manage-wrap">
+        <p class="sponsor-manage-note">Total sponsor aktif: <strong><?= (int)count($dashboardSponsors) ?></strong></p>
+
+        <form class="sponsor-form" method="post" action="/admin/dashboard" enctype="multipart/form-data" id="sponsorForm">
+          <input type="hidden" name="dashboard_action" value="create_sponsor">
+          <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+          <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+          <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+          <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+          <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+          <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+          <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+          <div class="sponsor-field">
+            <label for="sponsorName">Nama Sponsor</label>
+            <input id="sponsorName" type="text" name="sponsor_name" placeholder="Contoh: FCOM" required>
+          </div>
+          <div class="sponsor-field">
+            <label for="sponsorLink">Link Website <span style="font-weight:400;text-transform:none;">(opsional)</span></label>
+            <input id="sponsorLink" type="url" name="sponsor_link" placeholder="https://example.com">
+          </div>
+          <div class="sponsor-field">
+            <label for="sponsorLogo">Logo Sponsor</label>
+            <input id="sponsorLogo" type="file" name="sponsor_logo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
+            <p class="sponsor-help"><i class="bi bi-info-circle"></i> Format: JPG, PNG, WEBP</p>
+          </div>
+          <div class="sponsor-form-actions">
+            <button class="btn primary" type="submit"><i class="bi bi-check-circle"></i> Simpan</button>
+          </div>
+        </form>
+
+        <hr class="sponsor-manage-divider">
+
+        <?php if ($dashboardSponsors): ?>
+          <ul class="sponsor-manage-list">
+            <?php foreach ($dashboardSponsors as $sponsorRow): ?>
+              <?php
+                $rawLogoPath = trim((string)($sponsorRow['logo_path'] ?? ''));
+                $logoSrc = $rawLogoPath;
+                if ($logoSrc !== '' && !preg_match('/^https?:\/\//i', $logoSrc)) {
+                    $logoSrc = '/' . ltrim($logoSrc, '/');
+                }
+              ?>
+              <li class="sponsor-manage-item">
+                <div class="sponsor-manage-item-main">
+                  <div class="sponsor-manage-logo">
+                    <img src="<?= h($logoSrc) ?>" alt="<?= h((string)($sponsorRow['name'] ?? 'Sponsor')) ?>">
+                  </div>
+                  <div class="sponsor-manage-meta">
+                    <strong><?= h((string)($sponsorRow['name'] ?? 'Sponsor')) ?></strong>
+                    <span><?= h((string)($sponsorRow['website_url'] ?? 'Tanpa link website')) ?></span>
+                  </div>
+                </div>
+                <form method="post" action="/admin/dashboard" onsubmit="return confirm('Hapus sponsor ini dari daftar?');">
+                  <input type="hidden" name="dashboard_action" value="remove_sponsor">
+                  <input type="hidden" name="sponsor_id" value="<?= (int)($sponsorRow['id'] ?? 0) ?>">
+                  <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+                  <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+                  <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+                  <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+                  <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+                  <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+                  <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+                  <button class="sponsor-remove-btn" type="submit" aria-label="Hapus sponsor">
+                    <i class="bi bi-trash3"></i> Hapus
+                  </button>
+                </form>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php else: ?>
+          <div class="sponsor-empty">Belum ada sponsor. Tambahkan sponsor baru lewat form di atas.</div>
+        <?php endif; ?>
+
         <div class="sponsor-form-actions">
-          <button class="btn ghost" type="button" id="cancelSponsorModal"><i class="bi bi-x-circle"></i> Batal</button>
-          <button class="btn primary" type="submit"><i class="bi bi-check-circle"></i> Simpan</button>
+          <button class="btn ghost" type="button" id="cancelSponsorModal"><i class="bi bi-x-circle"></i> Tutup</button>
         </div>
-      </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="sponsor-modal" id="adModal" aria-hidden="true">
+    <div class="sponsor-modal-card" role="dialog" aria-modal="true" aria-labelledby="adModalTitle">
+      <div class="sponsor-modal-head">
+        <h2 class="sponsor-modal-title" id="adModalTitle"><i class="bi bi-badge-ad"></i> Tambah Iklan</h2>
+        <button class="sponsor-modal-close" type="button" id="closeAdModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <div class="ad-manage-wrap">
+        <p class="ad-manage-note">Total iklan aktif: <strong><?= (int)count($dashboardAds) ?></strong></p>
+
+        <form class="sponsor-form" method="post" action="/admin/dashboard" enctype="multipart/form-data" id="adForm">
+          <input type="hidden" name="dashboard_action" value="create_ad">
+          <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+          <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+          <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+          <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+          <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+          <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+          <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+          <div class="sponsor-field">
+            <label for="adTitle">Judul Iklan</label>
+            <input id="adTitle" type="text" name="ad_title" placeholder="Contoh: Promo Event 2026" required>
+          </div>
+          <div class="sponsor-field">
+            <label for="adUrl">Link YouTube / Reels IG <span style="font-weight:400;text-transform:none;">(opsional)</span></label>
+            <input id="adUrl" type="url" name="ad_url" placeholder="https://youtube.com/... atau https://instagram.com/reel/...">
+            <p class="sponsor-help"><i class="bi bi-link-45deg"></i> Domain yang didukung: YouTube dan Instagram Reels.</p>
+          </div>
+          <div class="sponsor-field">
+            <label for="adVideo">File Video Iklan <span style="font-weight:400;text-transform:none;">(opsional)</span></label>
+            <input id="adVideo" type="file" name="ad_video" accept=".mp4,.webm,.ogv,.mov,video/mp4,video/webm,video/ogg,video/quicktime">
+            <p class="sponsor-help"><i class="bi bi-info-circle"></i> Isi salah satu: link atau file video. Format file: MP4, WEBM, OGV, MOV (maks 50MB)</p>
+          </div>
+          <div class="ad-preview-box" id="adPreviewBox">
+            <div class="ad-preview-head"><i class="bi bi-eye"></i> Preview Iklan</div>
+            <div class="ad-preview-media" id="adPreviewMedia">
+              <div class="ad-preview-empty">Preview akan muncul setelah isi link atau pilih file video.</div>
+            </div>
+            <p class="ad-preview-note" id="adPreviewNote">Belum ada input untuk dipreview.</p>
+          </div>
+          <div class="sponsor-form-actions">
+            <button class="btn primary" type="submit"><i class="bi bi-check-circle"></i> Simpan Iklan</button>
+          </div>
+        </form>
+
+        <hr class="ad-manage-divider">
+
+        <?php if ($dashboardAds): ?>
+          <ul class="ad-manage-list">
+            <?php foreach ($dashboardAds as $adRow): ?>
+              <?php
+                $rawVideoPath = trim((string)($adRow['video_path'] ?? ''));
+                $videoSrc = $rawVideoPath;
+                if ($videoSrc !== '' && !preg_match('/^https?:\/\//i', $videoSrc)) {
+                    $videoSrc = '/' . ltrim($videoSrc, '/');
+                }
+                $isRemoteVideo = (bool)preg_match('/^https?:\/\//i', $videoSrc);
+                $videoHost = strtolower((string)(parse_url($videoSrc, PHP_URL_HOST) ?? ''));
+                $videoPath = strtolower((string)(parse_url($videoSrc, PHP_URL_PATH) ?? ''));
+                $linkLabel = 'Link Video';
+                if (strpos($videoHost, 'youtube.com') !== false || strpos($videoHost, 'youtu.be') !== false) {
+                    $linkLabel = 'YouTube';
+                } elseif (strpos($videoHost, 'instagram.com') !== false && (strpos($videoPath, '/reel/') === 0 || strpos($videoPath, '/reels/') === 0)) {
+                    $linkLabel = 'Instagram Reels';
+                }
+              ?>
+              <li class="ad-manage-item">
+                <div class="ad-manage-item-main">
+                  <div class="ad-manage-video">
+                    <?php if ($isRemoteVideo): ?>
+                      <a href="<?= h($videoSrc) ?>" target="_blank" rel="noopener noreferrer" class="ad-manage-link-preview"><?= h($linkLabel) ?></a>
+                    <?php else: ?>
+                      <video src="<?= h($videoSrc) ?>" muted preload="metadata"></video>
+                    <?php endif; ?>
+                  </div>
+                  <div class="ad-manage-meta">
+                    <strong><?= h((string)($adRow['title'] ?? 'Iklan')) ?></strong>
+                    <span><?= h((string)($adRow['video_path'] ?? '-')) ?></span>
+                  </div>
+                </div>
+                <form method="post" action="/admin/dashboard" onsubmit="return confirm('Hapus iklan ini dari daftar?');">
+                  <input type="hidden" name="dashboard_action" value="remove_ad">
+                  <input type="hidden" name="ad_id" value="<?= (int)($adRow['id'] ?? 0) ?>">
+                  <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+                  <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+                  <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+                  <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+                  <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+                  <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+                  <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+                  <button class="ad-remove-btn" type="submit" aria-label="Hapus iklan">
+                    <i class="bi bi-trash3"></i> Hapus
+                  </button>
+                </form>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php else: ?>
+          <div class="ad-empty">Belum ada iklan. Tambahkan iklan lewat link YouTube/Reels IG atau upload video.</div>
+        <?php endif; ?>
+
+        <div class="sponsor-form-actions">
+          <button class="btn ghost" type="button" id="cancelAdModal"><i class="bi bi-x-circle"></i> Tutup</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2012,6 +2669,161 @@ render_header([
       cancelBtn.addEventListener('click', closeModal);
       modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
+    })();
+  </script>
+
+  <script>
+    // ── Ads Modal ─────────────────────────────────────────────
+    (function () {
+      var modal = document.getElementById('adModal');
+      var openBtn = document.getElementById('openAdModal');
+      var closeBtn = document.getElementById('closeAdModal');
+      var cancelBtn = document.getElementById('cancelAdModal');
+      var adUrlInput = document.getElementById('adUrl');
+      var adVideoInput = document.getElementById('adVideo');
+      var adPreviewMedia = document.getElementById('adPreviewMedia');
+      var adPreviewNote = document.getElementById('adPreviewNote');
+      if (!modal || !openBtn || !closeBtn || !cancelBtn || !adPreviewMedia || !adPreviewNote) return;
+
+      var currentObjectUrl = '';
+
+      function clearPreviewMedia() {
+        adPreviewMedia.innerHTML = '<div class="ad-preview-empty">Preview akan muncul setelah isi link atau pilih file video.</div>';
+        adPreviewNote.textContent = 'Belum ada input untuk dipreview.';
+        adPreviewNote.classList.remove('is-error');
+      }
+
+      function releaseObjectUrl() {
+        if (!currentObjectUrl) return;
+        URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = '';
+      }
+
+      function parseYouTubeEmbed(urlText) {
+        try {
+          var u = new URL(urlText);
+          var host = (u.hostname || '').toLowerCase();
+          var id = '';
+          if (host === 'youtu.be' || host === 'www.youtu.be') {
+            id = (u.pathname || '').replace(/^\/+/, '').split('/')[0] || '';
+          } else if (host.indexOf('youtube.com') !== -1) {
+            if ((u.pathname || '').indexOf('/shorts/') === 0) {
+              id = (u.pathname || '').split('/')[2] || '';
+            } else {
+              id = u.searchParams.get('v') || '';
+            }
+          }
+          if (!id) return '';
+          return 'https://www.youtube.com/embed/' + encodeURIComponent(id);
+        } catch (err) {
+          return '';
+        }
+      }
+
+      function parseInstagramEmbed(urlText) {
+        try {
+          var u = new URL(urlText);
+          var host = (u.hostname || '').toLowerCase();
+          if (host.indexOf('instagram.com') === -1) return '';
+          var parts = (u.pathname || '').split('/').filter(Boolean);
+          if (parts.length < 2) return '';
+          var type = parts[0].toLowerCase();
+          var code = parts[1];
+          if ((type !== 'reel' && type !== 'reels') || !code) return '';
+          return 'https://www.instagram.com/reel/' + encodeURIComponent(code) + '/embed';
+        } catch (err) {
+          return '';
+        }
+      }
+
+      function renderIframePreview(src, noteText) {
+        adPreviewMedia.innerHTML = '';
+        var iframe = document.createElement('iframe');
+        iframe.src = src;
+        iframe.loading = 'lazy';
+        iframe.allowFullscreen = true;
+        iframe.referrerPolicy = 'no-referrer-when-downgrade';
+        adPreviewMedia.appendChild(iframe);
+        adPreviewNote.textContent = noteText;
+        adPreviewNote.classList.remove('is-error');
+      }
+
+      function renderFilePreview(file) {
+        releaseObjectUrl();
+        currentObjectUrl = URL.createObjectURL(file);
+        adPreviewMedia.innerHTML = '';
+        var video = document.createElement('video');
+        video.src = currentObjectUrl;
+        video.controls = true;
+        video.preload = 'metadata';
+        adPreviewMedia.appendChild(video);
+        adPreviewNote.textContent = 'Preview dari file lokal: ' + file.name;
+        adPreviewNote.classList.remove('is-error');
+      }
+
+      function renderInvalidUrlPreview() {
+        adPreviewMedia.innerHTML = '<div class="ad-preview-empty">Link belum valid untuk preview. Gunakan link YouTube atau Instagram Reels.</div>';
+        adPreviewNote.textContent = 'URL belum didukung.';
+        adPreviewNote.classList.add('is-error');
+      }
+
+      function refreshAdPreview() {
+        var hasFile = !!(adVideoInput && adVideoInput.files && adVideoInput.files.length > 0);
+        var urlText = adUrlInput ? String(adUrlInput.value || '').trim() : '';
+
+        if (hasFile) {
+          renderFilePreview(adVideoInput.files[0]);
+          return;
+        }
+
+        releaseObjectUrl();
+        if (!urlText) {
+          clearPreviewMedia();
+          return;
+        }
+
+        var ytEmbed = parseYouTubeEmbed(urlText);
+        if (ytEmbed) {
+          renderIframePreview(ytEmbed, 'Preview link YouTube.');
+          return;
+        }
+
+        var igEmbed = parseInstagramEmbed(urlText);
+        if (igEmbed) {
+          renderIframePreview(igEmbed, 'Preview link Instagram Reels.');
+          return;
+        }
+
+        renderInvalidUrlPreview();
+      }
+
+      function openModal() {
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('sponsor-modal-open');
+        var n = document.getElementById('adTitle');
+        if (n) setTimeout(function () { n.focus(); }, 20);
+        refreshAdPreview();
+      }
+      function closeModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('sponsor-modal-open');
+        releaseObjectUrl();
+      }
+      openBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      cancelBtn.addEventListener('click', closeModal);
+      if (adUrlInput) {
+        adUrlInput.addEventListener('input', refreshAdPreview);
+        adUrlInput.addEventListener('change', refreshAdPreview);
+      }
+      if (adVideoInput) {
+        adVideoInput.addEventListener('change', refreshAdPreview);
+      }
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
+      window.addEventListener('beforeunload', releaseObjectUrl);
     })();
   </script>
 
