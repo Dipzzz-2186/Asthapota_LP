@@ -656,7 +656,7 @@ if (!$sponsorItems) {
       height: var(--sponsor-logo-h);
       object-fit: contain;
       object-position: center;
-      filter: none;
+      filter: grayscale(100%) brightness(0) invert(1) contrast(1.2);
       user-select: none;
       pointer-events: none;
       transition: transform 0.16s ease, filter 0.2s ease;
@@ -664,7 +664,7 @@ if (!$sponsorItems) {
 
     .sponsor:hover img {
       transform: scale(1.03);
-      filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.24));
+      filter: grayscale(100%) brightness(0) invert(1) contrast(1.25) drop-shadow(0 5px 10px rgba(0, 0, 0, 0.24));
     }
 
     @keyframes sponsor-scroll {
