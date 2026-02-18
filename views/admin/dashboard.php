@@ -4,6 +4,11 @@ require_once __DIR__ . '/../../app/helpers.php';
 require_once __DIR__ . '/../../app/auth.php';
 require_once __DIR__ . '/../layout/app.php';
 require_admin();
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
 
 $db = get_db();
 ensure_order_qr_schema($db);
@@ -213,18 +218,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($dashboardAction === 'create_ad') {
         $adTitle = trim((string)($_POST['ad_title'] ?? ''));
+        $adSourceType = trim((string)($_POST['ad_source_type'] ?? ''));
         $adUrl = trim((string)($_POST['ad_url'] ?? ''));
         $videoFile = $_FILES['ad_video'] ?? null;
+        $hasUploadedVideo = is_array($videoFile) && (int)($videoFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
 
         if ($adTitle === '') {
             $flash['error'] = 'Judul iklan wajib diisi.';
         } elseif (mb_strlen($adTitle) > 150) {
             $flash['error'] = 'Judul iklan terlalu panjang.';
-        } elseif ($adUrl === '' && (!is_array($videoFile) || (int)($videoFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK)) {
-            $flash['error'] = 'Isi link YouTube/Reels IG atau upload file video.';
+        } elseif (!in_array($adSourceType, ['link', 'upload'], true)) {
+            $flash['error'] = 'Pilih sumber iklan: link atau upload video.';
+        } elseif ($adSourceType === 'link' && $adUrl === '') {
+            $flash['error'] = 'Link iklan wajib diisi.';
+        } elseif ($adSourceType === 'upload' && !$hasUploadedVideo) {
+            $flash['error'] = 'File video iklan wajib diunggah.';
+        } elseif ($adSourceType === 'link' && $hasUploadedVideo) {
+            $flash['error'] = 'Mode link dipilih, file video tidak boleh diisi.';
+        } elseif ($adSourceType === 'upload' && $adUrl !== '') {
+            $flash['error'] = 'Mode upload dipilih, link tidak boleh diisi.';
         } else {
             $storedVideoPath = '';
-            if ($adUrl !== '') {
+            if ($adSourceType === 'link') {
                 if (!filter_var($adUrl, FILTER_VALIDATE_URL)) {
                     $flash['error'] = 'Link iklan tidak valid.';
                 } else {
@@ -1058,6 +1073,43 @@ $extraHead = <<<'HTML'
     background: #f7faff;
     border: 1px solid var(--stroke);
   }
+  #adModal .ad-manage-section-title {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #adModal .ad-source-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  #adModal .ad-source-option {
+    border: 1px solid var(--stroke);
+    border-radius: 10px;
+    padding: 10px 11px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  #adModal .ad-source-option input[type="radio"] {
+    margin: 0;
+  }
+  #adModal .ad-source-option:has(input[type="radio"]:checked) {
+    border-color: #9fc2ff;
+    background: #eef4ff;
+  }
+  #adModal .ad-field-group.is-disabled {
+    display: none;
+  }
   #adModal .ad-manage-divider {
     height: 1px;
     border: 0;
@@ -1066,13 +1118,12 @@ $extraHead = <<<'HTML'
   }
   #adModal .ad-manage-list {
     margin: 0;
-    padding: 0;
+    padding: 8px;
     list-style: none;
-    display: grid;
-    gap: 8px;
-    max-height: 260px;
-    overflow-y: auto;
-    padding-right: 2px;
+    display: block;
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    background: #fff;
   }
   #adModal .ad-manage-item {
     display: flex;
@@ -1083,7 +1134,9 @@ $extraHead = <<<'HTML'
     border-radius: 12px;
     padding: 10px 12px;
     background: var(--surface-2, #f8faff);
+    margin-bottom: 8px;
   }
+  #adModal .ad-manage-item:last-child { margin-bottom: 0; }
   #adModal .ad-manage-item-main {
     min-width: 0;
     display: flex;
@@ -1146,20 +1199,23 @@ $extraHead = <<<'HTML'
     border: 1px dashed var(--stroke);
     border-radius: 10px;
     background: #fff;
-    min-height: 170px;
+    min-height: 220px;
+    height: clamp(220px, 32vh, 320px);
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    position: relative;
   }
   #adModal .ad-preview-media iframe,
   #adModal .ad-preview-media video {
     width: 100%;
-    height: 100%;
-    min-height: 170px;
+    height: 100% !important;
+    min-height: 0;
     border: 0;
     display: block;
     background: #000;
+    object-fit: cover;
   }
   #adModal .ad-preview-empty {
     color: var(--muted);
@@ -1773,6 +1829,7 @@ $extraHead = <<<'HTML'
     #adModal .ad-manage-wrap { padding: 14px; }
     #adModal .ad-manage-item { align-items: flex-start; flex-direction: column; }
     #adModal .ad-remove-btn { width: 100%; }
+    #adModal .ad-source-options { grid-template-columns: 1fr; }
 
     .order-card-actions .btn { font-size: 12px; }
   }
@@ -2343,44 +2400,10 @@ render_header([
         <button class="sponsor-modal-close" type="button" id="closeAdModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
       </div>
       <div class="ad-manage-wrap">
-        <p class="ad-manage-note">Total iklan aktif: <strong><?= (int)count($dashboardAds) ?></strong></p>
+        <p class="ad-manage-note">Total iklan tersimpan: <strong><?= (int)count($dashboardAds) ?></strong></p>
 
-        <form class="sponsor-form" method="post" action="/admin/dashboard" enctype="multipart/form-data" id="adForm">
-          <input type="hidden" name="dashboard_action" value="create_ad">
-          <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
-          <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
-          <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
-          <input type="hidden" name="name" value="<?= h($selectedName) ?>">
-          <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
-          <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
-          <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
-          <div class="sponsor-field">
-            <label for="adTitle">Judul Iklan</label>
-            <input id="adTitle" type="text" name="ad_title" placeholder="Contoh: Promo Event 2026" required>
-          </div>
-          <div class="sponsor-field">
-            <label for="adUrl">Link YouTube / Reels IG <span style="font-weight:400;text-transform:none;">(opsional)</span></label>
-            <input id="adUrl" type="url" name="ad_url" placeholder="https://youtube.com/... atau https://instagram.com/reel/...">
-            <p class="sponsor-help"><i class="bi bi-link-45deg"></i> Domain yang didukung: YouTube dan Instagram Reels.</p>
-          </div>
-          <div class="sponsor-field">
-            <label for="adVideo">File Video Iklan <span style="font-weight:400;text-transform:none;">(opsional)</span></label>
-            <input id="adVideo" type="file" name="ad_video" accept=".mp4,.webm,.ogv,.mov,video/mp4,video/webm,video/ogg,video/quicktime">
-            <p class="sponsor-help"><i class="bi bi-info-circle"></i> Isi salah satu: link atau file video. Format file: MP4, WEBM, OGV, MOV (maks 50MB)</p>
-          </div>
-          <div class="ad-preview-box" id="adPreviewBox">
-            <div class="ad-preview-head"><i class="bi bi-eye"></i> Preview Iklan</div>
-            <div class="ad-preview-media" id="adPreviewMedia">
-              <div class="ad-preview-empty">Preview akan muncul setelah isi link atau pilih file video.</div>
-            </div>
-            <p class="ad-preview-note" id="adPreviewNote">Belum ada input untuk dipreview.</p>
-          </div>
-          <div class="sponsor-form-actions">
-            <button class="btn primary" type="submit"><i class="bi bi-check-circle"></i> Simpan Iklan</button>
-          </div>
-        </form>
-
-        <hr class="ad-manage-divider">
+        <p class="ad-manage-section-title"><i class="bi bi-collection-play"></i> Daftar Iklan</p>
+        <p class="sponsor-help" style="margin:0;">Menampilkan <?= (int)count($dashboardAds) ?> data iklan.</p>
 
         <?php if ($dashboardAds): ?>
           <ul class="ad-manage-list">
@@ -2433,8 +2456,59 @@ render_header([
             <?php endforeach; ?>
           </ul>
         <?php else: ?>
-          <div class="ad-empty">Belum ada iklan. Tambahkan iklan lewat link YouTube/Reels IG atau upload video.</div>
+          <div class="ad-empty">Belum ada iklan tersimpan. Tambahkan iklan lewat link YouTube/Reels IG atau upload video.</div>
         <?php endif; ?>
+
+        <hr class="ad-manage-divider">
+
+        <p class="ad-manage-section-title"><i class="bi bi-plus-circle"></i> Tambah Iklan Baru</p>
+        <form class="sponsor-form" method="post" action="/admin/dashboard" enctype="multipart/form-data" id="adForm">
+          <input type="hidden" name="dashboard_action" value="create_ad">
+          <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+          <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+          <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+          <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+          <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+          <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+          <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+          <div class="sponsor-field">
+            <label for="adTitle">Judul Iklan</label>
+            <input id="adTitle" type="text" name="ad_title" placeholder="Contoh: Promo Event 2026" required>
+          </div>
+          <div class="sponsor-field">
+            <label>Pilih Sumber Iklan</label>
+            <div class="ad-source-options" id="adSourceOptions">
+              <label class="ad-source-option" for="adSourceLink">
+                <input id="adSourceLink" type="radio" name="ad_source_type" value="link" checked>
+                Link YouTube / Reels IG
+              </label>
+              <label class="ad-source-option" for="adSourceUpload">
+                <input id="adSourceUpload" type="radio" name="ad_source_type" value="upload">
+                Upload Video
+              </label>
+            </div>
+          </div>
+          <div class="sponsor-field ad-field-group" id="adUrlGroup">
+            <label for="adUrl">Link YouTube / Reels IG</label>
+            <input id="adUrl" type="url" name="ad_url" placeholder="https://youtube.com/... atau https://instagram.com/reel/...">
+            <p class="sponsor-help"><i class="bi bi-link-45deg"></i> Domain yang didukung: YouTube dan Instagram Reels.</p>
+          </div>
+          <div class="sponsor-field ad-field-group is-disabled" id="adVideoGroup">
+            <label for="adVideo">File Video Iklan</label>
+            <input id="adVideo" type="file" name="ad_video" accept=".mp4,.webm,.ogv,.mov,video/mp4,video/webm,video/ogg,video/quicktime">
+            <p class="sponsor-help"><i class="bi bi-info-circle"></i> Format file: MP4, WEBM, OGV, MOV (maks 50MB)</p>
+          </div>
+          <div class="ad-preview-box" id="adPreviewBox">
+            <div class="ad-preview-head"><i class="bi bi-eye"></i> Preview Iklan</div>
+            <div class="ad-preview-media" id="adPreviewMedia">
+              <div class="ad-preview-empty">Preview akan muncul setelah isi link atau pilih file video.</div>
+            </div>
+            <p class="ad-preview-note" id="adPreviewNote">Belum ada input untuk dipreview.</p>
+          </div>
+          <div class="sponsor-form-actions">
+            <button class="btn primary" type="submit"><i class="bi bi-check-circle"></i> Simpan Iklan</button>
+          </div>
+        </form>
 
         <div class="sponsor-form-actions">
           <button class="btn ghost" type="button" id="cancelAdModal"><i class="bi bi-x-circle"></i> Tutup</button>
@@ -2679,6 +2753,9 @@ render_header([
       var openBtn = document.getElementById('openAdModal');
       var closeBtn = document.getElementById('closeAdModal');
       var cancelBtn = document.getElementById('cancelAdModal');
+      var adSourceInputs = modal ? modal.querySelectorAll('input[name="ad_source_type"]') : null;
+      var adUrlGroup = document.getElementById('adUrlGroup');
+      var adVideoGroup = document.getElementById('adVideoGroup');
       var adUrlInput = document.getElementById('adUrl');
       var adVideoInput = document.getElementById('adVideo');
       var adPreviewMedia = document.getElementById('adPreviewMedia');
@@ -2691,6 +2768,30 @@ render_header([
         adPreviewMedia.innerHTML = '<div class="ad-preview-empty">Preview akan muncul setelah isi link atau pilih file video.</div>';
         adPreviewNote.textContent = 'Belum ada input untuk dipreview.';
         adPreviewNote.classList.remove('is-error');
+      }
+
+      function selectedSourceType() {
+        if (!adSourceInputs || !adSourceInputs.length) return 'link';
+        var selected = Array.prototype.find.call(adSourceInputs, function (input) { return input.checked; });
+        return selected ? selected.value : 'link';
+      }
+
+      function setInputModes() {
+        var sourceType = selectedSourceType();
+        var isLinkMode = sourceType === 'link';
+
+        if (adUrlInput) {
+          adUrlInput.disabled = !isLinkMode;
+          adUrlInput.required = isLinkMode;
+          if (!isLinkMode) adUrlInput.value = '';
+        }
+        if (adVideoInput) {
+          adVideoInput.disabled = isLinkMode;
+          adVideoInput.required = !isLinkMode;
+          if (isLinkMode) adVideoInput.value = '';
+        }
+        if (adUrlGroup) adUrlGroup.classList.toggle('is-disabled', !isLinkMode);
+        if (adVideoGroup) adVideoGroup.classList.toggle('is-disabled', isLinkMode);
       }
 
       function releaseObjectUrl() {
@@ -2768,15 +2869,23 @@ render_header([
       }
 
       function refreshAdPreview() {
+        var sourceType = selectedSourceType();
         var hasFile = !!(adVideoInput && adVideoInput.files && adVideoInput.files.length > 0);
         var urlText = adUrlInput ? String(adUrlInput.value || '').trim() : '';
 
-        if (hasFile) {
+        if (sourceType === 'upload' && hasFile) {
           renderFilePreview(adVideoInput.files[0]);
           return;
         }
 
         releaseObjectUrl();
+        if (sourceType === 'upload') {
+          adPreviewMedia.innerHTML = '<div class="ad-preview-empty">Pilih file video untuk melihat preview.</div>';
+          adPreviewNote.textContent = 'Mode upload dipilih.';
+          adPreviewNote.classList.remove('is-error');
+          return;
+        }
+
         if (!urlText) {
           clearPreviewMedia();
           return;
@@ -2803,6 +2912,7 @@ render_header([
         document.body.classList.add('sponsor-modal-open');
         var n = document.getElementById('adTitle');
         if (n) setTimeout(function () { n.focus(); }, 20);
+        setInputModes();
         refreshAdPreview();
       }
       function closeModal() {
@@ -2814,6 +2924,14 @@ render_header([
       openBtn.addEventListener('click', openModal);
       closeBtn.addEventListener('click', closeModal);
       cancelBtn.addEventListener('click', closeModal);
+      if (adSourceInputs && adSourceInputs.length) {
+        Array.prototype.forEach.call(adSourceInputs, function (input) {
+          input.addEventListener('change', function () {
+            setInputModes();
+            refreshAdPreview();
+          });
+        });
+      }
       if (adUrlInput) {
         adUrlInput.addEventListener('input', refreshAdPreview);
         adUrlInput.addEventListener('change', refreshAdPreview);
@@ -2821,6 +2939,7 @@ render_header([
       if (adVideoInput) {
         adVideoInput.addEventListener('change', refreshAdPreview);
       }
+      setInputModes();
       modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
       window.addEventListener('beforeunload', releaseObjectUrl);
