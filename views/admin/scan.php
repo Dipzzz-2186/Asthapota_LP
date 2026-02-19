@@ -1354,6 +1354,28 @@ render_header([
     document.addEventListener(evt, handleUserActivity, { passive: true });
   });
 
+  var shakeThreshold = 12;
+  var lastShakeTs = 0;
+  function handleShake(acceleration) {
+    if (!acceleration) return;
+    var now = Date.now();
+    if (now - lastShakeTs < 800) return;
+    var x = acceleration.x || 0;
+    var y = acceleration.y || 0;
+    var z = acceleration.z || 0;
+    var magnitude = Math.sqrt(x * x + y * y + z * z);
+    if (magnitude > shakeThreshold) {
+      lastShakeTs = now;
+      handleUserActivity();
+    }
+  }
+
+  if (window.DeviceMotionEvent) {
+    window.addEventListener('devicemotion', function (evt) {
+      handleShake(evt.accelerationIncludingGravity || evt.acceleration);
+    }, { passive: true });
+  }
+
   document.addEventListener('scanScreenChange', function (evt) {
     var detail = evt && evt.detail ? evt.detail : {};
     currentScreenId = detail.screen || '';
