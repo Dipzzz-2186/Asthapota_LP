@@ -944,7 +944,7 @@ render_header([
   <div id="adOverlay" class="ad-overlay" aria-hidden="true">
     <div class="ad-overlay-inner">
       <div class="ad-media">
-        <video id="adVideoPlayer" playsinline muted></video>
+        <video id="adVideoPlayer" playsinline></video>
         <iframe id="adIframePlayer" allow="autoplay; encrypted-media" allowfullscreen></iframe>
       </div>
       <div class="ad-overlay-note">Tekan atau gerakkan kursor untuk kembali ke check-in.</div>
@@ -1220,13 +1220,13 @@ render_header([
     if (!url) return '';
     var ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/))([A-Za-z0-9_-]{11})/i);
     if (ytMatch && ytMatch[1]) {
-      return appendQuery('https://www.youtube.com/embed/' + ytMatch[1], 'autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&playsinline=1');
+      return appendQuery('https://www.youtube.com/embed/' + ytMatch[1], 'autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1');
     }
     var igMatch = url.match(/instagram\.com\/reel\/([^/?#&]+)/i);
     if (igMatch && igMatch[1]) {
-      return appendQuery('https://www.instagram.com/reel/' + igMatch[1] + '/embed/', 'autoplay=1&mute=1');
+      return appendQuery('https://www.instagram.com/reel/' + igMatch[1] + '/embed/', 'autoplay=1');
     }
-    return appendQuery(url, 'autoplay=1&mute=1');
+    return appendQuery(url, 'autoplay=1');
   }
 
   function clearAdTimer() {
@@ -1280,6 +1280,8 @@ render_header([
     if (adVideoPlayer) {
       adVideoPlayer.src = sourceUrl;
       adVideoPlayer.style.display = '';
+      adVideoPlayer.muted = false;
+      adVideoPlayer.volume = 1;
       adVideoPlayer.load();
       adVideoPlayer.play().catch(function () {});
     }
