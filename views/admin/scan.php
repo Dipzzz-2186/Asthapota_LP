@@ -46,24 +46,31 @@ CREATE TABLE IF NOT EXISTS ads (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 SQL;
 
-$adVideoSrc = '';
 try {
     $db->exec($adsTableSql);
 } catch (Throwable $e) {
     // ignore
 }
 
+$adSources = [];
 try {
-    $adRow = $db->query('SELECT video_path FROM ads ORDER BY id DESC LIMIT 1')->fetch(PDO::FETCH_ASSOC);
-    if ($adRow) {
-        $temp = trim((string)($adRow['video_path'] ?? ''));
-        if ($temp !== '' && !preg_match('/^https?:\\/\\//i', $temp)) {
-            $temp = '/' . ltrim($temp, '/');
+    $adStmt = $db->query('SELECT id, title, video_path FROM ads ORDER BY id ASC');
+    foreach ($adStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $videoPath = trim((string)($row['video_path'] ?? ''));
+        if ($videoPath === '') {
+            continue;
         }
-        $adVideoSrc = $temp;
+        if (!preg_match('/^https?:\\/\\//i', $videoPath)) {
+            $videoPath = '/' . ltrim($videoPath, '/');
+        }
+        $adSources[] = [
+            'id' => (int)($row['id'] ?? 0),
+            'title' => trim((string)($row['title'] ?? '')),
+            'url' => $videoPath,
+        ];
     }
 } catch (Throwable $e) {
-    $adVideoSrc = '';
+    $adSources = [];
 }
 
 function normalize_gender_value($rawGender) {
@@ -581,56 +588,72 @@ body.admin-page::after { display: none !important; }
 #adOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(3,4,12,0.85);
-  backdrop-filter: blur(12px);
-  display: none;
-  align-items: center;
-  justify-content: center;
+  background: #000;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
   z-index: 200;
+  padding: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.55s ease, visibility 0.55s ease;
+  cursor: none;
 }
 
 #adOverlay.is-visible {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  cursor: none;
+}
+
+.ad-overlay-note {
+  display: none;
+}
+
+body.ad-overlay-active,
+body.ad-overlay-active * {
+  cursor: none !important;
 }
 
 .ad-overlay-inner {
-  width: min(92vw, 1100px);
-  max-width: 1100px;
-  padding: 20px;
-  border-radius: 20px;
-  background: rgba(4,5,16,0.9);
-  box-shadow: 0 40px 60px rgba(0,0,0,0.55);
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  align-items: stretch;
+  justify-content: center;
+  flex: 1;
+  position: relative;
+  min-width: 100vw;
+  min-height: 100vh;
 }
 
 .ad-media {
   width: 100%;
+  height: 100%;
   position: relative;
-  padding-top: 56.25%;
 }
 
 .ad-media iframe,
 .ad-media video {
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100%;
   height: 100%;
   border: none;
-  border-radius: 16px;
+  border-radius: 0;
   object-fit: cover;
   background: #000;
 }
 
 .ad-overlay-note {
-  font-size: 13px;
-  letter-spacing: 0.4em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.7);
-  text-align: center;
+  display: none;
 }
+
 </style>
 HTML;
 
@@ -748,7 +771,7 @@ render_header([
   <div id="adOverlay" class="ad-overlay" aria-hidden="true">
     <div class="ad-overlay-inner">
       <div class="ad-media">
-        <video id="adVideoPlayer" playsinline muted loop></video>
+        <video id="adVideoPlayer" playsinline muted></video>
         <iframe id="adIframePlayer" allow="autoplay; encrypted-media" allowfullscreen></iframe>
       </div>
       <div class="ad-overlay-note">Tekan atau gerakkan kursor untuk kembali ke check-in.</div>
@@ -961,23 +984,29 @@ render_header([
     if(k.length===1)hwBuf+=k;
   },true);
 
+  document.addEventListener('adOverlayHidden', function() { show(idle); });
   if(mInput&&mInput.value)verify(mInput.value);
 })();
 </script>
 
 <script>
 (function () {
-  var adVideoSrc = <?= json_encode($adVideoSrc) ?>;
-  if (!adVideoSrc) return;
+  var adPlaylist = <?= json_encode($adSources) ?>;
+  if (!Array.isArray(adPlaylist) || !adPlaylist.length) return;
 
   var adOverlay = document.getElementById('adOverlay');
   var adVideoPlayer = document.getElementById('adVideoPlayer');
   var adIframePlayer = document.getElementById('adIframePlayer');
-  var idleDelay = 25000;
+  var idleDelay = 10000;
   var idleTimer = null;
+  var overlayVisible = false;
+  var pendingHide = false;
+  var currentAdIndex = 0;
+  var adTimer = null;
+  var remoteAdDuration = 25000;
 
   function isRemoteVideo(url) {
-    return typeof url === 'string' && /^https?:\\/\\//i.test(url);
+    return typeof url === 'string' && /^https?:\/\//i.test(url);
   }
 
   function appendQuery(url, params) {
@@ -987,56 +1016,106 @@ render_header([
 
   function buildEmbedUrl(url) {
     if (!url) return '';
-    var ytMatch = url.match(/(?:youtu\\.be\\/|youtube\\.com\\/(?:watch\\?(?:.*&)?v=|embed\\/))([A-Za-z0-9_-]{11})/i);
+    var ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/))([A-Za-z0-9_-]{11})/i);
     if (ytMatch && ytMatch[1]) {
       return appendQuery('https://www.youtube.com/embed/' + ytMatch[1], 'autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&playsinline=1');
     }
-    var igMatch = url.match(/instagram\\.com\\/reel\\/([^/?#&]+)/i);
+    var igMatch = url.match(/instagram\.com\/reel\/([^/?#&]+)/i);
     if (igMatch && igMatch[1]) {
       return appendQuery('https://www.instagram.com/reel/' + igMatch[1] + '/embed/', 'autoplay=1&mute=1');
     }
     return appendQuery(url, 'autoplay=1&mute=1');
   }
 
-  function showAdOverlay() {
-    if (!adOverlay) return;
-    if (isRemoteVideo(adVideoSrc)) {
-      if (adIframePlayer) {
-        adIframePlayer.src = buildEmbedUrl(adVideoSrc);
-        adIframePlayer.style.display = '';
-      }
-      if (adVideoPlayer) adVideoPlayer.style.display = 'none';
-    } else {
-      if (adVideoPlayer) {
-        adVideoPlayer.src = adVideoSrc;
-        adVideoPlayer.style.display = '';
-        adVideoPlayer.pause();
-        adVideoPlayer.load();
-        adVideoPlayer.play().catch(function () {});
-      }
-      if (adIframePlayer) {
-        adIframePlayer.src = '';
-        adIframePlayer.style.display = 'none';
-      }
+  function clearAdTimer() {
+    if (adTimer) {
+      window.clearTimeout(adTimer);
+      adTimer = null;
     }
-    adOverlay.classList.add('is-visible');
-    adOverlay.setAttribute('aria-hidden', 'false');
   }
 
-  function hideAdOverlay() {
-    if (!adOverlay) return;
-    adOverlay.classList.remove('is-visible');
-    adOverlay.setAttribute('aria-hidden', 'true');
+  function scheduleRemoteAdvance() {
+    clearAdTimer();
+    adTimer = window.setTimeout(moveToNextAd, remoteAdDuration);
+  }
+
+  function moveToNextAd() {
+    if (!adPlaylist.length) return;
+    currentAdIndex = (currentAdIndex + 1) % adPlaylist.length;
+    playCurrentAd();
+  }
+
+  function playCurrentAd() {
+    if (!adPlaylist.length) return;
+    var entry = adPlaylist[currentAdIndex] || {};
+    var sourceUrl = (entry.url || '').trim();
+    if (!sourceUrl) {
+      moveToNextAd();
+      return;
+    }
+    clearAdTimer();
+    if (isRemoteVideo(sourceUrl)) {
+      if (adVideoPlayer) adVideoPlayer.style.display = 'none';
+      if (adIframePlayer) {
+        adIframePlayer.src = buildEmbedUrl(sourceUrl);
+        adIframePlayer.style.display = '';
+      }
+      scheduleRemoteAdvance();
+      return;
+    }
+    if (adIframePlayer) {
+      adIframePlayer.src = '';
+      adIframePlayer.style.display = 'none';
+    }
+    if (adVideoPlayer) {
+      adVideoPlayer.src = sourceUrl;
+      adVideoPlayer.style.display = '';
+      adVideoPlayer.load();
+      adVideoPlayer.play().catch(function () {});
+    }
+  }
+
+  function stopAdPlayback() {
+    clearAdTimer();
     if (adVideoPlayer) {
       adVideoPlayer.pause();
       adVideoPlayer.removeAttribute('src');
-      adVideoPlayer.load();
       adVideoPlayer.style.display = 'none';
     }
     if (adIframePlayer) {
       adIframePlayer.src = '';
       adIframePlayer.style.display = 'none';
     }
+  }
+
+  if (adVideoPlayer) {
+    adVideoPlayer.addEventListener('ended', function () {
+      moveToNextAd();
+    });
+  }
+
+  function showAdOverlay() {
+    if (!adOverlay || overlayVisible) return;
+    adOverlay.classList.add('is-visible');
+    adOverlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('ad-overlay-active');
+    overlayVisible = true;
+    pendingHide = false;
+    playCurrentAd();
+  }
+
+  function hideAdOverlay() {
+    if (!adOverlay || !overlayVisible) return;
+    adOverlay.classList.remove('is-visible');
+    adOverlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('ad-overlay-active');
+    stopAdPlayback();
+    overlayVisible = false;
+    pendingHide = true;
+  }
+
+  function notifyAdOverlayHidden() {
+    document.dispatchEvent(new Event('adOverlayHidden'));
   }
 
   function scheduleAd() {
@@ -1049,6 +1128,15 @@ render_header([
       hideAdOverlay();
     }
     scheduleAd();
+  }
+
+  if (adOverlay) {
+    adOverlay.addEventListener('transitionend', function (evt) {
+      if (evt.propertyName === 'opacity' && !adOverlay.classList.contains('is-visible') && pendingHide) {
+        pendingHide = false;
+        notifyAdOverlayHidden();
+      }
+    });
   }
 
   ['mousemove', 'mousedown', 'touchstart', 'keydown'].forEach(function (evt) {
