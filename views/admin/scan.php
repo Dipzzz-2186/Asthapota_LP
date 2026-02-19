@@ -347,11 +347,6 @@ body.admin-page::after { display: none !important; }
   color: #ffffff;
   letter-spacing: -0.04em;
   line-height: 1.05;
-  /*
-   * Multi-layer shadow: layer tebal → blur → spread
-   * Ini "menghitamkan" area di bawah teks tanpa kotak,
-   * jadi teks selalu terbaca di atas background warna apapun.
-   */
   text-shadow:
     0 2px 8px rgba(0,0,0,0.75),
     0 8px 22px rgba(0,0,0,0.55);
@@ -388,11 +383,14 @@ body.admin-page::after { display: none !important; }
 /* ─── Welcome Screen ─────────────────────────── */
 #welcome-screen {
   display:none; flex-direction:column; align-items:center; justify-content:center;
-  text-align:center; position:absolute; inset:0;
-  padding:clamp(22px,4vh,44px) clamp(16px,4vw,56px);
+  text-align:center;
+  position:fixed;
+  top:70px; left:0; right:0; bottom:88px;
+  padding: clamp(12px,2vh,24px) clamp(16px,4vw,56px);
   animation: welcomeIn 0.6s cubic-bezier(0.22,1,0.36,1);
   overflow:hidden;
   isolation:isolate;
+  z-index:10;
 }
 #welcome-screen::before {
   content:'';
@@ -417,9 +415,11 @@ body.admin-page::after { display: none !important; }
 }
 @keyframes welcomeIn { from{opacity:0;transform:scale(0.96) translateY(30px);} to{opacity:1;transform:scale(1) translateY(0);} }
 .welcome-panel{
-    width:min(92vw, 980px);
-    min-height: min(62vh, 600px);
-    transform: translateY(-7vh);
+  width:min(92vw, 980px);
+  /* max-height supaya tidak pernah overflow keluar area */
+  max-height: 100%;
+  overflow-y: auto;
+  transform: none;
   border-radius: 28px;
   border:1px solid rgba(148,163,184,0.42);
   background:
@@ -603,110 +603,10 @@ body.admin-page::after { display: none !important; }
 #scanner-widget.collapsed .widget-body{display:none;}
 #scanner-widget.collapsed .widget-toggle{transform:rotate(180deg);}
 
-/* ════════════════════════════════════════════════════
-   LOGO STRIP — versi bersih
-   • Tidak ada kotak/card
-   • Logo float langsung di atas wallpaper
-   • Ground gradient gelap tipis di bawah
-   • Edge fade kiri-kanan
-   • Separator titik tipis antar logo
-   ════════════════════════════════════════════════════ */
+/* ─── Logo Strip ─────────────────────────────── */
 .logo-strip {
   position: fixed;
   left: 0; right: 0; bottom: 0;
-  height: 88px;
-  overflow: hidden;
-  z-index: 30; /* di atas picker-screen agar tidak tertimpa konten */
-  /* gradien gelap dari bawah = "ground" untuk logo */
-  background: linear-gradient(
-    to top,
-    rgba(2,3,10,0.65) 0%,
-    rgba(2,3,10,0.30) 55%,
-    transparent 100%
-  );
-  /* fade kiri dan kanan */
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(0,0,0,0.7) 8%,
-    #000 18%,
-    #000 82%,
-    rgba(0,0,0,0.7) 92%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(0,0,0,0.7) 8%,
-    #000 18%,
-    #000 82%,
-    rgba(0,0,0,0.7) 92%,
-    transparent 100%
-  );
-  display: flex;
-  align-items: center;
-}
-
-.logo-track {
-  display: flex;
-  align-items: center;
-  width: max-content;
-  animation: logo-scroll 38s linear infinite;
-  /* pause saat hover */
-}
-.logo-track:hover { animation-play-state: paused; }
-
-/* logo-slide: satu logo + separator-nya */
-.logo-slide {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-}
-
-.logo-slide-inner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 116px;
-  padding: 0 10px;
-}
-
-/* separator vertikal tipis antar logo */
-.logo-sep {
-  width: 1px;
-  height: 24px;
-  background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.18), transparent);
-  flex-shrink: 0;
-}
-
-.logo-slide img {
-  max-width: 96px;
-  max-height: 42px;
-  width: auto; height: auto;
-  object-fit: contain;
-  filter: brightness(1.15) contrast(1.0) saturate(1.0)
-          drop-shadow(0 1px 8px rgba(0,0,0,0.65));
-  opacity: 0.72;
-  transition: opacity 0.4s ease, filter 0.4s ease, transform 0.3s ease;
-}
-.logo-slide:hover img {
-  opacity: 1;
-  filter: brightness(1.35) saturate(1.2)
-          drop-shadow(0 2px 16px rgba(56,189,248,0.25));
-  transform: translateY(-3px) scale(1.06);
-}
-
-@keyframes logo-scroll {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
-
-/* Override: clean, wrap-free logos */
-.logo-strip {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
   height: 88px;
   overflow: hidden;
   z-index: 30;
@@ -774,60 +674,12 @@ body.admin-page::after { display: none !important; }
   filter: brightness(0) invert(1) drop-shadow(0 0 14px rgba(255,255,255,0.55));
 }
 
-@media (max-width: 1080px) {
-  #topbar { padding: 12px 20px; min-height: 62px; }
-  #clock { font-size: 36px; }
-  #clockDate { font-size: 12px; letter-spacing: 0.22em; }
-  #result-head { width: min(94vw, 680px); }
-  .idle-title { font-size: clamp(34px, 7vw, 58px); }
-  .idle-subtitle { letter-spacing: 0.3em; }
-  #stage.stage--scanned #picker-screen { padding-top: clamp(128px, 18vh, 190px); }
-  #stage.stage--picker #picker-screen { padding-top: clamp(82px, 12vh, 124px); }
+@keyframes logo-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
 }
 
-@media (max-width: 820px) {
-  #topbar { padding: 10px 14px; }
-  #clock { font-size: 30px; }
-  #clockDate { letter-spacing: 0.16em; }
-  .btn-back { padding: 5px 10px; font-size: 12px; }
-  .btn-fs { width: 32px; height: 32px; }
-  #result-head { width: min(95vw, 560px); gap: 6px; }
-  #stage.stage--scanned #result-head { top: 76px; }
-  #stage.stage--picker #result-head { top: 56px; }
-  .idle-title { font-size: clamp(30px, 9vw, 48px); }
-  .idle-subtitle { font-size: 12px; letter-spacing: 0.24em; }
-  .idle-hint { font-size: 12px; }
-  .idle-hint::before, .idle-hint::after { width: 18px; }
-  .idle-qr-ring { width: 82px; height: 82px; font-size: 34px; margin-top: clamp(170px, 34vh, 260px); }
-  #picker-screen { padding: 16px 14px 14px; bottom: 86px; }
-  #stage.stage--picker #picker-screen { padding-top: 96px; }
-  .picker-order { gap: 12px; padding: 14px; border-radius: 14px; }
-  .picker-order-name { font-size: 20px; }
-  .picker-row { padding: 13px 14px; }
-  .picker-name { font-size: 15px; }
-  .btn-checkin { padding: 9px 14px; font-size: 13px; }
-  #welcome-screen { padding: 16px; }
-  .welcome-panel { width: min(94vw, 760px); min-height: min(58vh, 520px); border-radius: 22px; transform: translateY(-5vh); }
-  .welcome-greeting { margin-bottom: 10px; }
-  .welcome-name { font-size: clamp(42px, 15vw, 96px); line-height: 0.98; }
-  .welcome-package { letter-spacing: 0.2em; }
-}
-
-@media (max-width: 600px) {
-  #scanner-widget { left: 10px; bottom: 92px; width: min(170px, calc(100vw - 20px)); }
-  .picker-order { flex-direction: column; text-align: center; }
-  .picker-order-meta { justify-content: center; }
-  .picker-row { flex-direction: column; align-items: stretch; gap: 10px; }
-  .picker-row-left { width: 100%; justify-content: flex-start; }
-  .btn-checkin, .done-badge { width: 100%; justify-content: center; }
-  .idle-hint::before, .idle-hint::after { display: none; }
-  #result-head { width: min(95vw, 520px); }
-  #stage.stage--scanned #result-head { top: 70px; }
-  #stage.stage--picker #result-head { top: 50px; }
-  #stage.stage--picker #picker-screen { padding-top: 86px; }
-  .welcome-panel { width: min(94vw, 520px); min-height: min(56vh, 460px); border-radius: 18px; padding: 22px 16px; transform: translateY(-4vh); }
-}
-
+/* ─── Ad Overlay ─────────────────────────────── */
 #adOverlay {
   position: fixed;
   inset: 0;
@@ -893,8 +745,60 @@ body.ad-overlay-active * {
   background: #000;
 }
 
-.ad-overlay-note {
-  display: none;
+/* ─── Responsive ─────────────────────────────── */
+@media (max-width: 1080px) {
+  #topbar { padding: 12px 20px; min-height: 62px; }
+  #clock { font-size: 36px; }
+  #clockDate { font-size: 12px; letter-spacing: 0.22em; }
+  #result-head { width: min(94vw, 680px); }
+  .idle-title { font-size: clamp(34px, 7vw, 58px); }
+  .idle-subtitle { letter-spacing: 0.3em; }
+  #stage.stage--scanned #picker-screen { padding-top: clamp(128px, 18vh, 190px); }
+  #stage.stage--picker #picker-screen { padding-top: clamp(82px, 12vh, 124px); }
+}
+
+@media (max-width: 820px) {
+  #topbar { padding: 10px 14px; }
+  #clock { font-size: 30px; }
+  #clockDate { letter-spacing: 0.16em; }
+  .btn-back { padding: 5px 10px; font-size: 12px; }
+  .btn-fs { width: 32px; height: 32px; }
+  #result-head { width: min(95vw, 560px); gap: 6px; }
+  #stage.stage--scanned #result-head { top: 76px; }
+  #stage.stage--picker #result-head { top: 56px; }
+  .idle-title { font-size: clamp(30px, 9vw, 48px); }
+  .idle-subtitle { font-size: 12px; letter-spacing: 0.24em; }
+  .idle-hint { font-size: 12px; }
+  .idle-hint::before, .idle-hint::after { width: 18px; }
+  .idle-qr-ring { width: 82px; height: 82px; font-size: 34px; margin-top: clamp(170px, 34vh, 260px); }
+  #picker-screen { padding: 16px 14px 14px; bottom: 86px; }
+  #stage.stage--picker #picker-screen { padding-top: 96px; }
+  .picker-order { gap: 12px; padding: 14px; border-radius: 14px; }
+  .picker-order-name { font-size: 20px; }
+  .picker-row { padding: 13px 14px; }
+  .picker-name { font-size: 15px; }
+  .btn-checkin { padding: 9px 14px; font-size: 13px; }
+  #welcome-screen { padding: 12px; top: 62px; }
+  .welcome-panel { width: min(94vw, 760px); border-radius: 22px; transform: none; }
+  .welcome-greeting { margin-bottom: 10px; }
+  .welcome-name { font-size: clamp(42px, 15vw, 96px); line-height: 0.98; }
+  .welcome-package { letter-spacing: 0.2em; }
+}
+
+@media (max-width: 600px) {
+  #scanner-widget { left: 10px; bottom: 92px; width: min(170px, calc(100vw - 20px)); }
+  .picker-order { flex-direction: column; text-align: center; }
+  .picker-order-meta { justify-content: center; }
+  .picker-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .picker-row-left { width: 100%; justify-content: flex-start; }
+  .btn-checkin, .done-badge { width: 100%; justify-content: center; }
+  .idle-hint::before, .idle-hint::after { display: none; }
+  #result-head { width: min(95vw, 520px); }
+  #stage.stage--scanned #result-head { top: 70px; }
+  #stage.stage--picker #result-head { top: 50px; }
+  #stage.stage--picker #picker-screen { padding-top: 86px; }
+  #welcome-screen { padding: 12px; top: 56px; }
+  .welcome-panel { width: min(94vw, 520px); border-radius: 18px; padding: 22px 16px; transform: none; }
 }
 
 /* Global readability: black stroke for text + icons */
@@ -921,7 +825,6 @@ body.ad-overlay-active * {
     drop-shadow(0 1px 1px rgba(0,0,0,0.95))
     drop-shadow(0 0 8px rgba(0,0,0,0.55));
 }
-
 </style>
 HTML;
 
@@ -1018,11 +921,10 @@ render_header([
     </div>
   </div>
 
-  <!-- Logo strip — dibangun JS -->
+  <!-- Logo strip -->
   <section class="logo-strip" aria-label="Sponsor logos">
     <div class="logo-track" id="logoTrack">
       <?php foreach ($sponsorItems as $idx => $sp): ?>
-        <?php if ($idx > 0): ?><div class="logo-sep" aria-hidden="true"></div><?php endif; ?>
         <div class="logo-slide">
           <?php $hasUrl = !empty($sp['url']); ?>
           <?php if ($hasUrl): ?>
@@ -1038,6 +940,7 @@ render_header([
       <?php endforeach; ?>
     </div>
   </section>
+
   <div id="adOverlay" class="ad-overlay" aria-hidden="true">
     <div class="ad-overlay-inner">
       <div class="ad-media">
@@ -1128,7 +1031,6 @@ render_header([
   function buildMarquee(){
     var track=document.getElementById('logoTrack');
     if(!track) return;
-    /* hapus clone lama */
     Array.prototype.slice.call(track.querySelectorAll('[data-clone]')).forEach(function(n){n.parentNode.removeChild(n);});
     var origNodes=Array.prototype.slice.call(track.childNodes).filter(function(n){return n.nodeType===1;});
     if(!origNodes.length) return;
@@ -1136,9 +1038,6 @@ render_header([
     var needed=(strip?strip.clientWidth:window.innerWidth)*2.5;
     var iter=0;
     while(track.scrollWidth<needed&&iter<10){
-      var sep=document.createElement('div');
-      sep.className='logo-sep';sep.setAttribute('aria-hidden','true');sep.setAttribute('data-clone','1');
-      track.appendChild(sep);
       origNodes.forEach(function(n){
         var c=n.cloneNode(true);c.setAttribute('data-clone','1');c.setAttribute('aria-hidden','true');
         if(c.classList&&!c.classList.contains('logo-sep')){c.querySelectorAll('img').forEach(function(img){img.alt='';});}
@@ -1331,17 +1230,11 @@ render_header([
   }
 
   function clearAdTimer() {
-    if (adTimer) {
-      window.clearTimeout(adTimer);
-      adTimer = null;
-    }
+    if (adTimer) { window.clearTimeout(adTimer); adTimer = null; }
   }
 
   function clearIdleTimer() {
-    if (idleTimer) {
-      window.clearTimeout(idleTimer);
-      idleTimer = null;
-    }
+    if (idleTimer) { window.clearTimeout(idleTimer); idleTimer = null; }
   }
 
   function canRunAdCountdown() {
@@ -1372,10 +1265,7 @@ render_header([
     if (!adPlaylist.length) return;
     var entry = adPlaylist[currentAdIndex] || {};
     var sourceUrl = (entry.url || '').trim();
-    if (!sourceUrl) {
-      moveToNextAd();
-      return;
-    }
+    if (!sourceUrl) { moveToNextAd(); return; }
     clearAdTimer();
     if (isRemoteVideo(sourceUrl)) {
       if (adVideoPlayer) adVideoPlayer.style.display = 'none';
@@ -1386,10 +1276,7 @@ render_header([
       scheduleRemoteAdvance();
       return;
     }
-    if (adIframePlayer) {
-      adIframePlayer.src = '';
-      adIframePlayer.style.display = 'none';
-    }
+    if (adIframePlayer) { adIframePlayer.src = ''; adIframePlayer.style.display = 'none'; }
     if (adVideoPlayer) {
       adVideoPlayer.src = sourceUrl;
       adVideoPlayer.style.display = '';
@@ -1400,21 +1287,12 @@ render_header([
 
   function stopAdPlayback() {
     clearAdTimer();
-    if (adVideoPlayer) {
-      adVideoPlayer.pause();
-      adVideoPlayer.removeAttribute('src');
-      adVideoPlayer.style.display = 'none';
-    }
-    if (adIframePlayer) {
-      adIframePlayer.src = '';
-      adIframePlayer.style.display = 'none';
-    }
+    if (adVideoPlayer) { adVideoPlayer.pause(); adVideoPlayer.removeAttribute('src'); adVideoPlayer.style.display = 'none'; }
+    if (adIframePlayer) { adIframePlayer.src = ''; adIframePlayer.style.display = 'none'; }
   }
 
   if (adVideoPlayer) {
-    adVideoPlayer.addEventListener('ended', function () {
-      moveToNextAd();
-    });
+    adVideoPlayer.addEventListener('ended', function () { moveToNextAd(); });
   }
 
   function showAdOverlay() {
@@ -1457,9 +1335,7 @@ render_header([
   }
 
   function handleUserActivity() {
-    if (adOverlay && adOverlay.classList.contains('is-visible')) {
-      hideAdOverlay();
-    }
+    if (adOverlay && adOverlay.classList.contains('is-visible')) { hideAdOverlay(); }
     scheduleAd();
   }
 
@@ -1489,10 +1365,7 @@ render_header([
   });
 
   if (adOverlay) {
-    adOverlay.addEventListener('click', function () {
-      hideAdOverlay();
-      scheduleAd();
-    });
+    adOverlay.addEventListener('click', function () { hideAdOverlay(); scheduleAd(); });
   }
 
   currentScreenId = detectCurrentScreen() || currentScreenId;
