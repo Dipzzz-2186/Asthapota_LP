@@ -164,13 +164,7 @@ html, body { height: 100%; background: #08091a; }
 
 body.admin-page {
   font-family: 'Plus Jakarta Sans', sans-serif;
-  /* ── Overlay lebih gelap — cukup kontras tapi wallpaper masih keliatan ── */
-  background:
-    radial-gradient(ellipse 100% 80% at 50% 45%,
-      rgba(3,4,14,0.38) 0%,
-      rgba(3,4,14,0.60) 55%,
-      rgba(3,4,14,0.82) 100%),
-    url('/assets/img/wallpapeh3.jpg') center/cover fixed;
+  background: url('/assets/img/wallpapeh3.jpg') center/cover fixed;
   color: #f8fafc;
   font-size: 15px;
 }
@@ -186,12 +180,7 @@ body.admin-page::after { display: none !important; }
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(ellipse 100% 80% at 50% 45%,
-      rgba(3,4,14,0.38) 0%,
-      rgba(3,4,14,0.60) 55%,
-      rgba(3,4,14,0.82) 100%),
-    url('/assets/img/wallpapeh3.jpg') center/cover fixed;
+  background: url('/assets/img/wallpapeh3.jpg') center/cover fixed;
   background-color: #07091a;
 }
 
@@ -239,6 +228,67 @@ body.admin-page::after { display: none !important; }
   position:relative; overflow:hidden; min-height:0;
   padding-bottom: 96px; /* ruang logo strip */
 }
+#stage.stage--scanned {
+  justify-content:flex-start;
+  padding-top: 180px;
+  align-items:flex-start;
+}
+
+#stage.stage--scanned #picker-screen,
+#stage.stage--scanned #welcome-screen {
+  padding-top: 220px;
+}
+
+@keyframes resultHeadFloat {
+  0%   { transform: translate(-50%, 40px); opacity: 0; }
+  40%  { transform: translate(-50%, 14px); opacity: 0.7; }
+  100% { transform: translate(-50%, 0); opacity: 1; }
+}
+
+#result-head {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+  padding: 0;
+  pointer-events:none;
+  width: min(92vw, 420px);
+  text-align:center;
+  animation: resultHeadFloat 1.2s ease both;
+  z-index: 15;
+}
+#result-head::before {
+  content: '';
+  position:absolute;
+  inset: -18px;
+  border-radius: 60px;
+  filter: blur(16px);
+  background: radial-gradient(circle at center, rgba(56,189,248,0.25), transparent 60%);
+  opacity: 0.65;
+  pointer-events:none;
+}
+@keyframes resultHeadGlow {
+  0% { box-shadow: 0 12px 30px rgba(56,189,248,0.24); }
+  50% { box-shadow: 0 20px 55px rgba(56,189,248,0.35); }
+  100% { box-shadow: 0 12px 30px rgba(56,189,248,0.24); }
+}
+#stage.stage--scanned #result-head {
+  top: 120px;
+  bottom: auto;
+  left: clamp(36px, 9vw, 72px);
+  transform: translate(0, 0);
+  opacity: 1;
+  animation: none;
+}
+#stage.stage--scanned #result-head .idle-title,
+#stage.stage--scanned #result-head .idle-subtitle,
+#stage.stage--scanned #result-head .idle-hint {
+  animation: resultHeadGlow 2.4s ease-in-out infinite;
+}
 
 /* ─── Idle Screen ────────────────────────────── */
 #idle-screen {
@@ -271,29 +321,26 @@ body.admin-page::after { display: none !important; }
    * jadi teks selalu terbaca di atas background warna apapun.
    */
   text-shadow:
-    0 1px 0   rgba(0,0,0,1),
-    0 2px 4px rgba(0,0,0,0.95),
-    0 4px 12px rgba(0,0,0,0.9),
-    0 8px 28px rgba(0,0,0,0.75),
-    0 16px 52px rgba(0,0,0,0.45);
+    0 2px 8px rgba(0,0,0,0.75),
+    0 8px 22px rgba(0,0,0,0.55);
 }
 
 .idle-subtitle {
   font-size: clamp(13px, 1.8vw, 17px);
-  letter-spacing: 0.42em;
+  letter-spacing: 0.38em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.7);
+  color: rgba(255,255,255,0.85);
   font-weight: 600;
-  text-shadow: 0 1px 6px rgba(0,0,0,0.8), 0 4px 16px rgba(0,0,0,0.5);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.55), 0 4px 16px rgba(0,0,0,0.35);
 }
 
 .idle-hint {
   font-size: 13px; color: rgba(255,255,255,0.38); font-weight: 500;
   display:flex; align-items:center; gap:10px;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
 .idle-hint::before, .idle-hint::after {
-  content:''; width:28px; height:1px; background:rgba(255,255,255,0.14);
+  content:''; width:28px; height:1px; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
 }
 
 @keyframes bob    { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-6px);} }
@@ -683,14 +730,14 @@ render_header([
   </header>
 
   <div id="stage">
+    <div id="result-head" aria-live="polite">
+      <div class="idle-title">Temu Padel</div>
+      <div class="idle-subtitle">Welcome</div>
+      <div class="idle-hint">Scan QR tiket di pojok kiri bawah</div>
+    </div>
     <!-- 1. Idle -->
     <div id="idle-screen">
       <div class="idle-qr-ring"><i class="bi bi-qr-code"></i></div>
-      <div>
-        <div class="idle-title">Temu Padel</div>
-        <div class="idle-subtitle">Welcome</div>
-      </div>
-      <div class="idle-hint">Scan QR tiket di pojok kiri bawah</div>
     </div>
     <!-- 2. Picker -->
     <div id="picker-screen">
@@ -802,12 +849,22 @@ render_header([
   var clockD  = document.getElementById('clockDate');
   var wToggle = document.getElementById('widgetToggleBtn');
   var widget  = document.getElementById('scanner-widget');
+  var stageEl = document.getElementById('stage');
   var screens = [idle,picker,welcome,err];
   var scanner=null,scanning=false,busy=false,hwBuf='',hwTs=0;
   var DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   var MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
-  function show(el){ screens.forEach(function(s){s.style.display='none';}); el.style.display='flex'; }
+  function updateStageBanner(el) {
+    if (!stageEl) return;
+    var showTop = el === picker || el === welcome;
+    stageEl.classList.toggle('stage--scanned', showTop);
+  }
+  function show(el){
+    screens.forEach(function(s){s.style.display='none';});
+    el.style.display='flex';
+    updateStageBanner(el);
+  }
   function pad(n){ return String(n).padStart(2,'0'); }
 
   /* Clock */
