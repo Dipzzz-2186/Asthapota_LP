@@ -569,13 +569,13 @@ body.admin-page::after { display: none !important; }
   max-width: 96px;
   max-height: 42px;
   object-fit: contain;
-  filter: brightness(1.15) contrast(1.0) saturate(1.0);
+  filter: brightness(0) invert(1);
   opacity: 0.72;
   transition: opacity 0.3s ease, filter 0.3s ease;
 }
 .logo-link:hover img {
   opacity: 1;
-  filter: brightness(1.35) saturate(1.2) drop-shadow(0 2px 20px rgba(0,0,0,0.35));
+  filter: brightness(0) invert(1) drop-shadow(0 2px 20px rgba(0,0,0,0.35));
 }
 
 #adOverlay {
