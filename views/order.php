@@ -21,6 +21,7 @@ if (
 
 $db = get_db();
 ensure_order_attendee_checkin_schema($db);
+ensure_order_attendee_package_schema($db);
 $userStmt = $db->prepare('SELECT id, full_name, phone, email, instagram, gender FROM users WHERE id = ?');
 $userStmt->execute([(int)$_SESSION['user_id']]);
 $user = $userStmt->fetch(PDO::FETCH_ASSOC);
@@ -65,7 +66,27 @@ $errors = [];
 $additionalAttendeeCount = max(0, $totalTickets - 1);
 $attendeeNames = array_fill(0, $additionalAttendeeCount, '');
 $attendeeGenders = array_fill(0, $additionalAttendeeCount, '');
+$attendeePackageIds = array_fill(0, $additionalAttendeeCount, 0);
 $allowedAttendeeGenders = ['Laki-laki', 'Perempuan'];
+$packageTicketCounts = [];
+$packageNamesById = [];
+$packageIdOrder = [];
+foreach ($items as $it) {
+    $pkgId = (int)($it['package_id'] ?? 0);
+    $pkgQty = max(0, (int)($it['qty'] ?? 0));
+    if ($pkgId <= 0 || $pkgQty <= 0) {
+        continue;
+    }
+    if (!isset($packageTicketCounts[$pkgId])) {
+        $packageTicketCounts[$pkgId] = 0;
+        $packageNamesById[$pkgId] = (string)($it['name'] ?? ('Package #' . $pkgId));
+        $packageIdOrder[] = $pkgId;
+    }
+    $packageTicketCounts[$pkgId] += $pkgQty;
+}
+$requiresPackageSelection = count($packageTicketCounts) > 1;
+$defaultPackageId = (int)($packageIdOrder[0] ?? 0);
+$ownerPackageId = $defaultPackageId;
 
 $normalizeAttendeeGender = static function ($raw) use ($allowedAttendeeGenders): string {
     $value = trim((string)$raw);
@@ -97,8 +118,37 @@ if ($additionalAttendeeCount > 0 && isset($_SESSION['order_draft']['attendee_gen
         $attendeeGenders[$i] = $normalizeAttendeeGender($genderInput);
     }
 }
+if ($requiresPackageSelection && $additionalAttendeeCount > 0 && isset($_SESSION['order_draft']['attendee_package_ids']) && is_array($_SESSION['order_draft']['attendee_package_ids'])) {
+    for ($i = 0; $i < $additionalAttendeeCount; $i++) {
+        $pid = (int)($_SESSION['order_draft']['attendee_package_ids'][$i] ?? 0);
+        $attendeePackageIds[$i] = isset($packageTicketCounts[$pid]) ? $pid : 0;
+    }
+} elseif ($additionalAttendeeCount > 0 && $defaultPackageId > 0) {
+    for ($i = 0; $i < $additionalAttendeeCount; $i++) {
+        $attendeePackageIds[$i] = $defaultPackageId;
+    }
+}
+if ($requiresPackageSelection) {
+    $ownerDraftPackageId = (int)($_SESSION['order_draft']['owner_package_id'] ?? 0);
+    $ownerPackageId = isset($packageTicketCounts[$ownerDraftPackageId]) ? $ownerDraftPackageId : 0;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $rawPackages = $_POST['attendee_package_ids'] ?? [];
+    if (!is_array($rawPackages)) {
+        $rawPackages = [];
+    }
+    $rawOwnerPackage = (int)($_POST['owner_package_id'] ?? 0);
+
+    if ($requiresPackageSelection) {
+        $ownerPackageId = $rawOwnerPackage;
+        if ($ownerPackageId <= 0 || !isset($packageTicketCounts[$ownerPackageId])) {
+            $errors[] = 'Please select a valid package for attendee #1.';
+        }
+    } else {
+        $ownerPackageId = $defaultPackageId;
+    }
+
     if ($additionalAttendeeCount > 0) {
         $rawNames = $_POST['attendee_names'] ?? [];
         if (!is_array($rawNames)) {
@@ -121,99 +171,159 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($attendeeGenders[$i] === '') {
                 $errors[] = 'Please select gender for attendee #' . ($i + 2) . '.';
             }
+            if ($requiresPackageSelection) {
+                $packageIdInput = (int)($rawPackages[$i] ?? 0);
+                $attendeePackageIds[$i] = $packageIdInput;
+                if ($packageIdInput <= 0 || !isset($packageTicketCounts[$packageIdInput])) {
+                    $errors[] = 'Please select a valid package for attendee #' . ($i + 2) . '.';
+                }
+            } else {
+                $attendeePackageIds[$i] = $defaultPackageId;
+            }
+        }
+    }
+
+    if ($requiresPackageSelection) {
+        $usedPackageCounts = [];
+        if ($ownerPackageId > 0) {
+            $usedPackageCounts[$ownerPackageId] = (int)($usedPackageCounts[$ownerPackageId] ?? 0) + 1;
+        }
+        foreach ($attendeePackageIds as $pkgId) {
+            if ($pkgId <= 0) {
+                continue;
+            }
+            $usedPackageCounts[$pkgId] = (int)($usedPackageCounts[$pkgId] ?? 0) + 1;
+        }
+        foreach ($usedPackageCounts as $pkgId => $usedCount) {
+            if ($usedCount > (int)($packageTicketCounts[$pkgId] ?? 0)) {
+                $pkgLabel = (string)($packageNamesById[$pkgId] ?? ('Package #' . $pkgId));
+                $errors[] = 'Assigned attendees for package "' . $pkgLabel . '" exceed purchased quantity.';
+            }
         }
     }
 
     $_SESSION['order_draft']['attendee_names'] = $attendeeNames;
     $_SESSION['order_draft']['attendee_genders'] = $attendeeGenders;
+    $_SESSION['order_draft']['attendee_package_ids'] = $attendeePackageIds;
+    $_SESSION['order_draft']['owner_package_id'] = $ownerPackageId;
 
-    if (!isset($_FILES['payment_proof']) || $_FILES['payment_proof']['error'] !== UPLOAD_ERR_OK) {
-        $errors[] = 'Please upload a valid payment proof.';
-    } else {
-        $file = $_FILES['payment_proof'];
-        if ($file['size'] > 2 * 1024 * 1024) {
-            $errors[] = 'File is too large. Max 2MB.';
+    if (!$errors) {
+        if (!isset($_FILES['payment_proof']) || $_FILES['payment_proof']['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Please upload a valid payment proof.';
         } else {
-            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            if (!in_array($ext, ['jpg', 'jpeg', 'png'])) {
-                $errors[] = 'Only JPG or PNG allowed.';
+            $file = $_FILES['payment_proof'];
+            if ($file['size'] > 2 * 1024 * 1024) {
+                $errors[] = 'File is too large. Max 2MB.';
             } else {
-                $name = 'proof_u' . (int)$_SESSION['user_id'] . '_' . time() . '_' . mt_rand(1000, 9999) . '.' . $ext;
-                $uploadDir = $CONFIG['upload_dir'];
-                if (!is_dir($uploadDir)) {
-                    mkdir($uploadDir, 0775, true);
-                }
-                $target = $uploadDir . '/' . $name;
-                if (!move_uploaded_file($file['tmp_name'], $target)) {
-                    $errors[] = 'Failed to upload file.';
+                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                if (!in_array($ext, ['jpg', 'jpeg', 'png'])) {
+                    $errors[] = 'Only JPG or PNG allowed.';
                 } else {
-                    $orderId = 0;
-                    try {
-                        $db->beginTransaction();
-                        $stmt = $db->prepare('INSERT INTO orders (user_id, total, status, payment_proof, created_at) VALUES (?, ?, ?, ?, ?)');
-                        $stmt->execute([(int)$_SESSION['user_id'], (int)$total, 'paid', $name, date('c')]);
-                        $orderId = (int)$db->lastInsertId();
-
-                        $itemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
-                        foreach ($items as $it) {
-                            $itemStmt->execute([$orderId, $it['package_id'], $it['qty'], $it['price']]);
-                        }
-
-                        $db->commit();
-                    } catch (Throwable $e) {
-                        if ($db->inTransaction()) {
-                            $db->rollBack();
-                        }
-                        if (is_file($target)) {
-                            @unlink($target);
-                        }
-                        $errors[] = 'Failed to save your order. Please try again.';
+                    $name = 'proof_u' . (int)$_SESSION['user_id'] . '_' . time() . '_' . mt_rand(1000, 9999) . '.' . $ext;
+                    $uploadDir = $CONFIG['upload_dir'];
+                    if (!is_dir($uploadDir)) {
+                        mkdir($uploadDir, 0775, true);
                     }
-
-                    if ($orderId > 0) {
+                    $target = $uploadDir . '/' . $name;
+                    if (!move_uploaded_file($file['tmp_name'], $target)) {
+                        $errors[] = 'Failed to upload file.';
+                    } else {
+                        $orderId = 0;
                         try {
-                            $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
-                            $attendeeStmt->execute([$orderId, (string)$user['full_name'], $ownerGender, 1, date('Y-m-d H:i:s')]);
-                            foreach ($attendeeNames as $idx => $attendeeName) {
-                                $attendeeStmt->execute([$orderId, $attendeeName, (string)($attendeeGenders[$idx] ?? ''), $idx + 2, date('Y-m-d H:i:s')]);
+                            $db->beginTransaction();
+                            $stmt = $db->prepare('INSERT INTO orders (user_id, total, status, payment_proof, created_at) VALUES (?, ?, ?, ?, ?)');
+                            $stmt->execute([(int)$_SESSION['user_id'], (int)$total, 'paid', $name, date('c')]);
+                            $orderId = (int)$db->lastInsertId();
+
+                            $itemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
+                            foreach ($items as $it) {
+                                $itemStmt->execute([$orderId, $it['package_id'], $it['qty'], $it['price']]);
                             }
+
+                            $db->commit();
                         } catch (Throwable $e) {
-                            // Fallback for older attendee schema with attendee_gender.
+                            if ($db->inTransaction()) {
+                                $db->rollBack();
+                            }
+                            if (is_file($target)) {
+                                @unlink($target);
+                            }
+                            $errors[] = 'Failed to save your order. Please try again.';
+                        }
+
+                        if ($orderId > 0) {
+                            if ($ownerPackageId <= 0) {
+                                $ownerPackageId = $defaultPackageId;
+                            }
+
+                            $attendeeRows = [
+                                [
+                                    'name' => (string)$user['full_name'],
+                                    'gender' => $ownerGender,
+                                    'position_no' => 1,
+                                    'package_id' => $ownerPackageId > 0 ? (int)$ownerPackageId : null,
+                                ],
+                            ];
+                            foreach ($attendeeNames as $idx => $attendeeName) {
+                                $attendeeRows[] = [
+                                    'name' => (string)$attendeeName,
+                                    'gender' => (string)($attendeeGenders[$idx] ?? ''),
+                                    'position_no' => $idx + 2,
+                                    'package_id' => (int)($attendeePackageIds[$idx] ?? 0) > 0 ? (int)$attendeePackageIds[$idx] : null,
+                                ];
+                            }
+
                             try {
-                                $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, attendee_gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
-                                $attendeeStmt->execute([$orderId, (string)$user['full_name'], null, 1, date('Y-m-d H:i:s')]);
-                                foreach ($attendeeNames as $idx => $attendeeName) {
-                                    $attendeeStmt->execute([$orderId, $attendeeName, (string)($attendeeGenders[$idx] ?? ''), $idx + 2, date('Y-m-d H:i:s')]);
+                                $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, package_id, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+                                foreach ($attendeeRows as $row) {
+                                    $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], $row['package_id'], date('Y-m-d H:i:s')]);
                                 }
                             } catch (Throwable $e) {
-                                // Keep order success even when attendee table does not exist.
+                                // Fallback for older attendee schema without package_id.
+                                try {
+                                    $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
+                                    foreach ($attendeeRows as $row) {
+                                        $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], date('Y-m-d H:i:s')]);
+                                    }
+                                } catch (Throwable $e) {
+                                    // Fallback for older attendee schema with attendee_gender.
+                                    try {
+                                        $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, attendee_gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
+                                        foreach ($attendeeRows as $row) {
+                                            $legacyGender = $row['position_no'] === 1 ? null : $row['gender'];
+                                            $attendeeStmt->execute([$orderId, $row['name'], $legacyGender, $row['position_no'], date('Y-m-d H:i:s')]);
+                                        }
+                                    } catch (Throwable $e) {
+                                        // Keep order success even when attendee table does not exist.
+                                    }
+                                }
                             }
-                        }
 
-                        unset($_SESSION['order_draft']);
-                        send_invoice_email([
-                            'id' => $orderId,
-                            'full_name' => $user['full_name'],
-                            'email' => $user['email'],
-                            'phone' => $user['phone'],
-                            'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
-                            'status' => 'paid',
-                            'total' => $total,
-                            'payment_proof' => $name,
-                            'created_at' => date('Y-m-d H:i:s'),
-                        ], $items, (string)$user['email']);
-                        notify_admins_new_paid_order($db, [
-                            'id' => $orderId,
-                            'full_name' => $user['full_name'],
-                            'email' => $user['email'],
-                            'phone' => $user['phone'],
-                            'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
-                            'status' => 'paid',
-                            'total' => $total,
-                            'payment_proof' => $name,
-                            'created_at' => date('Y-m-d H:i:s'),
-                        ], $items);
-                        redirect('/thankyou?order=' . $orderId);
+                            unset($_SESSION['order_draft']);
+                            send_invoice_email([
+                                'id' => $orderId,
+                                'full_name' => $user['full_name'],
+                                'email' => $user['email'],
+                                'phone' => $user['phone'],
+                                'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
+                                'status' => 'paid',
+                                'total' => $total,
+                                'payment_proof' => $name,
+                                'created_at' => date('Y-m-d H:i:s'),
+                            ], $items, (string)$user['email']);
+                            notify_admins_new_paid_order($db, [
+                                'id' => $orderId,
+                                'full_name' => $user['full_name'],
+                                'email' => $user['email'],
+                                'phone' => $user['phone'],
+                                'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
+                                'status' => 'paid',
+                                'total' => $total,
+                                'payment_proof' => $name,
+                                'created_at' => date('Y-m-d H:i:s'),
+                            ], $items);
+                            redirect('/thankyou?order=' . $orderId);
+                        }
                     }
                 }
             }
@@ -473,11 +583,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       font-size: 14px;
     }
 
+    .attendee-grid input[readonly] {
+      opacity: 1;
+      cursor: default;
+      pointer-events: none;
+    }
+
     .attendee-row {
       display: grid;
       grid-template-columns: 1fr 180px;
       gap: 10px;
       align-items: end;
+    }
+
+    .attendee-row.has-package {
+      grid-template-columns: 1fr 180px 230px;
     }
 
     .attendee-row select {
@@ -555,6 +675,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .attendee-row {
         grid-template-columns: 1fr;
       }
+
+      .attendee-row.has-package {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -589,11 +713,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <?php if ($additionalAttendeeCount > 0): ?>
           <div class="payment-card" style="margin-top:16px;">
-            <div><i class="bi bi-people"></i> <strong>Additional Attendees</strong></div>
+            <div><i class="bi bi-people"></i> <strong>Attendees</strong></div>
             <div class="attendee-hint">Total tickets: <?= (int)$totalTickets ?>. Please fill names for attendee #2 until #<?= (int)$totalTickets ?>.</div>
+            <?php if ($requiresPackageSelection): ?>
+              <div class="attendee-hint">You bought different package types. Please assign package for each attendee, including attendee #1 (account owner).</div>
+            <?php endif; ?>
             <div class="attendee-grid">
+              <?php if ($requiresPackageSelection): ?>
+                <div class="attendee-row has-package">
+                  <label>
+                    Attendee #1 Name
+                    <input type="text" value="<?= h((string)$user['full_name']) ?>" readonly>
+                  </label>
+                  <label>
+                    Gender
+                    <input type="text" value="<?= h($ownerGender) ?>" readonly>
+                  </label>
+                  <label for="owner_package_id">
+                    Package
+                    <select id="owner_package_id" name="owner_package_id" form="orderSubmitForm" required>
+                      <option value="">Select package</option>
+                      <?php foreach ($packageIdOrder as $pkgId): ?>
+                        <?php $pkgLabel = (string)($packageNamesById[$pkgId] ?? ('Package #' . (int)$pkgId)); ?>
+                        <?php $pkgQty = (int)($packageTicketCounts[$pkgId] ?? 0); ?>
+                        <option value="<?= (int)$pkgId ?>"<?= ((int)$ownerPackageId === (int)$pkgId) ? ' selected' : '' ?>>
+                          <?= h($pkgLabel) ?> (<?= $pkgQty ?>x)
+                        </option>
+                      <?php endforeach; ?>
+                    </select>
+                  </label>
+                </div>
+              <?php endif; ?>
               <?php for ($i = 0; $i < $additionalAttendeeCount; $i++): ?>
-                <div class="attendee-row">
+                <div class="attendee-row<?= $requiresPackageSelection ? ' has-package' : '' ?>">
                   <label for="attendee_name_<?= (int)$i ?>">
                     Attendee #<?= (int)($i + 2) ?> Name
                     <input
@@ -614,6 +766,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       <option value="Perempuan"<?= (($attendeeGenders[$i] ?? '') === 'Perempuan') ? ' selected' : '' ?>>Perempuan</option>
                     </select>
                   </label>
+                  <?php if ($requiresPackageSelection): ?>
+                    <label for="attendee_package_<?= (int)$i ?>">
+                      Package
+                      <select id="attendee_package_<?= (int)$i ?>" name="attendee_package_ids[]" form="orderSubmitForm" required>
+                        <option value="">Select package</option>
+                        <?php foreach ($packageIdOrder as $pkgId): ?>
+                          <?php $pkgLabel = (string)($packageNamesById[$pkgId] ?? ('Package #' . (int)$pkgId)); ?>
+                          <?php $pkgQty = (int)($packageTicketCounts[$pkgId] ?? 0); ?>
+                          <option value="<?= (int)$pkgId ?>"<?= ((int)($attendeePackageIds[$i] ?? 0) === (int)$pkgId) ? ' selected' : '' ?>>
+                            <?= h($pkgLabel) ?> (<?= $pkgQty ?>x)
+                          </option>
+                        <?php endforeach; ?>
+                      </select>
+                    </label>
+                  <?php endif; ?>
                 </div>
               <?php endfor; ?>
             </div>
@@ -726,6 +893,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       var proofInput = document.getElementById('paymentProofInput');
       var proofPreviewWrap = document.getElementById('proofPreviewWrap');
       var proofPreviewImage = document.getElementById('proofPreviewImage');
+      var packageLimits = <?= json_encode(array_map('intval', $packageTicketCounts), JSON_UNESCAPED_UNICODE) ?>;
+      var packageSelectionEnabled = <?= $requiresPackageSelection ? 'true' : 'false' ?>;
 
       if (proofInput && proofPreviewWrap && proofPreviewImage) {
         proofInput.addEventListener('change', function () {
@@ -748,6 +917,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           };
           reader.readAsDataURL(file);
         });
+      }
+
+      if (packageSelectionEnabled) {
+        var ownerPackageSelect = document.getElementById('owner_package_id');
+        var attendeePackageSelects = Array.prototype.slice.call(document.querySelectorAll('select[name="attendee_package_ids[]"]'));
+        var allPackageSelects = [];
+        if (ownerPackageSelect) allPackageSelects.push(ownerPackageSelect);
+        allPackageSelects = allPackageSelects.concat(attendeePackageSelects);
+
+        function updatePackageAvailability() {
+          var counts = {};
+          allPackageSelects.forEach(function (sel) {
+            var val = String(sel.value || '');
+            if (!val) return;
+            counts[val] = (counts[val] || 0) + 1;
+          });
+
+          allPackageSelects.forEach(function (sel) {
+            var current = String(sel.value || '');
+            Array.prototype.forEach.call(sel.options, function (opt) {
+              var val = String(opt.value || '');
+              if (!val) {
+                opt.disabled = false;
+                return;
+              }
+              var limit = Number(packageLimits[val] || 0);
+              if (!limit) {
+                opt.disabled = true;
+                return;
+              }
+              var used = Number(counts[val] || 0);
+              opt.disabled = val !== current && used >= limit;
+            });
+          });
+        }
+
+        allPackageSelects.forEach(function (sel) {
+          sel.addEventListener('change', updatePackageAvailability);
+        });
+        updatePackageAvailability();
       }
     })();
   </script>

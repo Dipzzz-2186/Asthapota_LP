@@ -436,6 +436,39 @@ function ensure_order_attendee_checkin_schema(PDO $db): void {
     }
 }
 
+function ensure_order_attendee_package_schema(PDO $db): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $currentDb = (string)$db->query('SELECT DATABASE()')->fetchColumn();
+        if ($currentDb === '') {
+            return;
+        }
+
+        $checkStmt = $db->prepare(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_attendees' AND COLUMN_NAME = ?"
+        );
+        $checkStmt->execute([$currentDb, 'package_id']);
+        $hasPackageId = (int)$checkStmt->fetchColumn() > 0;
+        if (!$hasPackageId) {
+            $db->exec("ALTER TABLE order_attendees ADD COLUMN package_id INT NULL AFTER position_no");
+        }
+
+        try {
+            $db->exec("CREATE INDEX idx_order_attendees_package_id ON order_attendees (package_id)");
+        } catch (Throwable $e) {
+            // Ignore when index already exists.
+        }
+    } catch (Throwable $e) {
+        // Keep app functional even if schema migration fails.
+    }
+}
+
 function ensure_admin_notification_schema(PDO $db): void {
     static $checked = false;
     if ($checked) {

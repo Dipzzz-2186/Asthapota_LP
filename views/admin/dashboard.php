@@ -13,6 +13,7 @@ if (!headers_sent()) {
 $db = get_db();
 ensure_order_qr_schema($db);
 ensure_order_attendee_checkin_schema($db);
+ensure_order_attendee_package_schema($db);
 ensure_admin_notification_schema($db);
 $flash = ['success' => '', 'error' => ''];
 $selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
@@ -513,7 +514,11 @@ if ($orderIds) {
         $orderTicketCountMap[$oid] = ($orderTicketCountMap[$oid] ?? 0) + $qty;
     }
     try {
-        $attendeeSql = "SELECT order_id, attendee_name, position_no, checked_in_at FROM order_attendees WHERE order_id IN ($inPlaceholders) ORDER BY order_id ASC, position_no ASC, id ASC";
+        $attendeeSql = "SELECT oa.order_id, oa.attendee_name, oa.position_no, oa.checked_in_at, p.name AS package_name
+            FROM order_attendees oa
+            LEFT JOIN packages p ON p.id = oa.package_id
+            WHERE oa.order_id IN ($inPlaceholders)
+            ORDER BY oa.order_id ASC, oa.position_no ASC, oa.id ASC";
         $attendeeStmt = $db->prepare($attendeeSql);
         foreach ($orderIds as $index => $orderId) { $attendeeStmt->bindValue($index + 1, $orderId, PDO::PARAM_INT); }
         $attendeeStmt->execute();
@@ -521,7 +526,12 @@ if ($orderIds) {
             $oid = (int)($row['order_id'] ?? 0);
             if ($oid <= 0) continue;
             if (!isset($orderAttendeeMap[$oid])) $orderAttendeeMap[$oid] = [];
-            $orderAttendeeMap[$oid][] = ['position_no' => (int)($row['position_no'] ?? 0), 'attendee_name' => trim((string)($row['attendee_name'] ?? '')), 'checked_in_at' => (string)($row['checked_in_at'] ?? '')];
+            $orderAttendeeMap[$oid][] = [
+                'position_no' => (int)($row['position_no'] ?? 0),
+                'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
+                'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
+                'package_name' => trim((string)($row['package_name'] ?? '')),
+            ];
         }
     } catch (Throwable $e) { $orderAttendeeMap = []; }
 }
@@ -2994,10 +3004,14 @@ render_header([
           var li = document.createElement('li');
           var pos = Number(at && at.position_no ? at.position_no : 0);
           var name = at && at.attendee_name ? String(at.attendee_name) : '-';
+          var pkg = at && at.package_name ? String(at.package_name) : '';
           var checkedInAt = at && at.checked_in_at ? String(at.checked_in_at) : '';
           var arrived = checkedInAt ? 'Hadir' : 'Belum hadir';
           var arrivedColor = checkedInAt ? '#1f7a45' : '#b44';
-          li.innerHTML = escapeHtml((pos > 0 ? '#' + pos + ' — ' : '') + name) + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>' + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '');
+          li.innerHTML = escapeHtml((pos > 0 ? '#' + pos + ' — ' : '') + name)
+            + (pkg ? ' <span style="color:#0f5ea8;font-weight:700;font-size:11.5px;">[' + escapeHtml(pkg) + ']</span>' : '')
+            + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>'
+            + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '');
           detailAttendees.appendChild(li);
         });
         detailAttendeesEmpty.style.display = attendeesArr.length ? 'none' : 'block';
