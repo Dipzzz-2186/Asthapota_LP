@@ -239,9 +239,12 @@ body.admin-page::after { display: none !important; }
   padding-top: 0;
 }
 
-#stage.stage--scanned #picker-screen,
-#stage.stage--scanned #welcome-screen {
+#stage.stage--scanned #picker-screen {
   padding-top: clamp(140px, 20vh, 220px);
+}
+
+#stage.stage--welcome #welcome-screen {
+  padding-top: clamp(8px, 1.4vh, 18px);
 }
 
 @keyframes resultHeadFloat {
@@ -289,10 +292,30 @@ body.admin-page::after { display: none !important; }
   opacity: 1;
   animation: none;
 }
+#stage.stage--picker #result-head {
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -16px);
+}
+#stage.stage--welcome #result-head {
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -16px);
+}
 #stage.stage--scanned #result-head .idle-title,
 #stage.stage--scanned #result-head .idle-subtitle,
 #stage.stage--scanned #result-head .idle-hint {
   animation: resultHeadGlow 2.4s ease-in-out infinite;
+}
+#stage.stage--picker #result-head .idle-subtitle {
+  display: none;
+}
+#stage.stage--picker #result-head .idle-hint {
+  display: none;
+}
+#stage.stage--picker #picker-screen {
+  padding-top: clamp(88px, 13vh, 132px);
+  scroll-padding-top: clamp(88px, 13vh, 132px);
 }
 
 /* ─── Idle Screen ────────────────────────────── */
@@ -366,21 +389,125 @@ body.admin-page::after { display: none !important; }
 #welcome-screen {
   display:none; flex-direction:column; align-items:center; justify-content:center;
   text-align:center; position:absolute; inset:0;
-  padding:clamp(84px,12vh,140px) clamp(24px,10vw,180px) clamp(120px,16vh,170px);
+  padding:clamp(22px,4vh,44px) clamp(16px,4vw,56px);
   animation: welcomeIn 0.6s cubic-bezier(0.22,1,0.36,1);
+  overflow:hidden;
+  isolation:isolate;
+}
+#welcome-screen::before {
+  content:'';
+  position:absolute;
+  inset:0;
+  background: linear-gradient(180deg, rgba(1,5,16,0.34) 0%, rgba(1,5,16,0.44) 45%, rgba(1,5,16,0.34) 100%);
+  z-index:-3;
+}
+#welcome-screen::after {
+  content:'';
+  position:absolute;
+  inset:-10% -8%;
+  background:
+    radial-gradient(50% 38% at 50% 58%, rgba(56,189,248,0.28), transparent 72%),
+    radial-gradient(40% 28% at 50% 42%, rgba(125,211,252,0.18), transparent 72%),
+    radial-gradient(25% 20% at 22% 70%, rgba(14,165,233,0.14), transparent 76%),
+    radial-gradient(25% 20% at 78% 30%, rgba(96,165,250,0.14), transparent 76%);
+  filter: blur(10px);
+  opacity: 0.95;
+  z-index:-2;
+  animation: welcomeAura 6.8s ease-in-out infinite;
 }
 @keyframes welcomeIn { from{opacity:0;transform:scale(0.96) translateY(30px);} to{opacity:1;transform:scale(1) translateY(0);} }
+.welcome-panel{
+    width:min(92vw, 980px);
+    min-height: min(62vh, 600px);
+    transform: translateY(-7vh);
+  border-radius: 28px;
+  border:1px solid rgba(148,163,184,0.42);
+  background:
+    linear-gradient(145deg, rgba(6,14,34,0.72), rgba(4,9,24,0.78)),
+    radial-gradient(55% 60% at 50% 35%, rgba(56,189,248,0.2), transparent 70%);
+  box-shadow:
+    0 24px 80px rgba(0,0,0,0.52),
+    inset 0 0 0 1px rgba(255,255,255,0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding: clamp(24px, 5vh, 48px) clamp(20px, 5vw, 60px);
+  position:relative;
+  overflow:hidden;
+  animation: welcomePanelIn 0.75s cubic-bezier(.16,.8,.2,1) both;
+}
+.welcome-panel::before{
+  content:'';
+  position:absolute;
+  width:140%;
+  height:42%;
+  left:-22%;
+  top:12%;
+  background: linear-gradient(110deg, transparent 36%, rgba(255,255,255,0.24) 50%, transparent 64%);
+  transform: translateX(-30%) rotate(-4deg);
+  opacity:0.22;
+  animation: welcomeSweep 4.8s ease-in-out infinite;
+  pointer-events:none;
+}
+.welcome-panel > *{ position:relative; z-index:1; }
 .welcome-avatar { width:clamp(140px,18vw,220px); height:clamp(140px,18vw,220px); margin-bottom:clamp(24px,3vw,40px); position:relative; animation:floaty 2.8s ease-in-out infinite; flex-shrink:0; }
+.welcome-avatar::before{
+  content:'';
+  position:absolute;
+  inset:-22px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(125,211,252,0.42), rgba(56,189,248,0.1) 48%, transparent 74%);
+  filter:blur(6px);
+  animation:welcomePulse 2.8s ease-in-out infinite;
+  z-index:-1;
+}
 .welcome-avatar img { width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 8px 40px rgba(0,0,0,0.5)); }
-.welcome-greeting { font-size:clamp(22px,3vw,48px); font-weight:600; color:rgba(241,245,249,0.45); letter-spacing:0.06em; margin-bottom:16px; line-height:1.2; text-shadow:0 2px 12px rgba(0,0,0,0.6); }
+.welcome-greeting { font-size:clamp(22px,3vw,48px); font-weight:600; color:rgba(241,245,249,0.58); letter-spacing:0.08em; margin-bottom:12px; line-height:1.2; text-shadow:0 2px 12px rgba(0,0,0,0.6); animation:welcomeTitleIn 0.75s cubic-bezier(.16,.8,.2,1) both; }
 .welcome-name {
   font-size:clamp(48px,10vw,140px); font-weight:900; color:#fff;
   letter-spacing:-0.04em; line-height:0.95; margin-bottom:0; max-width:1200px;
   text-shadow:0 2px 4px rgba(0,0,0,1),0 8px 30px rgba(0,0,0,0.9),0 20px 60px rgba(0,0,0,0.5);
   word-wrap:break-word; hyphens:auto;
+  animation:welcomeNameIn 0.95s cubic-bezier(.14,.82,.2,1) both;
 }
-.welcome-package { font-size:clamp(16px,2.4vw,20px); font-weight:600; letter-spacing:0.35em; text-transform:uppercase; color:rgba(56,189,248,0.9); margin-top:10px; text-shadow:0 2px 12px rgba(0,0,0,0.6); }
+.welcome-package { font-size:clamp(16px,2.4vw,20px); font-weight:600; letter-spacing:0.35em; text-transform:uppercase; color:rgba(56,189,248,0.95); margin-top:10px; text-shadow:0 2px 12px rgba(0,0,0,0.6); animation:welcomePackageIn 1.05s ease both, welcomePackageGlow 2.6s ease-in-out infinite 1s; }
 .welcome-badge,.welcome-time,.welcome-tags { display:none!important; }
+@keyframes welcomeAura{
+  0%,100%{ transform:scale(1); opacity:0.88; }
+  50%{ transform:scale(1.05); opacity:1; }
+}
+@keyframes welcomeSweep{
+  0%{ transform:translateX(-30%) rotate(-4deg); opacity:0.08; }
+  45%{ opacity:0.26; }
+  100%{ transform:translateX(20%) rotate(-4deg); opacity:0.1; }
+}
+@keyframes welcomePulse{
+  0%,100%{ transform:scale(0.95); opacity:0.6; }
+  50%{ transform:scale(1.05); opacity:1; }
+}
+@keyframes welcomeTitleIn{
+  from{ opacity:0; transform:translateY(14px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+@keyframes welcomeNameIn{
+  from{ opacity:0; transform:translateY(24px) scale(0.94); letter-spacing:-0.01em; }
+  to{ opacity:1; transform:translateY(0) scale(1); letter-spacing:-0.04em; }
+}
+@keyframes welcomePackageIn{
+  from{ opacity:0; transform:translateY(12px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+@keyframes welcomePackageGlow{
+  0%,100%{ text-shadow:0 2px 12px rgba(0,0,0,0.6), 0 0 10px rgba(56,189,248,0.12); }
+  50%{ text-shadow:0 2px 12px rgba(0,0,0,0.6), 0 0 18px rgba(56,189,248,0.35); }
+}
+@keyframes welcomePanelIn{
+  from{ opacity:0; transform:translateY(26px) scale(0.96); }
+  to{ opacity:1; transform:translateY(0) scale(1); }
+}
 
 /* ─── Picker Screen ──────────────────────────── */
 #picker-screen {
@@ -655,6 +782,7 @@ body.admin-page::after { display: none !important; }
   .idle-title { font-size: clamp(34px, 7vw, 58px); }
   .idle-subtitle { letter-spacing: 0.3em; }
   #stage.stage--scanned #picker-screen { padding-top: clamp(128px, 18vh, 190px); }
+  #stage.stage--picker #picker-screen { padding-top: clamp(82px, 12vh, 124px); }
 }
 
 @media (max-width: 820px) {
@@ -665,18 +793,21 @@ body.admin-page::after { display: none !important; }
   .btn-fs { width: 32px; height: 32px; }
   #result-head { width: min(95vw, 560px); gap: 6px; }
   #stage.stage--scanned #result-head { top: 76px; }
+  #stage.stage--picker #result-head { top: 56px; }
   .idle-title { font-size: clamp(30px, 9vw, 48px); }
   .idle-subtitle { font-size: 12px; letter-spacing: 0.24em; }
   .idle-hint { font-size: 12px; }
   .idle-hint::before, .idle-hint::after { width: 18px; }
   .idle-qr-ring { width: 82px; height: 82px; font-size: 34px; margin-top: clamp(170px, 34vh, 260px); }
   #picker-screen { padding: 16px 14px 14px; bottom: 86px; }
+  #stage.stage--picker #picker-screen { padding-top: 96px; }
   .picker-order { gap: 12px; padding: 14px; border-radius: 14px; }
   .picker-order-name { font-size: 20px; }
   .picker-row { padding: 13px 14px; }
   .picker-name { font-size: 15px; }
   .btn-checkin { padding: 9px 14px; font-size: 13px; }
-  #welcome-screen { padding: 110px 18px 132px; }
+  #welcome-screen { padding: 16px; }
+  .welcome-panel { width: min(94vw, 760px); min-height: min(58vh, 520px); border-radius: 22px; transform: translateY(-5vh); }
   .welcome-greeting { margin-bottom: 10px; }
   .welcome-name { font-size: clamp(42px, 15vw, 96px); line-height: 0.98; }
   .welcome-package { letter-spacing: 0.2em; }
@@ -692,6 +823,9 @@ body.admin-page::after { display: none !important; }
   .idle-hint::before, .idle-hint::after { display: none; }
   #result-head { width: min(95vw, 520px); }
   #stage.stage--scanned #result-head { top: 70px; }
+  #stage.stage--picker #result-head { top: 50px; }
+  #stage.stage--picker #picker-screen { padding-top: 86px; }
+  .welcome-panel { width: min(94vw, 520px); min-height: min(56vh, 460px); border-radius: 18px; padding: 22px 16px; transform: translateY(-4vh); }
 }
 
 #adOverlay {
@@ -768,9 +902,9 @@ body.ad-overlay-active * {
   #clock, #clockDate,
   .idle-title, .idle-subtitle, .idle-hint,
   .welcome-greeting, .welcome-name, .welcome-package,
-  .picker-order-name, .picker-name, .picker-package, .picker-label,
+  .picker-order-name, .picker-name, .picker-package,
   .err-title, .err-msg,
-  .widget-head-title, .qr-idle-label, .widget-divider,
+  .widget-head-title, .widget-divider,
   .wbtn, .btn-checkin, .done-badge, .btn-back,
   .tag, .logo-slide
 ) {
@@ -834,10 +968,12 @@ render_header([
     </div>
     <!-- 3. Welcome -->
     <div id="welcome-screen">
-      <div class="welcome-avatar" id="welcomeAvatar"><img id="welcomeImg" src="" alt=""></div>
-      <div class="welcome-greeting">Selamat Datang</div>
-      <div class="welcome-name" id="welcomeName">—</div>
-      <div class="welcome-package" id="welcomePackage" style="display:none;"></div>
+      <div class="welcome-panel">
+        <div class="welcome-avatar" id="welcomeAvatar"><img id="welcomeImg" src="" alt=""></div>
+        <div class="welcome-greeting">Selamat Datang</div>
+        <div class="welcome-name" id="welcomeName">—</div>
+        <div class="welcome-package" id="welcomePackage" style="display:none;"></div>
+      </div>
     </div>
     <!-- 4. Error -->
     <div id="err-screen">
@@ -939,6 +1075,7 @@ render_header([
   var stageEl = document.getElementById('stage');
   var screens = [idle,picker,welcome,err];
   var scanner=null,scanning=false,busy=false,hwBuf='',hwTs=0;
+  var welcomeHoldMs = 30 * 1000;
   var DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   var MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
@@ -946,11 +1083,24 @@ render_header([
     if (!stageEl) return;
     var showTop = el === picker || el === welcome;
     stageEl.classList.toggle('stage--scanned', showTop);
+    stageEl.classList.toggle('stage--picker', el === picker);
+    stageEl.classList.toggle('stage--welcome', el === welcome);
+  }
+  function notifyScreenChange(el){
+    document.dispatchEvent(new CustomEvent('scanScreenChange',{
+      detail:{screen:(el&&el.id)?el.id:''}
+    }));
+  }
+  function notifyCameraState(active){
+    document.dispatchEvent(new CustomEvent('scanCameraState',{
+      detail:{active:!!active}
+    }));
   }
   function show(el){
     screens.forEach(function(s){s.style.display='none';});
     el.style.display='flex';
     updateStageBanner(el);
+    notifyScreenChange(el);
   }
   function pad(n){ return String(n).padStart(2,'0'); }
 
@@ -1051,7 +1201,8 @@ render_header([
     if(wPkg){if(data.package){wPkg.textContent=data.package;wPkg.style.display='block';}else{wPkg.textContent='';wPkg.style.display='none';}}
     show(welcome);
     clearTimeout(window._wt);
-    window._wt=setTimeout(function(){show(idle);},60000);
+    var holdMs = Math.max(30000, Number(welcomeHoldMs) || 0);
+    window._wt=setTimeout(function(){show(idle);},holdMs);
   }
 
   function post(payload){
@@ -1094,21 +1245,28 @@ render_header([
   }
 
   function stopCam(){
-    if(!scanner||!scanning)return Promise.resolve();
-    scanning=false;if(scanLine)scanLine.classList.remove('on');if(qrIdle)qrIdle.style.display='';
+    if(!scanner||!scanning){notifyCameraState(false);return Promise.resolve();}
+    scanning=false;
+    notifyCameraState(false);
+    if(scanLine)scanLine.classList.remove('on');if(qrIdle)qrIdle.style.display='';
     return scanner.stop().catch(function(){}).then(function(){return scanner.clear().catch(function(){});});
   }
 
   btnStart.addEventListener('click',function(){
     if(scanning)return;
     if(typeof Html5Qrcode==='undefined'){showErr('Library scanner gagal dimuat.');return;}
+    notifyCameraState(true);
     if(qrIdle)qrIdle.style.display='none';if(scanLine)scanLine.classList.add('on');
     scanner=new Html5Qrcode('qr-reader');
     scanner.start({facingMode:'environment'},{fps:10,qrbox:160},
       function(text){stopCam().finally(function(){verify(text);});},
       function(){}
     ).then(function(){scanning=true;})
-    .catch(function(){if(qrIdle)qrIdle.style.display='';if(scanLine)scanLine.classList.remove('on');showErr('Izinkan akses kamera atau gunakan input manual.');});
+    .catch(function(){
+      notifyCameraState(false);
+      if(qrIdle)qrIdle.style.display='';if(scanLine)scanLine.classList.remove('on');
+      showErr('Izinkan akses kamera atau gunakan input manual.');
+    });
   });
   btnStop.addEventListener('click',stopCam);
   mForm.addEventListener('submit',function(e){e.preventDefault();verify(mInput.value||'');});
@@ -1128,7 +1286,6 @@ render_header([
     if(k.length===1)hwBuf+=k;
   },true);
 
-  document.addEventListener('adOverlayHidden', function() { show(idle); });
   if(mInput&&mInput.value)verify(mInput.value);
 })();
 </script>
@@ -1148,6 +1305,8 @@ render_header([
   var currentAdIndex = 0;
   var adTimer = null;
   var remoteAdDuration = 25000;
+  var currentScreenId = 'idle-screen';
+  var cameraActive = false;
 
   function isRemoteVideo(url) {
     return typeof url === 'string' && /^https?:\/\//i.test(url);
@@ -1176,6 +1335,26 @@ render_header([
       window.clearTimeout(adTimer);
       adTimer = null;
     }
+  }
+
+  function clearIdleTimer() {
+    if (idleTimer) {
+      window.clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+  }
+
+  function canRunAdCountdown() {
+    return currentScreenId === 'idle-screen' && !cameraActive;
+  }
+
+  function detectCurrentScreen() {
+    var ids = ['idle-screen', 'picker-screen', 'welcome-screen', 'err-screen'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el && window.getComputedStyle(el).display !== 'none') return ids[i];
+    }
+    return '';
   }
 
   function scheduleRemoteAdvance() {
@@ -1239,7 +1418,7 @@ render_header([
   }
 
   function showAdOverlay() {
-    if (!adOverlay || overlayVisible) return;
+    if (!adOverlay || overlayVisible || !canRunAdCountdown()) return;
     adOverlay.classList.add('is-visible');
     adOverlay.setAttribute('aria-hidden', 'false');
     document.body.classList.add('ad-overlay-active');
@@ -1263,8 +1442,18 @@ render_header([
   }
 
   function scheduleAd() {
-    if (idleTimer) window.clearTimeout(idleTimer);
+    clearIdleTimer();
+    if (!canRunAdCountdown()) return;
     idleTimer = window.setTimeout(showAdOverlay, idleDelay);
+  }
+
+  function syncAdByState() {
+    if (!canRunAdCountdown()) {
+      clearIdleTimer();
+      if (overlayVisible) hideAdOverlay();
+      return;
+    }
+    scheduleAd();
   }
 
   function handleUserActivity() {
@@ -1287,6 +1476,18 @@ render_header([
     document.addEventListener(evt, handleUserActivity, { passive: true });
   });
 
+  document.addEventListener('scanScreenChange', function (evt) {
+    var detail = evt && evt.detail ? evt.detail : {};
+    currentScreenId = detail.screen || '';
+    syncAdByState();
+  });
+
+  document.addEventListener('scanCameraState', function (evt) {
+    var detail = evt && evt.detail ? evt.detail : {};
+    cameraActive = !!detail.active;
+    syncAdByState();
+  });
+
   if (adOverlay) {
     adOverlay.addEventListener('click', function () {
       hideAdOverlay();
@@ -1294,7 +1495,8 @@ render_header([
     });
   }
 
-  scheduleAd();
+  currentScreenId = detectCurrentScreen() || currentScreenId;
+  syncAdByState();
 })();
 </script>
 

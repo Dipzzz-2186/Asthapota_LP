@@ -123,10 +123,6 @@ if ($requiresPackageSelection && $additionalAttendeeCount > 0 && isset($_SESSION
         $pid = (int)($_SESSION['order_draft']['attendee_package_ids'][$i] ?? 0);
         $attendeePackageIds[$i] = isset($packageTicketCounts[$pid]) ? $pid : 0;
     }
-} elseif ($additionalAttendeeCount > 0 && $defaultPackageId > 0) {
-    for ($i = 0; $i < $additionalAttendeeCount; $i++) {
-        $attendeePackageIds[$i] = $defaultPackageId;
-    }
 }
 if ($requiresPackageSelection) {
     $ownerDraftPackageId = (int)($_SESSION['order_draft']['owner_package_id'] ?? 0);
