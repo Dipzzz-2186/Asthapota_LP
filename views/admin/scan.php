@@ -520,10 +520,46 @@ body.admin-page::after { display: none !important; }
 .btn-checkin:hover{background:#38bdf8;color:#050611;border-color:#38bdf8;box-shadow:0 4px 16px rgba(56,189,248,0.4);transform:translateY(-1px);}
 
 /* ─── Error Screen ───────────────────────────── */
-#err-screen{display:none;flex-direction:column;align-items:center;justify-content:center;position:absolute;inset:0;gap:14px;padding:40px 24px;text-align:center;animation:fadeUp 0.3s ease-out;}
-.err-icon{font-size:48px;color:rgba(248,113,113,0.55);}
-.err-title{font-size:24px;font-weight:800;color:#f87171;}
-.err-msg{font-size:15px;color:rgba(241,245,249,0.4);max-width:380px;}
+#err-screen{
+  display:none;
+  position:fixed;
+  inset:0;
+  align-items:center;
+  justify-content:center;
+  background:rgba(2,6,23,0.75);
+  backdrop-filter:blur(8px);
+  padding:24px;
+  animation:fadeUp 0.3s ease-out;
+  z-index:60;
+}
+.err-modal{
+  width:min(92vw,420px);
+  background:rgba(8,14,30,0.96);
+  border-radius:26px;
+  padding:30px 28px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:16px;
+  box-shadow:0 30px 60px rgba(0,0,0,0.65),0 0 0 1px rgba(255,255,255,0.05);
+  text-align:center;
+}
+.err-icon{
+  width:68px;
+  height:68px;
+  border-radius:50%;
+  border:2px solid rgba(248,113,113,0.35);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:32px;
+  color:#f87171;
+  background:rgba(248,113,113,0.08);
+}
+.err-title{font-size:26px;font-weight:800;color:#f87171;margin:0;letter-spacing:0.04em;}
+.err-msg{font-size:16px;color:rgba(241,245,249,0.85);max-width:360px;margin:0;}
+.err-close{border:none;background:rgba(248,113,113,0.12);color:#f87171;font-size:13px;font-weight:700;padding:10px 24px;border-radius:999px;cursor:pointer;transition:0.2s;letter-spacing:0.1em;}
+.err-close:hover{background:rgba(248,113,113,0.25);}
 
 /* ─── Tag util ───────────────────────────────── */
 .tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);color:rgba(241,245,249,0.55);}
@@ -531,8 +567,58 @@ body.admin-page::after { display: none !important; }
 .tag.female{background:rgba(244,114,182,0.1);border-color:rgba(244,114,182,0.2);color:#f9a8d4;}
 .tag.ok{background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.2);color:#4ade80;}
 
+.scanner-launcher {
+  position:fixed;
+  left:16px;
+  bottom:96px;
+  z-index:41;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.2);
+  background:rgba(4,5,16,0.78);
+  color:#f8fafc;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+  backdrop-filter:blur(18px);
+  box-shadow:0 10px 24px rgba(0,0,0,0.5);
+  transition:0.2s;
+}
+.scanner-launcher:hover {
+  transform:translateY(-2px);
+  border-color:rgba(255,255,255,0.35);
+}
+.scanner-launcher .bi {
+  font-size:16px;
+}
+
 /* ─── Scanner Widget ─────────────────────────── */
 #scanner-widget{position:fixed;left:16px;bottom:96px;width:168px;background:rgba(4,5,16,0.8);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.11);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,0.65);z-index:40;overflow:hidden;transition:0.25s cubic-bezier(0.4,0,0.2,1);}
+#scanner-widget.hidden {
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  transform:translateY(22px);
+}
+.scanner-close-btn {
+  border:none;
+  background:rgba(255,255,255,0.1);
+  color:#f8fafc;
+  width:28px;
+  height:28px;
+  border-radius:8px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  font-size:12px;
+}
+.scanner-close-btn:hover {
+  background:rgba(255,255,255,0.2);
+}
 .widget-head{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;user-select:none;}
 .widget-head-left{display:flex;align-items:center;gap:6px;}
 .widget-head-icon{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#38bdf8,#818cf8);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex-shrink:0;}
@@ -863,20 +949,31 @@ render_header([
       </div>
     </div>
     <!-- 4. Error -->
-    <div id="err-screen">
-      <div class="err-icon"><i class="bi bi-exclamation-circle"></i></div>
-      <div class="err-title">Gagal</div>
-      <div class="err-msg" id="errMsg">—</div>
+    <div id="err-screen" role="alertdialog" aria-live="polite" aria-modal="true">
+      <div class="err-modal">
+        <div class="err-icon"><i class="bi bi-exclamation-circle"></i></div>
+        <div class="err-title">Gagal</div>
+        <div class="err-msg" id="errMsg">—</div>
+        <button type="button" class="err-close" id="errCloseBtn">Tutup</button>
+      </div>
     </div>
   </div>
+  <!-- Scanner launcher -->
+  <button id="scanner-widget-launcher" class="scanner-launcher" type="button" aria-label="Buka scanner">
+    <i class="bi bi-qr-code-scan" aria-hidden="true"></i>
+    <span>Scanner</span>
+  </button>
 
   <!-- Scanner widget -->
-  <div id="scanner-widget">
+  <div id="scanner-widget" class="hidden collapsed">
     <div class="widget-head" id="widgetToggleBtn">
       <div class="widget-head-left">
         <div class="widget-head-icon"><i class="bi bi-qr-code-scan"></i></div>
         <span class="widget-head-title">Scanner</span>
       </div>
+      <button type="button" class="scanner-close-btn" id="scannerCloseBtn" aria-label="Tutup scanner">
+        <i class="bi bi-x"></i>
+      </button>
       <i class="bi bi-chevron-up widget-toggle"></i>
     </div>
     <div class="widget-body">
@@ -949,6 +1046,7 @@ render_header([
   var wName   = document.getElementById('welcomeName');
   var wPkg    = document.getElementById('welcomePackage');
   var errMsg  = document.getElementById('errMsg');
+  var errCloseBtn = document.getElementById('errCloseBtn');
   var btnStart= document.getElementById('btnStart');
   var btnStop = document.getElementById('btnStop');
   var mForm   = document.getElementById('manualForm');
@@ -959,8 +1057,10 @@ render_header([
   var clockD  = document.getElementById('clockDate');
   var wToggle = document.getElementById('widgetToggleBtn');
   var widget  = document.getElementById('scanner-widget');
+  var widgetLauncher = document.getElementById('scanner-widget-launcher');
+  var widgetCloseBtn = document.getElementById('scannerCloseBtn');
   var stageEl = document.getElementById('stage');
-  var screens = [idle,picker,welcome,err];
+  var screens = [idle,picker,welcome];
   var scanner=null,scanning=false,busy=false,hwBuf='',hwTs=0;
   var welcomeHoldMs = 30 * 1000;
   var DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
@@ -983,11 +1083,47 @@ render_header([
       detail:{active:!!active}
     }));
   }
+  function showScannerWidget(fromLauncher){
+    if(!widget) return;
+    widget.classList.remove('hidden');
+    if(fromLauncher){
+      widget.classList.remove('collapsed');
+    }
+    if(widgetLauncher){
+      widgetLauncher.style.display='none';
+      widgetLauncher.setAttribute('aria-hidden','true');
+    }
+  }
+  function hideScannerWidget(){
+    if(!widget) return;
+    widget.classList.add('hidden');
+    widget.classList.add('collapsed');
+    if(widgetLauncher){
+      widgetLauncher.style.display='inline-flex';
+      widgetLauncher.removeAttribute('aria-hidden');
+    }
+  }
   function show(el){
-    screens.forEach(function(s){s.style.display='none';});
-    el.style.display='flex';
-    updateStageBanner(el);
-    notifyScreenChange(el);
+    screens.forEach(function(s){ if(s) s.style.display='none'; });
+    if(err){
+      err.style.display='none';
+      err.setAttribute('aria-hidden','true');
+    }
+    if(el){
+      el.style.display='flex';
+      if(el !== err){
+        updateStageBanner(el);
+        notifyScreenChange(el);
+      }
+      if(el === err){
+        err.setAttribute('aria-hidden','false');
+        if(errCloseBtn) errCloseBtn.focus();
+      }
+    }
+  }
+  function hideErr(){
+    if(err) err.style.display='none';
+    show(idle);
   }
   function pad(n){ return String(n).padStart(2,'0'); }
 
@@ -1040,6 +1176,18 @@ render_header([
 
   /* Widget */
   wToggle.addEventListener('click',function(){widget.classList.toggle('collapsed');});
+  if(widgetLauncher){
+    widgetLauncher.addEventListener('click',function(e){e.preventDefault(); showScannerWidget(true);});
+  }
+  if(widgetCloseBtn){
+    widgetCloseBtn.addEventListener('click',function(e){e.stopPropagation(); hideScannerWidget();});
+  }
+  if(errCloseBtn){
+    errCloseBtn.addEventListener('click',function(){ hideErr(); });
+  }
+  if(err){
+    err.addEventListener('click',function(e){ if(e.target === err){ hideErr(); } });
+  }
 
   /* Utils */
   function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
