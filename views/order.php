@@ -387,7 +387,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'payment_proof' => $primaryProof,
                 'payment_proofs' => $proofPayloadForNotifications,
                 'created_at' => date('Y-m-d H:i:s'),
-            ], $items, (string)$user['email']);
+            ], $items, (string)$user['email'], $attendeeDetailsForAdmin);
             notify_admins_new_paid_order($db, [
                 'id' => $orderId,
                 'full_name' => $user['full_name'],

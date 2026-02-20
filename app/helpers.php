@@ -194,17 +194,26 @@ function render_payment_proof_buttons(array $proofPaths): string {
         return '<span style="color:#5a6b86;">Tidak ada</span>';
     }
     $total = count($proofPaths);
-    $buttons = '';
-    foreach ($proofPaths as $index => $fileName) {
-        $label = $total === 1 ? 'Lihat Bukti Pembayaran' : 'Bukti ' . ($index + 1) . ' dari ' . $total;
-        $proofUrl = app_base_url() . '/uploads/' . rawurlencode($fileName);
-        $safeProofUrl = htmlspecialchars($proofUrl, ENT_QUOTES, 'UTF-8');
-        $buttons .= '<div style="margin-top:6px;"><a href="' . $safeProofUrl . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1658ad;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;padding:10px 14px;border-radius:10px;">' . $label . '</a></div>';
+    $rowsHtml = '';
+    $chunkSize = 5;
+    $chunks = array_chunk($proofPaths, $chunkSize);
+    foreach ($chunks as $chunkIndex => $chunk) {
+        $cellsHtml = '';
+        foreach ($chunk as $innerIndex => $fileName) {
+            $proofIndex = ($chunkIndex * $chunkSize) + $innerIndex + 1;
+            $label = $total === 1 ? 'Lihat Bukti Pembayaran' : 'Bukti ' . $proofIndex . ' dari ' . $total;
+            $proofUrl = app_base_url() . '/uploads/' . rawurlencode($fileName);
+            $safeProofUrl = htmlspecialchars($proofUrl, ENT_QUOTES, 'UTF-8');
+            $cellsHtml .= '<td style="padding:0 8px 8px 0;vertical-align:top;">
+                <a href="' . $safeProofUrl . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1658ad;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;padding:10px 14px;border-radius:10px;white-space:nowrap;">' . $label . '</a>
+              </td>';
+        }
+        $rowsHtml .= '<tr>' . $cellsHtml . '</tr>';
     }
-    return $buttons;
+    return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">' . $rowsHtml . '</table>';
 }
 
-function send_invoice_email(array $order, array $items, string $toEmail): bool {
+function send_invoice_email(array $order, array $items, string $toEmail, array $attendeeDetails = []): bool {
     $subject = 'Asthapora - Invoice Order #' . (int)$order['id'];
 
     $rows = '';
@@ -220,6 +229,7 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
     }
 
     $paymentProofButton = render_payment_proof_buttons(get_order_payment_proof_paths($order));
+    $attendeeRows = render_admin_attendee_rows($attendeeDetails);
 
     $body = '
       <div style="margin:0;padding:0;background:#eef3ff;font-family:Arial,Helvetica,sans-serif;">
@@ -282,6 +292,18 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
                         <td align="right" style="font-size:20px;color:#1658ad;font-weight:800;">' . rupiah((int)$order['total']) . '</td>
                       </tr>
                     </table>
+                    ' . ($attendeeRows !== ''
+                        ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:16px;border-collapse:collapse;font-size:14px;color:#0c1b36;">
+                            <thead>
+                              <tr>
+                                <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">No</th>
+                                <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Attendee</th>
+                                <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Package</th>
+                              </tr>
+                            </thead>
+                            <tbody>' . $attendeeRows . '</tbody>
+                          </table>'
+                        : '') . '
 
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:16px;background:#f8fbff;border:1px dashed #c6d9ff;border-radius:12px;">
                       <tr>
@@ -531,6 +553,33 @@ function ensure_order_attendee_payment_schema(PDO $db): void {
         $exists = (int)$checkStmt->fetchColumn() > 0;
         if (!$exists) {
             $db->exec("ALTER TABLE order_attendees ADD COLUMN payment_proof VARCHAR(255) NULL AFTER package_id");
+        }
+    } catch (Throwable $e) {
+        // Keep app functional even if schema migration fails.
+    }
+}
+
+function ensure_order_attendee_court_schema(PDO $db): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $currentDb = (string)$db->query('SELECT DATABASE()')->fetchColumn();
+        if ($currentDb === '') {
+            return;
+        }
+
+        $checkStmt = $db->prepare(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_attendees' AND COLUMN_NAME = 'court_no'"
+        );
+        $checkStmt->execute([$currentDb]);
+        $exists = (int)$checkStmt->fetchColumn() > 0;
+        if (!$exists) {
+            $db->exec("ALTER TABLE order_attendees ADD COLUMN court_no TINYINT NULL AFTER payment_proof");
         }
     } catch (Throwable $e) {
         // Keep app functional even if schema migration fails.

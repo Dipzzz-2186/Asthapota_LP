@@ -9,6 +9,7 @@ $db = get_db();
 ensure_order_qr_schema($db);
 ensure_order_attendee_checkin_schema($db);
 ensure_order_attendee_package_schema($db);
+ensure_order_attendee_court_schema($db);
 
 $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/'));
 $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, '/');
@@ -112,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $attendees = [];
     try {
-        $attendeeStmt = $db->prepare('SELECT oa.id, oa.attendee_name, oa.gender, oa.position_no, oa.checked_in_at, oa.package_id, p.name AS package_name FROM order_attendees oa LEFT JOIN packages p ON p.id = oa.package_id WHERE oa.order_id = ? ORDER BY oa.position_no ASC, oa.id ASC');
+        $attendeeStmt = $db->prepare('SELECT oa.id, oa.attendee_name, oa.gender, oa.position_no, oa.checked_in_at, oa.package_id, oa.court_no, p.name AS package_name FROM order_attendees oa LEFT JOIN packages p ON p.id = oa.package_id WHERE oa.order_id = ? ORDER BY oa.position_no ASC, oa.id ASC');
         $attendeeStmt->execute([$orderId]);
         $packIdx = 0;
         foreach ($attendeeStmt->fetchAll(PDO::FETCH_ASSOC) as $ar) {
@@ -124,13 +125,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($packageLabel === '') {
                 $packageLabel = (string)($packagePool[$packIdx] ?? '');
             }
-            $attendees[] = ['id'=>$aid,'name'=>$aname,'gender'=>normalize_gender_value($ar['gender']??''),'position_no'=>(int)($ar['position_no']??0),'checked_in_at'=>(string)($ar['checked_in_at']??''),'package'=>$packageLabel];
+            $attendees[] = ['id'=>$aid,'name'=>$aname,'gender'=>normalize_gender_value($ar['gender']??''),'position_no'=>(int)($ar['position_no']??0),'checked_in_at'=>(string)($ar['checked_in_at']??''),'package'=>$packageLabel,'court_no'=>(int)($ar['court_no']??0)];
             $packIdx++;
         }
     } catch (Throwable $e) { $attendees = []; }
 
     if (!$attendees) {
-        $attendees[] = ['id'=>0,'name'=>$ownerName!==''?$ownerName:'Pemesan','gender'=>$orderGender,'position_no'=>1,'checked_in_at'=>(string)($row['checked_in_at']??''),'package'=>(string)($packagePool[0]??'')];
+        $attendees[] = ['id'=>0,'name'=>$ownerName!==''?$ownerName:'Pemesan','gender'=>$orderGender,'position_no'=>1,'checked_in_at'=>(string)($row['checked_in_at']??''),'package'=>(string)($packagePool[0]??''),'court_no'=>0];
     }
 
     if ($mode === 'checkin') {
@@ -148,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($rc<=0){ $db->prepare('UPDATE orders SET checked_in_at=? WHERE id=?')->execute([$now,$orderId]); }
             else { $db->prepare('UPDATE orders SET checked_in_at=NULL WHERE id=?')->execute([$orderId]); }
         } catch(Throwable $e){}
-        echo json_encode(['ok'=>true,'order_id'=>$orderId,'name'=>(string)$selected['name'],'gender'=>normalize_gender_value($selected['gender']??$orderGender),'checked_in_at'=>$now,'package'=>(string)($selected['package']??''),'message'=>'Check-in berhasil.']);
+        echo json_encode(['ok'=>true,'order_id'=>$orderId,'name'=>(string)$selected['name'],'gender'=>normalize_gender_value($selected['gender']??$orderGender),'checked_in_at'=>$now,'package'=>(string)($selected['package']??''),'court_no'=>(int)($selected['court_no']??0),'message'=>'Check-in berhasil.']);
         exit;
     }
 
@@ -439,7 +440,8 @@ body.admin-page::after { display: none !important; }
   word-wrap:break-word; hyphens:auto; white-space:normal;
   animation:welcomeNameIn 0.95s cubic-bezier(.14,.82,.2,1) both;
 }
-.welcome-package { font-size:clamp(13px,1.6vw,15px); font-weight:700; letter-spacing:0.3em; text-transform:uppercase; color:rgba(255,255,255,0.9); margin-top:10px; text-shadow:0 2px 12px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.55); animation:welcomePackageIn 1.05s ease both, welcomePackageGlow 2.6s ease-in-out infinite 1s; }
+.welcome-package { font-size:clamp(20px,2.7vw,32px); font-weight:800; letter-spacing:0.2em; text-transform:uppercase; color:rgba(255,255,255,0.95); margin-top:12px; text-shadow:0 2px 12px rgba(0,0,0,0.8), 0 0 10px rgba(255,255,255,0.2); animation:welcomePackageIn 1.05s ease both, welcomePackageGlow 2.6s ease-in-out infinite 1s; }
+.welcome-court { font-size:clamp(17px,2.1vw,26px); font-weight:900; letter-spacing:0.18em; text-transform:uppercase; color:rgba(125,211,252,1); margin-top:8px; text-shadow:0 2px 12px rgba(0,0,0,0.8), 0 0 12px rgba(56,189,248,0.35); animation:welcomePackageIn 1.15s ease both; }
 .welcome-badge,.welcome-time,.welcome-tags { display:none!important; }
 @keyframes welcomeAura{
   0%,100%{ transform:scale(1); opacity:0.88; }
@@ -514,7 +516,8 @@ body.admin-page::after { display: none !important; }
 .picker-num.done{background:rgba(34,197,94,0.18);color:#4ade80;border:1px solid rgba(34,197,94,0.3);}
 .picker-name{font-size:17px;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .picker-name.done{color:#4ade80;}
-.picker-package{font-size:11px;letter-spacing:0.35em;text-transform:uppercase;color:rgba(125,211,252,0.95);margin-top:2px;display:block;}
+.picker-package{font-size:14px;letter-spacing:0.16em;text-transform:uppercase;color:rgba(125,211,252,0.98);margin-top:3px;display:block;font-weight:800;}
+.picker-court{font-size:13px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(165,180,252,0.98);margin-top:3px;display:block;font-weight:800;}
 .done-badge{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:999px;background:rgba(34,197,94,0.14);border:1px solid rgba(34,197,94,0.25);font-size:13px;font-weight:700;color:#4ade80;white-space:nowrap;flex-shrink:0;}
 .btn-checkin{display:inline-flex;align-items:center;gap:7px;padding:10px 22px;border-radius:10px;font-family:inherit;font-size:14px;font-weight:700;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;cursor:pointer;transition:0.15s;white-space:nowrap;flex-shrink:0;}
 .btn-checkin:hover{background:#38bdf8;color:#050611;border-color:#38bdf8;box-shadow:0 4px 16px rgba(56,189,248,0.4);transform:translateY(-1px);}
@@ -882,8 +885,8 @@ body.ad-overlay-active * {
 #app :is(
   #clock, #clockDate,
   .idle-title, .idle-subtitle, .idle-hint,
-  .welcome-greeting, .welcome-name, .welcome-package,
-  .picker-order-name, .picker-name, .picker-package,
+  .welcome-greeting, .welcome-name, .welcome-package, .welcome-court,
+  .picker-order-name, .picker-name, .picker-package, .picker-court,
   .err-title, .err-msg,
   .widget-head-title, .widget-divider,
   .wbtn, .btn-checkin, .done-badge, .btn-back,
@@ -956,6 +959,7 @@ render_header([
         <div class="welcome-greeting">Selamat Datang</div>
         <div class="welcome-name" id="welcomeName">—</div>
         <div class="welcome-package" id="welcomePackage" style="display:none;"></div>
+        <div class="welcome-court" id="welcomeCourt" style="display:none;"></div>
       </div>
     </div>
     <!-- 4. Error -->
@@ -1054,6 +1058,7 @@ render_header([
   var pList   = document.getElementById('pickerList');
   var wName   = document.getElementById('welcomeName');
   var wPkg    = document.getElementById('welcomePackage');
+  var wCourt  = document.getElementById('welcomeCourt');
   var errMsg  = document.getElementById('errMsg');
   var errCloseBtn = document.getElementById('errCloseBtn');
   var btnStart= document.getElementById('btnStart');
@@ -1204,6 +1209,8 @@ render_header([
   function gL(g){return g==='male'?'Laki-laki':g==='female'?'Perempuan':'Unknown';}
   function gI(g){return g==='male'?'bi-gender-male':g==='female'?'bi-gender-female':'bi-gender-ambiguous';}
   function gA(g){return g==='female'?'/assets/img/perempuan.png':'/assets/img/laki.png';}
+  function cNo(raw){var n=Number(raw||0);return n>=1&&n<=6?n:0;}
+  function cLabel(raw){var n=cNo(raw);return n>0?('Court '+n):'';}
   var welcomeAvatarPool = {
     male: ['/assets/img/laki.png','/assets/img/laki1.png','/assets/img/laki2.png'],
     female: ['/assets/img/perempuan.png','/assets/img/perempuan1.png','/assets/img/perempuan2.png']
@@ -1233,9 +1240,9 @@ render_header([
       (remain>0?'<span class="tag"><i class="bi bi-hourglass-split"></i> '+remain+' sisa</span>':'')+
       '</div></div>';
     pList.innerHTML=att.map(function(a,i){
-      var done=!!a.checked_in_at,pkg=a.package?'<span class="picker-package">'+esc(a.package)+'</span>':'';
-      if(done) return '<div class="picker-row done"><div class="picker-row-left"><div class="picker-num done">'+(i+1)+'</div><div class="picker-name done">'+esc(a.name||'-')+'</div>'+pkg+'</div><span class="done-badge"><i class="bi bi-check-lg"></i> Sudah hadir</span></div>';
-      return '<div class="picker-row pending"><div class="picker-row-left"><div class="picker-num pending">'+(i+1)+'</div><div class="picker-name">'+esc(a.name||'-')+'</div>'+pkg+'</div>'+
+      var done=!!a.checked_in_at,pkg=a.package?'<span class="picker-package">'+esc(a.package)+'</span>':'',court=cLabel(a.court_no),courtHtml=court?'<span class="picker-court">'+esc(court)+'</span>':'';
+      if(done) return '<div class="picker-row done"><div class="picker-row-left"><div class="picker-num done">'+(i+1)+'</div><div class="picker-name done">'+esc(a.name||'-')+'</div>'+pkg+courtHtml+'</div><span class="done-badge"><i class="bi bi-check-lg"></i> Sudah hadir</span></div>';
+      return '<div class="picker-row pending"><div class="picker-row-left"><div class="picker-num pending">'+(i+1)+'</div><div class="picker-name">'+esc(a.name||'-')+'</div>'+pkg+courtHtml+'</div>'+
         '<button type="button" class="btn-checkin do-checkin" data-id="'+Number(a.id||0)+'" data-token="'+esc(token)+'" data-name="'+esc(a.name||'-')+'"><i class="bi bi-person-check"></i> Check-in</button></div>';
     }).join('');
     pList.querySelectorAll('.do-checkin').forEach(function(b){
@@ -1253,6 +1260,7 @@ render_header([
     if(wi) wi.src=gAW(g);
     wName.textContent=name;
     if(wPkg){if(data.package){wPkg.textContent=data.package;wPkg.style.display='block';}else{wPkg.textContent='';wPkg.style.display='none';}}
+    if(wCourt){var courtText=cLabel(data.court_no);if(courtText){wCourt.textContent=courtText;wCourt.style.display='block';}else{wCourt.textContent='';wCourt.style.display='none';}}
     show(welcome);
     clearTimeout(window._wt);
     var holdMs = Math.max(30000, Number(welcomeHoldMs) || 0);

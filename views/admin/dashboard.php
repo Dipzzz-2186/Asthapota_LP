@@ -15,6 +15,7 @@ ensure_order_qr_schema($db);
 ensure_order_attendee_checkin_schema($db);
 ensure_order_attendee_package_schema($db);
 ensure_order_attendee_payment_schema($db);
+ensure_order_attendee_court_schema($db);
 ensure_admin_notification_schema($db);
 $flash = ['success' => '', 'error' => ''];
 $selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
@@ -53,6 +54,7 @@ if (!empty($_SESSION['dashboard_flash']) && is_array($_SESSION['dashboard_flash'
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $flash = ['success' => '', 'error' => ''];
     $dashboardAction = trim((string)($_POST['dashboard_action'] ?? 'order_decision'));
+    $isAjaxRequest = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
 
     if ($dashboardAction === 'add_admin_notification_email') {
         $adminId = (int)($_SESSION['admin_id'] ?? 0);
@@ -337,6 +339,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash['error'] = 'Gagal menghapus iklan.';
             }
         }
+    } elseif ($dashboardAction === 'update_attendee_court') {
+        $orderId = (int)($_POST['order_id'] ?? 0);
+        $attendeeId = (int)($_POST['attendee_id'] ?? 0);
+        $courtNo = (int)($_POST['court_no'] ?? 0);
+
+        if ($orderId <= 0 || $attendeeId <= 0) {
+            $flash['error'] = 'Data attendee tidak valid.';
+        } elseif ($courtNo < 1 || $courtNo > 6) {
+            $flash['error'] = 'Court harus dipilih dari 1 sampai 6.';
+        } else {
+            try {
+                $updateCourtStmt = $db->prepare('UPDATE order_attendees SET court_no = ? WHERE id = ? AND order_id = ? LIMIT 1');
+                $updateCourtStmt->execute([$courtNo, $attendeeId, $orderId]);
+                if ($updateCourtStmt->rowCount() > 0) {
+                    $flash['success'] = 'Court attendee berhasil diperbarui.';
+                } else {
+                    $existsStmt = $db->prepare('SELECT id FROM order_attendees WHERE id = ? AND order_id = ? LIMIT 1');
+                    $existsStmt->execute([$attendeeId, $orderId]);
+                    $exists = $existsStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($exists) {
+                        $flash['success'] = 'Court attendee sudah sesuai.';
+                    } else {
+                        $flash['error'] = 'Attendee tidak ditemukan pada order ini.';
+                    }
+                }
+            } catch (Throwable $e) {
+                $flash['error'] = 'Gagal menyimpan court attendee.';
+            }
+        }
+
+        if ($isAjaxRequest) {
+            header('Content-Type: application/json; charset=UTF-8');
+            echo json_encode([
+                'ok' => $flash['error'] === '',
+                'message' => $flash['error'] !== '' ? $flash['error'] : $flash['success'],
+                'court_no' => $courtNo >= 1 && $courtNo <= 6 ? $courtNo : null,
+            ]);
+            exit;
+        }
     } elseif ($dashboardAction === 'change_attendee_package') {
         $orderId = (int)($_POST['order_id'] ?? 0);
         $attendeeId = (int)($_POST['attendee_id'] ?? 0);
@@ -478,21 +519,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $newStatus = $action === 'accept' ? 'accepted' : 'rejected';
                 if ($newStatus === 'accepted') {
-                    $qrToken = extract_qr_token((string)($orderRow['qr_token'] ?? ''));
-                    if ($qrToken === '') $qrToken = strtolower(bin2hex(random_bytes(24)));
-                    $update = $db->prepare('UPDATE orders SET status = ?, qr_token = ?, qr_sent_at = ?, checked_in_at = NULL WHERE id = ?');
-                    $update->execute([$newStatus, $qrToken, date('Y-m-d H:i:s'), $orderId]);
-                    $orderRow['qr_token'] = $qrToken;
-                    try { $db->prepare('UPDATE order_attendees SET checked_in_at = NULL WHERE order_id = ?')->execute([$orderId]); } catch (Throwable $e) {}
+                    $missingCourtCount = 0;
+                    try {
+                        $missingCourtStmt = $db->prepare("SELECT COUNT(*) FROM order_attendees WHERE order_id = ? AND (court_no IS NULL OR court_no < 1 OR court_no > 6)");
+                        $missingCourtStmt->execute([$orderId]);
+                        $missingCourtCount = (int)$missingCourtStmt->fetchColumn();
+                    } catch (Throwable $e) {
+                        $missingCourtCount = 0;
+                    }
+                    if ($missingCourtCount > 0) {
+                        $flash['error'] = 'Tidak bisa Accept. Masih ada ' . $missingCourtCount . ' attendee yang belum pilih court. Buka Detail dan pilih court dulu.';
+                    } else {
+                        $qrToken = extract_qr_token((string)($orderRow['qr_token'] ?? ''));
+                        if ($qrToken === '') $qrToken = strtolower(bin2hex(random_bytes(24)));
+                        $update = $db->prepare('UPDATE orders SET status = ?, qr_token = ?, qr_sent_at = ?, checked_in_at = NULL WHERE id = ?');
+                        $update->execute([$newStatus, $qrToken, date('Y-m-d H:i:s'), $orderId]);
+                        $orderRow['qr_token'] = $qrToken;
+                        try { $db->prepare('UPDATE order_attendees SET checked_in_at = NULL WHERE order_id = ?')->execute([$orderId]); } catch (Throwable $e) {}
+                    }
                 } else {
                     $update = $db->prepare('UPDATE orders SET status = ?, qr_token = NULL, qr_sent_at = NULL, checked_in_at = NULL WHERE id = ?');
                     $update->execute([$newStatus, $orderId]);
                     $orderRow['qr_token'] = null;
                     try { $db->prepare('UPDATE order_attendees SET checked_in_at = NULL WHERE order_id = ?')->execute([$orderId]); } catch (Throwable $e) {}
                 }
-                $orderRow['status'] = $newStatus;
-                $sent = send_order_status_email($orderRow, $orderRow['email']);
-                $flash['success'] = $sent ? 'Order status updated and email sent.' : 'Order status updated, but email failed to send.';
+                if ($flash['error'] === '') {
+                    $orderRow['status'] = $newStatus;
+                    $sent = send_order_status_email($orderRow, $orderRow['email']);
+                    $flash['success'] = $sent ? 'Order status updated and email sent.' : 'Order status updated, but email failed to send.';
+                }
             }
         }
     }
@@ -694,6 +749,7 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $orderItemDetailsMap = [];
 $orderTicketCountMap = [];
 $orderAttendeeMap = [];
+$orderMissingCourtCountMap = [];
 $orderAttendeePackageSummaryMap = [];
 $orderAttendeeCountMap = [];
 $orderIds = array_values(array_unique(array_map(static function ($row) { return (int)($row['id'] ?? 0); }, $orders)));
@@ -714,7 +770,7 @@ if ($orderIds) {
         $orderTicketCountMap[$oid] = ($orderTicketCountMap[$oid] ?? 0) + $qty;
     }
     try {
-        $attendeeSql = "SELECT oa.id AS attendee_id, oa.order_id, oa.attendee_name, oa.position_no, oa.checked_in_at, oa.package_id, p.name AS package_name, p.price AS package_price
+        $attendeeSql = "SELECT oa.id AS attendee_id, oa.order_id, oa.attendee_name, oa.position_no, oa.checked_in_at, oa.package_id, oa.court_no, p.name AS package_name, p.price AS package_price
             FROM order_attendees oa
             LEFT JOIN packages p ON p.id = oa.package_id
             WHERE oa.order_id IN ($inPlaceholders)
@@ -726,6 +782,11 @@ if ($orderIds) {
             $oid = (int)($row['order_id'] ?? 0);
             if ($oid <= 0) continue;
             if (!isset($orderAttendeeMap[$oid])) $orderAttendeeMap[$oid] = [];
+            if (!isset($orderMissingCourtCountMap[$oid])) $orderMissingCourtCountMap[$oid] = 0;
+            $courtNo = (int)($row['court_no'] ?? 0);
+            if ($courtNo < 1 || $courtNo > 6) {
+                $orderMissingCourtCountMap[$oid]++;
+            }
             $orderAttendeeMap[$oid][] = [
                 'attendee_id' => (int)($row['attendee_id'] ?? 0),
                 'position_no' => (int)($row['position_no'] ?? 0),
@@ -733,6 +794,7 @@ if ($orderIds) {
                 'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
                 'package_id' => (int)($row['package_id'] ?? 0),
                 'package_name' => trim((string)($row['package_name'] ?? '')),
+                'court_no' => $courtNo,
             ];
             $orderAttendeeCountMap[$oid] = ($orderAttendeeCountMap[$oid] ?? 0) + 1;
 
@@ -1718,6 +1780,66 @@ $extraHead = <<<'HTML'
   .action-group .btn.primary:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,102,255,0.3); }
   .action-group .btn.ghost:not(:disabled):hover { transform: translateY(-1px); }
   .action-group .btn:disabled { opacity: 0.38; cursor: not-allowed; }
+  .btn.detail-warning {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.55);
+    color: #9a6700;
+    position: relative;
+    overflow: visible;
+  }
+  .btn.detail-warning:not(:disabled):hover {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.72);
+    color: #7a5200;
+  }
+  .btn.detail-warning[data-tooltip]:not([data-tooltip=""])::after,
+  .btn.detail-warning[data-tooltip]:not([data-tooltip=""])::before {
+    position: absolute;
+    left: 50%;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+    z-index: 45;
+  }
+  .btn.detail-warning[data-tooltip]:not([data-tooltip=""])::after {
+    content: attr(data-tooltip);
+    bottom: calc(100% + 10px);
+    transform: translate(-50%, 6px);
+    min-width: 220px;
+    max-width: min(360px, 72vw);
+    padding: 9px 11px;
+    border-radius: 10px;
+    border: 1px solid rgba(245, 158, 11, 0.55);
+    background: linear-gradient(180deg, #252016 0%, #1f1a12 100%);
+    color: #ffe8b6;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+    white-space: normal;
+    text-align: left;
+  }
+  .btn.detail-warning[data-tooltip]:not([data-tooltip=""])::before {
+    content: '';
+    bottom: calc(100% + 4px);
+    transform: translate(-50%, 6px);
+    width: 9px;
+    height: 9px;
+    background: #1f1a12;
+    border-right: 1px solid rgba(245, 158, 11, 0.55);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.55);
+    rotate: 45deg;
+  }
+  .btn.detail-warning[data-tooltip]:not([data-tooltip=""]):hover::after,
+  .btn.detail-warning[data-tooltip]:not([data-tooltip=""]):hover::before,
+  .btn.detail-warning[data-tooltip]:not([data-tooltip=""]):focus-visible::after,
+  .btn.detail-warning[data-tooltip]:not([data-tooltip=""]):focus-visible::before {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, 0);
+  }
 
   /* ══════════════════════════════════════════════════════════
      MOBILE CARD LAYOUT — replaces table on small screens
@@ -1933,6 +2055,30 @@ $extraHead = <<<'HTML'
   .detail-title .bi { color: var(--primary); font-size: 14px; }
   .detail-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
   .detail-list li { border: 1px solid var(--stroke); border-radius: 9px; background: var(--surface-2, #f8faff); padding: 9px 12px; font-size: 12.5px; line-height: 1.5; font-weight: 500; color: var(--text); }
+  .detail-attendee-main { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .detail-attendee-court-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
+  .detail-court-select {
+    height: 28px;
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+    font-size: 12px;
+    padding: 0 8px;
+    font-weight: 700;
+  }
+  .detail-court-btn {
+    border: 1px solid #4f8cff;
+    color: #1e5fc9;
+    background: #edf3ff;
+    height: 28px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0 10px;
+    cursor: pointer;
+  }
+  .detail-court-btn:disabled { opacity: 0.65; cursor: not-allowed; }
   .detail-package-wrap {
     margin-top: 8px;
     display: inline-flex;
@@ -2360,6 +2506,7 @@ render_header([
               $proofPaths = $orderProofPathsMap[$detailOrderId] ?? [];
               $firstProof = $proofPaths[0] ?? '';
               $canAction = !empty($firstProof) && $o['status'] === 'paid';
+              $missingCourtCount = (int)($orderMissingCourtCountMap[$detailOrderId] ?? 0);
               $detailPayload = [
                 'order_id' => $detailOrderId,
                 'user_name' => (string)($o['full_name'] ?? ''),
@@ -2369,6 +2516,7 @@ render_header([
                 'ticket_count' => (int)($orderTicketCountMap[$detailOrderId] ?? 0),
                 'items' => $orderItemDetailsMap[$detailOrderId] ?? [],
                 'attendees' => $orderAttendeeMap[$detailOrderId] ?? [],
+                'missing_court_count' => $missingCourtCount,
                 'proofs' => $proofPaths,
               ];
             ?>
@@ -2399,8 +2547,8 @@ render_header([
                 </td>
                 <td>
                   <div class="action-group">
-                    <button class="btn ghost small" type="button" data-order-detail="<?= h(json_encode($detailPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>"><i class="bi bi-info-circle"></i> Detail</button>
-                    <button class="btn primary small" type="button" data-confirm-action="accept" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-check-circle"></i> Accept</button>
+                    <button class="btn ghost small<?= $missingCourtCount > 0 ? ' detail-warning' : '' ?>" type="button" data-order-detail="<?= h(json_encode($detailPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>" data-tooltip="<?= $missingCourtCount > 0 ? h('Masih ada ' . $missingCourtCount . ' attendee belum pilih court. Klik Detail untuk lengkapi.') : '' ?>"><i class="bi bi-info-circle"></i> Detail</button>
+                    <button class="btn primary small" type="button" data-confirm-action="accept" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" data-court-missing="<?= (int)$missingCourtCount ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-check-circle"></i> Accept</button>
                     <button class="btn ghost small" type="button" data-confirm-action="reject" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-x-circle"></i> Reject</button>
                   </div>
                 </td>
@@ -2425,6 +2573,7 @@ render_header([
           $proofPaths = $orderProofPathsMap[$detailOrderId] ?? [];
           $firstProof = $proofPaths[0] ?? '';
           $canAction = !empty($firstProof) && $o['status'] === 'paid';
+          $missingCourtCount = (int)($orderMissingCourtCountMap[$detailOrderId] ?? 0);
           $detailPayload = [
             'order_id' => $detailOrderId,
             'user_name' => (string)($o['full_name'] ?? ''),
@@ -2434,6 +2583,7 @@ render_header([
             'ticket_count' => (int)($orderTicketCountMap[$detailOrderId] ?? 0),
             'items' => $orderItemDetailsMap[$detailOrderId] ?? [],
             'attendees' => $orderAttendeeMap[$detailOrderId] ?? [],
+            'missing_court_count' => $missingCourtCount,
             'proofs' => $proofPaths,
           ];
           $ig = trim((string)($o['instagram'] ?? '')); $ig = $ig !== '' ? '@' . ltrim($ig, '@') : '-';
@@ -2491,8 +2641,8 @@ render_header([
 
             <!-- Card Actions -->
             <div class="order-card-actions">
-              <button class="btn ghost small" type="button" data-order-detail="<?= h(json_encode($detailPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>"><i class="bi bi-info-circle"></i> Detail</button>
-              <button class="btn primary small" type="button" data-confirm-action="accept" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-check-circle"></i> Accept</button>
+              <button class="btn ghost small<?= $missingCourtCount > 0 ? ' detail-warning' : '' ?>" type="button" data-order-detail="<?= h(json_encode($detailPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>" data-tooltip="<?= $missingCourtCount > 0 ? h('Masih ada ' . $missingCourtCount . ' attendee belum pilih court. Klik Detail untuk lengkapi.') : '' ?>"><i class="bi bi-info-circle"></i> Detail</button>
+              <button class="btn primary small" type="button" data-confirm-action="accept" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" data-court-missing="<?= (int)$missingCourtCount ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-check-circle"></i> Accept</button>
               <button class="btn ghost small" type="button" data-confirm-action="reject" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-x-circle"></i> Reject</button>
             </div>
           </div>
@@ -3349,6 +3499,8 @@ render_header([
       function escapeHtml(t) { return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
       function clearList(el) { while (el.firstChild) el.removeChild(el.firstChild); }
       function statusLabel(s) { return s === 'paid' ? 'Paid' : s === 'accepted' ? 'Accepted' : s === 'rejected' ? 'Rejected' : (s || '-'); }
+      function courtLabel(courtNo) { return Number(courtNo) > 0 ? ('Court ' + Number(courtNo)) : ''; }
+      function toCourtNo(raw) { var n = Number(raw || 0); return n >= 1 && n <= 6 ? n : 0; }
       function submitPackageChange(orderId, attendeeId, packageId) {
         if (!packageForm || !packageFormOrderId || !packageFormAttendeeId || !packageFormNewPackageId) return;
         packageFormOrderId.value = String(orderId || '');
@@ -3356,6 +3508,55 @@ render_header([
         packageFormNewPackageId.value = String(packageId || '');
         if (!packageFormOrderId.value || !packageFormAttendeeId.value || !packageFormNewPackageId.value) return;
         packageForm.submit();
+      }
+      function saveCourt(orderId, attendeeId, courtNo) {
+        var body = new URLSearchParams();
+        body.append('dashboard_action', 'update_attendee_court');
+        body.append('order_id', String(Number(orderId || 0)));
+        body.append('attendee_id', String(Number(attendeeId || 0)));
+        body.append('court_no', String(toCourtNo(courtNo)));
+        return fetch('/admin/dashboard', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: body.toString()
+        }).then(function(res) {
+          return res.json().catch(function() {
+            return { ok: false, message: 'Response server tidak valid.' };
+          });
+        });
+      }
+      function syncPayloadToButtons(orderId, attendeeId, courtNo) {
+        var latestMissingCount = 0;
+        document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
+          var raw = btn.getAttribute('data-order-detail') || '{}';
+          var payload = {};
+          try { payload = JSON.parse(raw); } catch (err) { payload = {}; }
+          if (Number(payload.order_id || 0) !== Number(orderId || 0)) return;
+          var attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
+          attendees.forEach(function(at) {
+            if (Number(at && at.attendee_id ? at.attendee_id : 0) === Number(attendeeId || 0)) {
+              at.court_no = toCourtNo(courtNo);
+            }
+          });
+          var missingCount = attendees.filter(function(at) {
+            var cn = toCourtNo(at && at.court_no ? at.court_no : 0);
+            return cn <= 0;
+          }).length;
+          payload.missing_court_count = missingCount;
+          btn.setAttribute('data-order-detail', JSON.stringify(payload));
+          latestMissingCount = missingCount;
+          var warnTitle = missingCount > 0 ? ('Masih ada ' + missingCount + ' attendee belum pilih court. Klik Detail untuk lengkapi.') : '';
+          btn.setAttribute('data-tooltip', warnTitle);
+          btn.classList.toggle('detail-warning', missingCount > 0);
+        });
+        document.querySelectorAll('[data-confirm-action="accept"]').forEach(function(btn) {
+          if (Number(btn.getAttribute('data-order-id') || 0) !== Number(orderId || 0)) return;
+          btn.setAttribute('data-court-missing', String(Math.max(0, latestMissingCount)));
+        });
       }
 
       function openDetail(rawJson) {
@@ -3389,13 +3590,45 @@ render_header([
           var packageId = Number(at && at.package_id ? at.package_id : 0);
           var name = at && at.attendee_name ? String(at.attendee_name) : '-';
           var pkg = at && at.package_name ? String(at.package_name) : '';
+          var courtNo = toCourtNo(at && at.court_no ? at.court_no : 0);
+          var court = courtLabel(courtNo);
           var checkedInAt = at && at.checked_in_at ? String(at.checked_in_at) : '';
           var arrived = checkedInAt ? 'Hadir' : 'Belum hadir';
           var arrivedColor = checkedInAt ? '#1f7a45' : '#b44';
-          li.innerHTML = escapeHtml((pos > 0 ? '#' + pos + ' — ' : '') + name)
+          var courtBadge = court ? ' <span class="attendee-court-badge" style="color:#4f46e5;font-weight:700;font-size:11.5px;">[' + escapeHtml(court) + ']</span>' : '';
+          li.innerHTML = '<div class="detail-attendee-main">' + escapeHtml((pos > 0 ? '#' + pos + ' — ' : '') + name)
             + (pkg ? ' <span style="color:#0f5ea8;font-weight:700;font-size:11.5px;">[' + escapeHtml(pkg) + ']</span>' : '')
+            + courtBadge
             + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>'
-            + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '');
+            + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '')
+            + '</div>';
+          if (attendeeId > 0 && !checkedInAt) {
+            var selectedCourt = courtNo > 0 ? courtNo : 1;
+            var courtWrap = document.createElement('div');
+            courtWrap.className = 'detail-attendee-court-actions';
+            var courtSelect = document.createElement('select');
+            courtSelect.className = 'detail-court-select';
+            courtSelect.setAttribute('data-role', 'court-select');
+            for (var cn = 1; cn <= 6; cn++) {
+              var courtOption = document.createElement('option');
+              courtOption.value = String(cn);
+              courtOption.textContent = 'Court ' + cn;
+              if (cn === selectedCourt) {
+                courtOption.selected = true;
+              }
+              courtSelect.appendChild(courtOption);
+            }
+            var courtBtn = document.createElement('button');
+            courtBtn.type = 'button';
+            courtBtn.className = 'detail-court-btn';
+            courtBtn.setAttribute('data-save-court', '1');
+            courtBtn.setAttribute('data-order-id', String(orderId));
+            courtBtn.setAttribute('data-attendee-id', String(attendeeId));
+            courtBtn.textContent = 'Pilih court';
+            courtWrap.appendChild(courtSelect);
+            courtWrap.appendChild(courtBtn);
+            li.appendChild(courtWrap);
+          }
           if (attendeeId > 0 && String(payload.status || '') === 'accepted' && !checkedInAt) {
             var wrap = document.createElement('div');
             wrap.className = 'detail-package-wrap';
@@ -3437,6 +3670,52 @@ render_header([
         modal.setAttribute('aria-hidden', 'true');
       }
       document.querySelectorAll('[data-order-detail]').forEach(function(btn) { btn.addEventListener('click', function() { openDetail(btn.getAttribute('data-order-detail') || '{}'); }); });
+      detailAttendees.addEventListener('click', function(e) {
+        var btn = e.target && e.target.closest ? e.target.closest('[data-save-court="1"]') : null;
+        if (!btn) return;
+        var li = btn.closest('li');
+        if (!li) return;
+        var select = li.querySelector('[data-role="court-select"]');
+        var orderId = Number(btn.getAttribute('data-order-id') || 0);
+        var attendeeId = Number(btn.getAttribute('data-attendee-id') || 0);
+        var courtNo = toCourtNo(select ? select.value : 0);
+        if (orderId <= 0 || attendeeId <= 0 || courtNo <= 0) {
+          alert('Data court attendee tidak valid.');
+          return;
+        }
+        btn.disabled = true;
+        var originalText = btn.textContent;
+        btn.textContent = 'Menyimpan...';
+        saveCourt(orderId, attendeeId, courtNo)
+          .then(function(resp) {
+            if (!resp || !resp.ok) {
+              throw new Error(resp && resp.message ? String(resp.message) : 'Gagal menyimpan court.');
+            }
+            var badge = li.querySelector('.attendee-court-badge');
+            var courtText = '[' + courtLabel(courtNo) + ']';
+            if (!badge) {
+              badge = document.createElement('span');
+              badge.className = 'attendee-court-badge';
+              badge.style.color = '#4f46e5';
+              badge.style.fontWeight = '700';
+              badge.style.fontSize = '11.5px';
+              var mainWrap = li.querySelector('.detail-attendee-main');
+              if (mainWrap) mainWrap.appendChild(document.createTextNode(' '));
+              if (mainWrap) mainWrap.appendChild(badge);
+            }
+            badge.textContent = courtText;
+            syncPayloadToButtons(orderId, attendeeId, courtNo);
+            btn.textContent = 'Tersimpan';
+            setTimeout(function() { btn.textContent = originalText; }, 1000);
+          })
+          .catch(function(err) {
+            alert(err && err.message ? err.message : 'Gagal menyimpan court attendee.');
+            btn.textContent = originalText;
+          })
+          .finally(function() {
+            btn.disabled = false;
+          });
+      });
       closeBtn.addEventListener('click', closeDetail);
       modal.addEventListener('click', function(e) { if (e.target === modal) closeDetail(); });
       document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && modal.classList.contains('show')) closeDetail(); });
@@ -3597,6 +3876,11 @@ render_header([
           var proof=btn.getAttribute('data-proof')||'';
           var orderId=btn.getAttribute('data-order-id')||'';
           var action=btn.getAttribute('data-confirm-action')||'';
+          var missingCourtCount = Number(btn.getAttribute('data-court-missing') || 0);
+          if (action === 'accept' && missingCourtCount > 0) {
+            alert('Tidak bisa Accept. Masih ada ' + missingCourtCount + ' attendee yang belum pilih court. Buka Detail dan pilih court dulu.');
+            return;
+          }
           if(!proof||!orderId||!action)return;
           open(proof,orderId,action);
         });
