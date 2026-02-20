@@ -391,45 +391,39 @@ body.admin-page::after { display: none !important; }
   overflow:hidden;
   isolation:isolate;
   z-index:10;
+  background: transparent;
 }
 #welcome-screen::before {
   content:'';
   position:absolute;
   inset:0;
-  background: linear-gradient(180deg, rgba(1,5,16,0.34) 0%, rgba(1,5,16,0.44) 45%, rgba(1,5,16,0.34) 100%);
+  background: linear-gradient(180deg, rgba(1,5,16,0.35) 0%, rgba(1,5,16,0.25) 60%, rgba(1,5,16,0.1) 100%);
   z-index:-3;
+  opacity:0.65;
 }
 #welcome-screen::after {
   content:'';
   position:absolute;
-  inset:-10% -8%;
+  inset:-5% -8%;
   background:
-    radial-gradient(50% 38% at 50% 58%, rgba(56,189,248,0.28), transparent 72%),
-    radial-gradient(40% 28% at 50% 42%, rgba(125,211,252,0.18), transparent 72%),
-    radial-gradient(25% 20% at 22% 70%, rgba(14,165,233,0.14), transparent 76%),
-    radial-gradient(25% 20% at 78% 30%, rgba(96,165,250,0.14), transparent 76%);
-  filter: blur(10px);
-  opacity: 0.95;
+    radial-gradient(circle at center, rgba(255,255,255,0.15), transparent 70%);
+  filter: blur(20px);
+  opacity: 0.75;
   z-index:-2;
   animation: welcomeAura 6.8s ease-in-out infinite;
 }
 @keyframes welcomeIn { from{opacity:0;transform:scale(0.96) translateY(30px);} to{opacity:1;transform:scale(1) translateY(0);} }
 .welcome-panel{
   width:min(92vw, 980px);
-  /* max-height supaya tidak pernah overflow keluar area */
   max-height: 100%;
   overflow-y: auto;
   transform: none;
   border-radius: 28px;
-  border:1px solid rgba(148,163,184,0.42);
-  background:
-    linear-gradient(145deg, rgba(6,14,34,0.72), rgba(4,9,24,0.78)),
-    radial-gradient(55% 60% at 50% 35%, rgba(56,189,248,0.2), transparent 70%);
-  box-shadow:
-    0 24px 80px rgba(0,0,0,0.52),
-    inset 0 0 0 1px rgba(255,255,255,0.05);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   display:flex;
   flex-direction:column;
   align-items:center;
@@ -437,20 +431,10 @@ body.admin-page::after { display: none !important; }
   padding: clamp(24px, 5vh, 48px) clamp(20px, 5vw, 60px);
   position:relative;
   overflow:hidden;
-  animation: welcomePanelIn 0.75s cubic-bezier(.16,.8,.2,1) both;
+  animation:none;
 }
 .welcome-panel::before{
-  content:'';
-  position:absolute;
-  width:140%;
-  height:42%;
-  left:-22%;
-  top:12%;
-  background: linear-gradient(110deg, transparent 36%, rgba(255,255,255,0.24) 50%, transparent 64%);
-  transform: translateX(-30%) rotate(-4deg);
-  opacity:0.22;
-  animation: welcomeSweep 4.8s ease-in-out infinite;
-  pointer-events:none;
+  display:none;
 }
 .welcome-panel > *{ position:relative; z-index:1; }
 .welcome-avatar { width:clamp(140px,18vw,220px); height:clamp(140px,18vw,220px); margin-bottom:clamp(24px,3vw,40px); position:relative; animation:floaty 2.8s ease-in-out infinite; flex-shrink:0; }
@@ -465,7 +449,7 @@ body.admin-page::after { display: none !important; }
   z-index:-1;
 }
 .welcome-avatar img { width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 8px 40px rgba(0,0,0,0.5)); }
-.welcome-greeting { font-size:clamp(22px,3vw,48px); font-weight:600; color:rgba(241,245,249,0.58); letter-spacing:0.08em; margin-bottom:12px; line-height:1.2; text-shadow:0 2px 12px rgba(0,0,0,0.6); animation:welcomeTitleIn 0.75s cubic-bezier(.16,.8,.2,1) both; }
+.welcome-greeting { font-size:clamp(22px,3vw,48px); font-weight:600; color:rgba(255,255,255,0.98); letter-spacing:0.08em; margin-bottom:12px; line-height:1.2; text-shadow:0 2px 12px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.55); animation:welcomeTitleIn 0.75s cubic-bezier(.16,.8,.2,1) both; }
 .welcome-name {
   font-size:clamp(48px,10vw,140px); font-weight:900; color:#fff;
   letter-spacing:-0.04em; line-height:0.95; margin-bottom:0; max-width:1200px;
@@ -473,7 +457,7 @@ body.admin-page::after { display: none !important; }
   word-wrap:break-word; hyphens:auto;
   animation:welcomeNameIn 0.95s cubic-bezier(.14,.82,.2,1) both;
 }
-.welcome-package { font-size:clamp(13px,1.8vw,16px); font-weight:600; letter-spacing:0.35em; text-transform:uppercase; color:rgba(56,189,248,0.95); margin-top:12px; text-shadow:0 2px 12px rgba(0,0,0,0.6); animation:welcomePackageIn 1.05s ease both, welcomePackageGlow 2.6s ease-in-out infinite 1s; }
+.welcome-package { font-size:clamp(13px,1.6vw,15px); font-weight:700; letter-spacing:0.3em; text-transform:uppercase; color:rgba(255,255,255,0.9); margin-top:10px; text-shadow:0 2px 12px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.55); animation:welcomePackageIn 1.05s ease both, welcomePackageGlow 2.6s ease-in-out infinite 1s; }
 .welcome-badge,.welcome-time,.welcome-tags { display:none!important; }
 @keyframes welcomeAura{
   0%,100%{ transform:scale(1); opacity:0.88; }
