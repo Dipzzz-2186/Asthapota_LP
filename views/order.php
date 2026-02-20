@@ -68,7 +68,6 @@ $additionalAttendeeCount = max(0, $totalTickets - 1);
 $attendeeNames = array_fill(0, $additionalAttendeeCount, '');
 $attendeeGenders = array_fill(0, $additionalAttendeeCount, '');
 $attendeePackageIds = array_fill(0, $additionalAttendeeCount, 0);
-$attendeeProofNames = array_fill(0, $totalTickets, '');
 $allowedAttendeeGenders = ['Laki-laki', 'Perempuan'];
 $packageTicketCounts = [];
 $packageNamesById = [];
@@ -201,7 +200,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $proofUploadCandidates = [];
-    $proofInput = $_FILES['attendee_payment_proofs'] ?? null;
+    $proofInput = $_FILES['payment_proofs'] ?? null;
     if ($totalTickets <= 0) {
         $errors[] = 'Unable to determine the attendee count for payment proof upload.';
     } elseif (
@@ -214,27 +213,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Please upload payment proof for each attendee.';
     } else {
         $allowedProofExts = ['jpg', 'jpeg', 'png'];
-        for ($i = 0; $i < $totalTickets; $i++) {
+        $proofCount = max(0, count($proofInput['tmp_name']));
+        if ($proofCount === 0) {
+            $errors[] = 'Please upload at least one payment proof.';
+        }
+        for ($i = 0; $i < $proofCount; $i++) {
             $labelNo = $i + 1;
             $errorCode = $proofInput['error'][$i] ?? UPLOAD_ERR_NO_FILE;
             if ($errorCode !== UPLOAD_ERR_OK) {
-                $errors[] = 'Please upload a valid payment proof for attendee #' . $labelNo . '.';
+                $errors[] = 'Please upload a valid payment proof #' . $labelNo . '.';
                 continue;
             }
             $tmpName = (string)($proofInput['tmp_name'][$i] ?? '');
             $size = (int)($proofInput['size'][$i] ?? 0);
             $originalName = trim((string)($proofInput['name'][$i] ?? ''));
             if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-                $errors[] = 'Please upload a valid payment proof for attendee #' . $labelNo . '.';
+                $errors[] = 'Please upload a valid payment proof #' . $labelNo . '.';
                 continue;
             }
             if ($size > 2 * 1024 * 1024) {
-                $errors[] = 'Payment proof for attendee #' . $labelNo . ' is too large. Max 2MB.';
+                $errors[] = 'Payment proof #' . $labelNo . ' is too large. Max 2MB.';
                 continue;
             }
             $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
             if (!in_array($ext, $allowedProofExts, true)) {
-                $errors[] = 'Only JPG or PNG allowed for attendee #' . $labelNo . '.';
+                $errors[] = 'Only JPG or PNG allowed for payment proof #' . $labelNo . '.';
                 continue;
             }
             $proofUploadCandidates[$i] = [
@@ -249,6 +252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $_SESSION['order_draft']['attendee_package_ids'] = $attendeePackageIds;
     $_SESSION['order_draft']['owner_package_id'] = $ownerPackageId;
 
+    $uploadedProofNames = [];
     if (!$errors) {
         $uploadDir = $CONFIG['upload_dir'];
         if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true)) {
@@ -259,15 +263,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errors) {
         $movedProofTargets = [];
         $proofTimestamp = time();
+        $uploadedProofNames = [];
         foreach ($proofUploadCandidates as $index => $candidate) {
             $proofName = 'proof_u' . (int)$_SESSION['user_id'] . '_' . $proofTimestamp . '_' . ($index + 1) . '_' . mt_rand(1000, 9999) . '.' . $candidate['ext'];
             $target = $uploadDir . '/' . $proofName;
             if (!move_uploaded_file($candidate['tmp_name'], $target)) {
-                $errors[] = 'Failed to upload payment proof for attendee #' . ($index + 1) . '.';
+                $errors[] = 'Failed to upload payment proof #' . ($index + 1) . '.';
                 break;
             }
             $movedProofTargets[] = $target;
-            $attendeeProofNames[$index] = $proofName;
+            $uploadedProofNames[] = $proofName;
         }
 
         if ($errors) {
@@ -281,13 +286,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors) {
         $orderId = 0;
-        $proofPayload = array_values(array_filter($attendeeProofNames, static fn ($path) => $path !== ''));
+        $proofPayload = array_values(array_filter($uploadedProofNames ?? [], static fn ($path) => $path !== ''));
+        $proofJson = $proofPayload ? json_encode($proofPayload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
+        if ($proofJson === false) {
+            $proofJson = null;
+        }
         $primaryProof = $proofPayload[0] ?? null;
 
         try {
             $db->beginTransaction();
             $stmt = $db->prepare('INSERT INTO orders (user_id, total, status, payment_proof, created_at) VALUES (?, ?, ?, ?, ?)');
-            $stmt->execute([(int)$_SESSION['user_id'], (int)$total, 'paid', $primaryProof, date('c')]);
+            $stmt->execute([(int)$_SESSION['user_id'], (int)$total, 'paid', $proofJson, date('c')]);
             $orderId = (int)$db->lastInsertId();
 
             $itemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
@@ -319,7 +328,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'gender' => $ownerGender,
                     'position_no' => 1,
                     'package_id' => $ownerPackageId > 0 ? (int)$ownerPackageId : null,
-                    'payment_proof' => $attendeeProofNames[0] ?? null,
                 ],
             ];
             foreach ($attendeeNames as $idx => $attendeeName) {
@@ -328,7 +336,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'gender' => (string)($attendeeGenders[$idx] ?? ''),
                     'position_no' => $idx + 2,
                     'package_id' => (int)($attendeePackageIds[$idx] ?? 0) > 0 ? (int)$attendeePackageIds[$idx] : null,
-                    'payment_proof' => $attendeeProofNames[$idx + 1] ?? null,
                 ];
             }
             $attendeeDetailsForAdmin = [];
@@ -338,29 +345,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'name' => (string)($row['name'] ?? ''),
                     'position_no' => (int)($row['position_no'] ?? 0),
                     'package' => (string)($packageNamesById[$pkgId] ?? ($pkgId > 0 ? ('Package #' . $pkgId) : '-')),
-                    'payment_proof' => (string)($row['payment_proof'] ?? ''),
                 ];
             }
 
             try {
-                $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, package_id, payment_proof, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, package_id, created_at) VALUES (?, ?, ?, ?, ?, ?)');
                 foreach ($attendeeRows as $row) {
-                    $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], $row['package_id'], $row['payment_proof'], date('Y-m-d H:i:s')]);
+                    $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], $row['package_id'], date('Y-m-d H:i:s')]);
                 }
             } catch (Throwable $e) {
                 // Fallback for older attendee schema without package_id.
                 try {
-                    $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, payment_proof, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+                    $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
                     foreach ($attendeeRows as $row) {
-                        $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], $row['payment_proof'], date('Y-m-d H:i:s')]);
+                        $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], date('Y-m-d H:i:s')]);
                     }
                 } catch (Throwable $e) {
                     // Fallback for older attendee schema with attendee_gender.
                     try {
-                        $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, attendee_gender, position_no, payment_proof, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+                        $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, attendee_gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
                         foreach ($attendeeRows as $row) {
                             $legacyGender = $row['position_no'] === 1 ? null : $row['gender'];
-                            $attendeeStmt->execute([$orderId, $row['name'], $legacyGender, $row['position_no'], $row['payment_proof'], date('Y-m-d H:i:s')]);
+                            $attendeeStmt->execute([$orderId, $row['name'], $legacyGender, $row['position_no'], date('Y-m-d H:i:s')]);
                         }
                     } catch (Throwable $e) {
                         // Keep order success even when attendee table does not exist.
@@ -399,18 +405,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$attendeeProofInputs = [];
-$ownerDisplay = trim((string)$user['full_name']);
-$ownerLabel = 'Attendee #1' . ($ownerDisplay !== '' ? ' — ' . $ownerDisplay : ' (Pemilik akun)');
-$attendeeProofInputs[] = ['index' => 0, 'label' => $ownerLabel];
-for ($i = 0; $i < $additionalAttendeeCount; $i++) {
-    $displayName = trim((string)($attendeeNames[$i] ?? ''));
-    $label = 'Attendee #' . ($i + 2);
-    if ($displayName !== '') {
-        $label .= ' — ' . $displayName;
-    }
-    $attendeeProofInputs[] = ['index' => $i + 1, 'label' => $label];
-}
 ?>
 <!doctype html>
 <html lang="en">
@@ -653,7 +647,13 @@ for ($i = 0; $i < $additionalAttendeeCount; $i++) {
       grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
     }
 
-    .proof-field {
+    .proof-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .proof-field-row {
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -663,6 +663,47 @@ for ($i = 0; $i < $additionalAttendeeCount; $i++) {
       border: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 12px;
       padding: 12px;
+    }
+
+    .proof-row-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .proof-row-remove {
+      border: none;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #f4b8b8;
+      background: rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .proof-row-remove:hover {
+      background: rgba(255, 255, 255, 0.38);
+    }
+
+    .proof-add-btn {
+      margin-top: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px dashed rgba(255, 255, 255, 0.4);
+      color: #eaf1ff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .proof-add-btn:hover {
+      border-color: rgba(255, 255, 255, 0.7);
+      background: rgba(255, 255, 255, 0.18);
     }
 
     .proof-field input[type="file"] {
@@ -680,6 +721,39 @@ for ($i = 0; $i < $additionalAttendeeCount; $i++) {
     .proof-field-note {
       font-size: 12px;
       color: #a5b3cf;
+    }
+
+    .proof-multi-label {
+      width: 100%;
+      border-radius: 12px;
+      border: 1.5px dashed rgba(255, 255, 255, 0.45);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .proof-multi-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f7fbff;
+    }
+
+    .proof-multi-label input[type="file"] {
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 10px 12px;
+      color: #0b2d61;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .proof-preview-count {
+      font-size: 12px;
+      color: #a5b3cf;
+      margin-top: 4px;
     }
 
     .attendee-grid {
@@ -940,31 +1014,47 @@ for ($i = 0; $i < $additionalAttendeeCount; $i++) {
 
         <form method="post" enctype="multipart/form-data" id="orderSubmitForm">
           <div class="upload-box">
-            <?php if ($attendeeProofInputs): ?>
-              <p class="proof-upload-note"><i class="bi bi-info-circle"></i> Upload satu bukti pembayaran per peserta (JPG/PNG, maks 2MB per file).</p>
-              <div class="proof-grid">
-                <?php foreach ($attendeeProofInputs as $input): ?>
-                  <label class="proof-field" for="attendeeProofInput_<?= (int)$input['index'] ?>">
-                    <span class="proof-field-label"><?= h($input['label']) ?></span>
-                    <input
-                      type="file"
-                      id="attendeeProofInput_<?= (int)$input['index'] ?>"
-                      name="attendee_payment_proofs[]"
-                      form="orderSubmitForm"
-                      accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-                      data-proof-input
-                      data-proof-label="<?= h($input['label']) ?>"
-                      required
-                    >
-                    <span class="proof-field-note">Max 2MB &middot; JPG/PNG</span>
-                  </label>
-                <?php endforeach; ?>
+            <p class="proof-upload-note"><i class="bi bi-info-circle"></i> Upload minimal satu bukti pembayaran. Jumlah file bisa lebih dari satu.</p>
+            <div class="proof-rows" id="proofRows">
+              <div class="proof-field proof-field-row" data-proof-row>
+                <div class="proof-row-head">
+                  <span class="proof-field-label" data-proof-label="Proof #1">Proof #1</span>
+                  <button type="button" class="proof-row-remove" data-proof-remove>Hapus</button>
+                </div>
+                <input
+                  type="file"
+                  name="payment_proofs[]"
+                  form="orderSubmitForm"
+                  accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                  data-proof-input
+                  required
+                >
+                <span class="proof-field-note">Max 2MB · JPG/PNG</span>
               </div>
-            <?php endif; ?>
+            </div>
+            <button type="button" class="proof-add-btn" id="proofAddBtn">+ Tambah bukti lain</button>
             <div class="proof-preview" id="proofPreviewWrap" aria-live="polite">
               <div class="proof-preview-label"><i class="bi bi-image"></i> Live Preview <span id="proofPreviewLabel">Pilih file untuk melihat preview</span></div>
+              <div class="proof-preview-count" id="proofPreviewCount"></div>
               <img id="proofPreviewImage" src="" alt="Payment proof preview">
             </div>
+            <template id="proofRowTemplate">
+              <div class="proof-field proof-field-row" data-proof-row>
+                <div class="proof-row-head">
+                  <span class="proof-field-label" data-proof-label="">Proof</span>
+                  <button type="button" class="proof-row-remove" data-proof-remove>Hapus</button>
+                </div>
+                <input
+                  type="file"
+                  name="payment_proofs[]"
+                  form="orderSubmitForm"
+                  accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                  data-proof-input
+                  required
+                >
+                <span class="proof-field-note">Max 2MB · JPG/PNG</span>
+              </div>
+            </template>
           </div>
           <div style="margin-top:16px;">
             <button class="btn primary" type="submit"><i class="bi bi-upload"></i> Submit Bukti</button>
@@ -1035,10 +1125,13 @@ for ($i = 0; $i < $additionalAttendeeCount; $i++) {
         });
       }
 
-      var proofInputs = Array.prototype.slice.call(document.querySelectorAll('[data-proof-input]'));
+      var proofRowsContainer = document.getElementById('proofRows');
+      var proofTemplate = document.getElementById('proofRowTemplate');
+      var proofAddBtn = document.getElementById('proofAddBtn');
       var proofPreviewWrap = document.getElementById('proofPreviewWrap');
       var proofPreviewImage = document.getElementById('proofPreviewImage');
       var proofPreviewLabel = document.getElementById('proofPreviewLabel');
+      var proofPreviewCount = document.getElementById('proofPreviewCount');
       var packageLimits = <?= json_encode(array_map('intval', $packageTicketCounts), JSON_UNESCAPED_UNICODE) ?>;
       var packageSelectionEnabled = <?= $requiresPackageSelection ? 'true' : 'false' ?>;
 
@@ -1048,36 +1141,105 @@ for ($i = 0; $i < $additionalAttendeeCount; $i++) {
         if (proofPreviewLabel) {
           proofPreviewLabel.textContent = 'Pilih file untuk melihat preview';
         }
+        if (proofPreviewCount) {
+          proofPreviewCount.textContent = '';
+        }
       }
 
-      function showProofPreview(event, label) {
+      function showProofPreview(event, label, fileCount) {
         var result = event && event.target && event.target.result ? event.target.result : '';
         proofPreviewImage.src = result;
         proofPreviewWrap.classList.toggle('is-visible', !!result);
         if (proofPreviewLabel) {
           proofPreviewLabel.textContent = label || 'Preview';
         }
+        if (proofPreviewCount) {
+          if (fileCount > 1) {
+            proofPreviewCount.textContent = fileCount + ' files selected';
+          } else if (fileCount === 1) {
+            proofPreviewCount.textContent = '1 file selected';
+          } else {
+            proofPreviewCount.textContent = '';
+          }
+        }
       }
 
-      if (proofInputs.length && proofPreviewWrap && proofPreviewImage) {
-        proofInputs.forEach(function (input) {
-          input.addEventListener('change', function () {
-            var file = input.files && input.files[0] ? input.files[0] : null;
-            var labelText = input.getAttribute('data-proof-label') || '';
-            if (!file || !file.type || file.type.indexOf('image/') !== 0) {
-              resetProofPreview();
-              return;
-            }
-            var reader = new FileReader();
-            reader.onload = function (event) {
-              showProofPreview(event, labelText);
-            };
-            reader.onerror = function () {
-              resetProofPreview();
-            };
-            reader.readAsDataURL(file);
-          });
+      function getRowLabel(input) {
+        var row = input ? input.closest('[data-proof-row]') : null;
+        if (!row) return '';
+        var labelNode = row.querySelector('[data-proof-label]');
+        return labelNode ? String(labelNode.textContent || '') : '';
+      }
+
+      function registerProofInput(input) {
+        if (!input) return;
+        input.addEventListener('change', function () {
+          var file = input.files && input.files[0] ? input.files[0] : null;
+          var labelText = getRowLabel(input);
+          if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+            resetProofPreview();
+            return;
+          }
+          var reader = new FileReader();
+          reader.onload = function (event) {
+            showProofPreview(event, labelText ? labelText + ' • ' + (file.name || '') : (file.name || 'Preview'), 1);
+          };
+          reader.onerror = function () {
+            resetProofPreview();
+          };
+          reader.readAsDataURL(file);
         });
+      }
+
+      function updateProofRowLabels() {
+        if (!proofRowsContainer) return;
+        var rows = proofRowsContainer.querySelectorAll('[data-proof-row]');
+        rows.forEach(function (row, index) {
+          var labelNode = row.querySelector('[data-proof-label]');
+          var labelText = 'Proof #' + (index + 1);
+          if (labelNode) {
+            labelNode.textContent = labelText;
+          }
+          var removeBtn = row.querySelector('[data-proof-remove]');
+          if (removeBtn) {
+            removeBtn.style.display = rows.length <= 1 ? 'none' : 'inline-flex';
+          }
+        });
+      }
+
+      function createProofRow() {
+        if (!proofRowsContainer || !proofTemplate) return;
+        var templateContent = proofTemplate.content && proofTemplate.content.firstElementChild
+          ? proofTemplate.content.firstElementChild.cloneNode(true)
+          : null;
+        if (!templateContent) return;
+        var input = templateContent.querySelector('[data-proof-input]');
+        var removeBtn = templateContent.querySelector('[data-proof-remove]');
+        if (removeBtn) {
+          removeBtn.addEventListener('click', function () {
+            if (proofRowsContainer.childElementCount <= 1) return;
+            proofRowsContainer.removeChild(templateContent);
+            updateProofRowLabels();
+            resetProofPreview();
+          });
+        }
+        if (input) {
+          registerProofInput(input);
+        }
+        proofRowsContainer.appendChild(templateContent);
+        updateProofRowLabels();
+      }
+
+      if (proofRowsContainer) {
+        var initialInput = proofRowsContainer.querySelector('[data-proof-input]');
+        if (initialInput) {
+          registerProofInput(initialInput);
+        }
+        updateProofRowLabels();
+      }
+
+      if (proofAddBtn) {
+        proofAddBtn.addEventListener('click', createProofRow);
       }
 
       if (packageSelectionEnabled) {

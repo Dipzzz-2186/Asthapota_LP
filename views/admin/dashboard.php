@@ -347,9 +347,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $db->prepare('SELECT o.id, o.status, o.payment_proof, o.qr_token, u.email, u.full_name FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?');
             $stmt->execute([$orderId]);
             $orderRow = $stmt->fetch(PDO::FETCH_ASSOC);
+            $proofPaths = $orderRow ? get_order_payment_proof_paths($orderRow) : [];
             if (!$orderRow) {
                 $flash['error'] = 'Order not found.';
-            } elseif (empty($orderRow['payment_proof'])) {
+            } elseif (!$proofPaths) {
                 $flash['error'] = 'Cannot update. Payment proof is required.';
             } elseif ($orderRow['status'] !== 'paid') {
                 $flash['error'] = 'Only paid orders can be accepted or rejected.';
@@ -515,7 +516,7 @@ if ($orderIds) {
         $orderTicketCountMap[$oid] = ($orderTicketCountMap[$oid] ?? 0) + $qty;
     }
     try {
-        $attendeeSql = "SELECT oa.order_id, oa.attendee_name, oa.position_no, oa.checked_in_at, oa.payment_proof, p.name AS package_name
+        $attendeeSql = "SELECT oa.order_id, oa.attendee_name, oa.position_no, oa.checked_in_at, p.name AS package_name
             FROM order_attendees oa
             LEFT JOIN packages p ON p.id = oa.package_id
             WHERE oa.order_id IN ($inPlaceholders)
@@ -532,10 +533,16 @@ if ($orderIds) {
                 'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
                 'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
                 'package_name' => trim((string)($row['package_name'] ?? '')),
-                'payment_proof' => trim((string)($row['payment_proof'] ?? '')),
             ];
         }
     } catch (Throwable $e) { $orderAttendeeMap = []; }
+
+    $orderProofPathsMap = [];
+    foreach ($orders as $row) {
+        $orderId = (int)($row['id'] ?? 0);
+        if ($orderId <= 0) continue;
+        $orderProofPathsMap[$orderId] = get_order_payment_proof_paths($row);
+    }
 }
 
 $hasActiveFilters = $selectedPackage > 0 || $selectedOrderId > 0 || $selectedName !== '' || $selectedEmail !== '' || $selectedDate !== '' || $selectedStatus !== '';
@@ -1669,13 +1676,42 @@ $extraHead = <<<'HTML'
   .detail-chip .chip-label { color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10.5px; }
   .detail-chip .chip-value { color: var(--text); font-weight: 700; }
 
-  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
   .detail-box { border: 1px solid var(--stroke); border-radius: 12px; background: var(--surface); padding: 14px; }
   .detail-title { font-size: 13px; font-weight: 800; margin-bottom: 10px; color: var(--text); display: inline-flex; align-items: center; gap: 6px; }
   .detail-title .bi { color: var(--primary); font-size: 14px; }
   .detail-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
   .detail-list li { border: 1px solid var(--stroke); border-radius: 9px; background: var(--surface-2, #f8faff); padding: 9px 12px; font-size: 12.5px; line-height: 1.5; font-weight: 500; color: var(--text); }
   .detail-empty { color: var(--muted); font-size: 13px; padding: 4px 2px; font-weight: 500; }
+  .detail-proof-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
+  .detail-proof-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--stroke);
+    background: var(--surface-2, #f8faff);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .detail-proof-item .proof-label {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .detail-proof-item .proof-link {
+    justify-content: center;
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
 
   /* ─── Animations ─────────────────────────────────────────── */
   @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -2042,9 +2078,21 @@ render_header([
               <tr><td colspan="9" class="table-empty"><div class="empty-state"><i class="bi bi-inbox"></i> Belum ada order</div></td></tr>
             <?php endif; ?>
             <?php foreach ($orders as $o):
-              $canAction = !empty($o['payment_proof']) && $o['status'] === 'paid';
               $detailOrderId = (int)$o['id'];
-              $detailPayload = ['order_id' => $detailOrderId, 'user_name' => (string)($o['full_name'] ?? ''), 'total' => (int)($o['total'] ?? 0), 'status' => (string)($o['status'] ?? ''), 'created_at' => (string)($o['created_at'] ?? ''), 'ticket_count' => (int)($orderTicketCountMap[$detailOrderId] ?? 0), 'items' => $orderItemDetailsMap[$detailOrderId] ?? [], 'attendees' => $orderAttendeeMap[$detailOrderId] ?? []];
+              $proofPaths = $orderProofPathsMap[$detailOrderId] ?? [];
+              $firstProof = $proofPaths[0] ?? '';
+              $canAction = !empty($firstProof) && $o['status'] === 'paid';
+              $detailPayload = [
+                'order_id' => $detailOrderId,
+                'user_name' => (string)($o['full_name'] ?? ''),
+                'total' => (int)($o['total'] ?? 0),
+                'status' => (string)($o['status'] ?? ''),
+                'created_at' => (string)($o['created_at'] ?? ''),
+                'ticket_count' => (int)($orderTicketCountMap[$detailOrderId] ?? 0),
+                'items' => $orderItemDetailsMap[$detailOrderId] ?? [],
+                'attendees' => $orderAttendeeMap[$detailOrderId] ?? [],
+                'proofs' => $proofPaths,
+              ];
             ?>
               <tr>
                 <td><strong style="font-size:13.5px;letter-spacing:-0.3px;">#<?= (int)$o['id'] ?></strong></td>
@@ -2067,15 +2115,15 @@ render_header([
                   <?php endif; ?>
                 </td>
                 <td>
-                  <?php if ($o['payment_proof']): ?>
-                    <button class="proof-link" type="button" data-proof="/uploads/<?= h($o['payment_proof']) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View</button>
+                  <?php if ($firstProof): ?>
+                    <button class="proof-link" type="button" data-proof="/uploads/<?= h($firstProof) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View</button>
                   <?php else: ?><span style="color:var(--muted);font-size:12px;">—</span><?php endif; ?>
                 </td>
                 <td>
                   <div class="action-group">
                     <button class="btn ghost small" type="button" data-order-detail="<?= h(json_encode($detailPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>"><i class="bi bi-info-circle"></i> Detail</button>
-                    <button class="btn primary small" type="button" data-confirm-action="accept" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $o['payment_proof'] ? '/uploads/' . h($o['payment_proof']) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-check-circle"></i> Accept</button>
-                    <button class="btn ghost small" type="button" data-confirm-action="reject" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $o['payment_proof'] ? '/uploads/' . h($o['payment_proof']) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-x-circle"></i> Reject</button>
+                    <button class="btn primary small" type="button" data-confirm-action="accept" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-check-circle"></i> Accept</button>
+                    <button class="btn ghost small" type="button" data-confirm-action="reject" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-x-circle"></i> Reject</button>
                   </div>
                 </td>
                 <td style="font-size:11.5px;color:var(--muted);white-space:nowrap;font-weight:600;"><?= h(date('d M Y', strtotime($o['created_at']))) ?><br><span style="opacity:0.7;"><?= h(date('H:i', strtotime($o['created_at']))) ?></span></td>
@@ -2095,9 +2143,21 @@ render_header([
           </div>
         <?php endif; ?>
         <?php foreach ($orders as $o):
-          $canAction = !empty($o['payment_proof']) && $o['status'] === 'paid';
           $detailOrderId = (int)$o['id'];
-          $detailPayload = ['order_id' => $detailOrderId, 'user_name' => (string)($o['full_name'] ?? ''), 'total' => (int)($o['total'] ?? 0), 'status' => (string)($o['status'] ?? ''), 'created_at' => (string)($o['created_at'] ?? ''), 'ticket_count' => (int)($orderTicketCountMap[$detailOrderId] ?? 0), 'items' => $orderItemDetailsMap[$detailOrderId] ?? [], 'attendees' => $orderAttendeeMap[$detailOrderId] ?? []];
+          $proofPaths = $orderProofPathsMap[$detailOrderId] ?? [];
+          $firstProof = $proofPaths[0] ?? '';
+          $canAction = !empty($firstProof) && $o['status'] === 'paid';
+          $detailPayload = [
+            'order_id' => $detailOrderId,
+            'user_name' => (string)($o['full_name'] ?? ''),
+            'total' => (int)($o['total'] ?? 0),
+            'status' => (string)($o['status'] ?? ''),
+            'created_at' => (string)($o['created_at'] ?? ''),
+            'ticket_count' => (int)($orderTicketCountMap[$detailOrderId] ?? 0),
+            'items' => $orderItemDetailsMap[$detailOrderId] ?? [],
+            'attendees' => $orderAttendeeMap[$detailOrderId] ?? [],
+            'proofs' => $proofPaths,
+          ];
           $ig = trim((string)($o['instagram'] ?? '')); $ig = $ig !== '' ? '@' . ltrim($ig, '@') : '-';
         ?>
           <div class="order-card">
@@ -2141,11 +2201,11 @@ render_header([
               </div>
 
               <!-- Proof row -->
-              <?php if ($o['payment_proof']): ?>
+              <?php if ($firstProof): ?>
               <div class="order-card-row">
                 <div class="order-card-label">Bukti</div>
                 <div>
-                  <button class="proof-link" type="button" data-proof="/uploads/<?= h($o['payment_proof']) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View Proof</button>
+                  <button class="proof-link" type="button" data-proof="/uploads/<?= h($firstProof) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View Proof</button>
                 </div>
               </div>
               <?php endif; ?>
@@ -2154,8 +2214,8 @@ render_header([
             <!-- Card Actions -->
             <div class="order-card-actions">
               <button class="btn ghost small" type="button" data-order-detail="<?= h(json_encode($detailPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>"><i class="bi bi-info-circle"></i> Detail</button>
-              <button class="btn primary small" type="button" data-confirm-action="accept" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $o['payment_proof'] ? '/uploads/' . h($o['payment_proof']) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-check-circle"></i> Accept</button>
-              <button class="btn ghost small" type="button" data-confirm-action="reject" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $o['payment_proof'] ? '/uploads/' . h($o['payment_proof']) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-x-circle"></i> Reject</button>
+              <button class="btn primary small" type="button" data-confirm-action="accept" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-check-circle"></i> Accept</button>
+              <button class="btn ghost small" type="button" data-confirm-action="reject" data-order-id="<?= (int)$o['id'] ?>" data-proof="<?= $firstProof ? '/uploads/' . h($firstProof) : '' ?>" <?= $canAction ? '' : 'disabled' ?>><i class="bi bi-x-circle"></i> Reject</button>
             </div>
           </div>
         <?php endforeach; ?>
@@ -2239,6 +2299,11 @@ render_header([
             <div class="detail-title"><i class="bi bi-people"></i> Attendees</div>
             <ul class="detail-list" id="orderDetailAttendees"></ul>
             <div class="detail-empty" id="orderDetailAttendeesEmpty">No attendee data available.</div>
+          </div>
+          <div class="detail-box detail-proof-box">
+            <div class="detail-title"><i class="bi bi-image"></i> Bukti Pembayaran</div>
+            <div class="detail-proof-list" id="orderDetailProofs"></div>
+            <div class="detail-empty" id="orderDetailProofsEmpty">Belum ada bukti pembayaran.</div>
           </div>
         </div>
       </div>
@@ -2969,6 +3034,8 @@ render_header([
       var detailItemsEmpty = document.getElementById('orderDetailItemsEmpty');
       var detailAttendees = document.getElementById('orderDetailAttendees');
       var detailAttendeesEmpty = document.getElementById('orderDetailAttendeesEmpty');
+      var detailProofs = document.getElementById('orderDetailProofs');
+      var detailProofsEmpty = document.getElementById('orderDetailProofsEmpty');
       var closeBtn = modal.querySelector('.proof-close');
 
       function asCurrency(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
@@ -3014,17 +3081,32 @@ render_header([
             + (pkg ? ' <span style="color:#0f5ea8;font-weight:700;font-size:11.5px;">[' + escapeHtml(pkg) + ']</span>' : '')
             + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>'
             + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '');
-          var proofPath = at && at.payment_proof ? String(at.payment_proof).trim() : '';
-          if (proofPath) {
-            var proofUrl = '/uploads/' + encodeURIComponent(proofPath);
-            li.innerHTML += ' <button class="proof-link detail-proof" type="button" data-proof="' + escapeHtml(proofUrl) + '" data-order="' + escapeHtml('#' + (orderId || '-') + ' — ' + name) + '"><i class="bi bi-file-earmark-image"></i> View Proof</button>';
-          }
-          detailAttendees.appendChild(li);
-        });
-        detailAttendeesEmpty.style.display = attendeesArr.length ? 'none' : 'block';
-        if (typeof attachProofLinks === 'function') {
-          attachProofLinks(detailAttendees);
-        }
+        detailAttendees.appendChild(li);
+      });
+      detailAttendeesEmpty.style.display = attendeesArr.length ? 'none' : 'block';
+      clearList(detailProofs);
+      var proofList = Array.isArray(payload.proofs) ? payload.proofs : [];
+      var safeProofs = proofList.filter(function(path) { return path && typeof path === 'string'; });
+      safeProofs.forEach(function(path, idx) {
+        var proofItem = document.createElement('div');
+        proofItem.className = 'detail-proof-item';
+        var proofLabel = document.createElement('span');
+        proofLabel.className = 'proof-label';
+        proofLabel.textContent = 'Bukti ' + (idx + 1);
+        var proofBtn = document.createElement('button');
+        proofBtn.className = 'proof-link';
+        proofBtn.setAttribute('type', 'button');
+        proofBtn.setAttribute('data-proof', '/uploads/' + encodeURIComponent(path));
+        proofBtn.setAttribute('data-order', escapeHtml('#' + (orderId || '-')));
+        proofBtn.innerHTML = '<i class="bi bi-file-earmark-image"></i> Lihat';
+        proofItem.appendChild(proofLabel);
+        proofItem.appendChild(proofBtn);
+        detailProofs.appendChild(proofItem);
+      });
+      detailProofsEmpty.style.display = safeProofs.length ? 'none' : 'block';
+      if (typeof attachProofLinks === 'function') {
+        attachProofLinks(detailProofs);
+      }
         modal.classList.add('show'); modal.setAttribute('aria-hidden', 'false');
       }
       function closeDetail() { modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true'); }

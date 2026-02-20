@@ -569,20 +569,12 @@ function render_admin_attendee_rows(array $attendees): string {
         $position = max(1, (int)($attendee['position_no'] ?? ($idx + 1)));
         $name = trim((string)($attendee['name'] ?? ''));
         $package = trim((string)($attendee['package'] ?? ''));
-        $proof = normalize_payment_proof_filename((string)($attendee['payment_proof'] ?? ''));
         $safeName = htmlspecialchars($name !== '' ? $name : ('Attendee #' . $position), ENT_QUOTES, 'UTF-8');
         $safePackage = htmlspecialchars($package !== '' ? $package : '-', ENT_QUOTES, 'UTF-8');
-        $proofHtml = '<span style="color:#5a6b86;">Tidak ada</span>';
-        if ($proof !== '') {
-            $proofUrl = app_base_url() . '/uploads/' . rawurlencode($proof);
-            $safeProofUrl = htmlspecialchars($proofUrl, ENT_QUOTES, 'UTF-8');
-            $proofHtml = '<a href="' . $safeProofUrl . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1658ad;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;padding:8px 12px;border-radius:8px;">Bukti #' . $position . '</a>';
-        }
         $rows .= '<tr>
             <td style="padding:10px 0;border-bottom:1px solid #e6ecf8;color:#1f3559;font-weight:700;">#' . $position . '</td>
             <td style="padding:10px 0;border-bottom:1px solid #e6ecf8;color:#1f3559;">' . $safeName . '</td>
             <td style="padding:10px 0;border-bottom:1px solid #e6ecf8;color:#1f3559;">' . $safePackage . '</td>
-            <td style="padding:10px 0;border-bottom:1px solid #e6ecf8;text-align:right;">' . $proofHtml . '</td>
           </tr>';
     }
     return $rows;
@@ -650,7 +642,6 @@ function send_admin_order_paid_email(array $order, array $items, string $toEmail
                         <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">No</th>
                         <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Attendee</th>
                         <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Package</th>
-                        <th align="right" style="text-align:right;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Bukti</th>
                       </tr>
                     </thead>
                     <tbody>' . $attendeeRows . '</tbody>
