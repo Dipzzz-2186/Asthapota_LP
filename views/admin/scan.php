@@ -812,7 +812,9 @@ body.ad-overlay-active * {
   filter: saturate(1.18) brightness(1.05) drop-shadow(0 2px 12px rgba(0,0,0,0.65));
   opacity: 1;
   transform-origin: 50% 50%;
-  animation: logoGearSpin 2.8s steps(18, end) infinite, logoGearJitter 0.22s steps(2, end) infinite;
+  will-change: transform, filter;
+  backface-visibility: hidden;
+  animation: logoGearSpin 4.8s linear infinite, logoGearJitter 3.2s ease-in-out infinite;
 }
 
 @keyframes logoGearSpin {
