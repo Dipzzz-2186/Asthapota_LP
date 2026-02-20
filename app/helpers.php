@@ -560,7 +560,35 @@ function ensure_admin_notification_schema(PDO $db): void {
     }
 }
 
-function send_admin_order_paid_email(array $order, array $items, string $toEmail): bool {
+function render_admin_attendee_rows(array $attendees): string {
+    if (!$attendees) {
+        return '';
+    }
+    $rows = '';
+    foreach ($attendees as $idx => $attendee) {
+        $position = max(1, (int)($attendee['position_no'] ?? ($idx + 1)));
+        $name = trim((string)($attendee['name'] ?? ''));
+        $package = trim((string)($attendee['package'] ?? ''));
+        $proof = normalize_payment_proof_filename((string)($attendee['payment_proof'] ?? ''));
+        $safeName = htmlspecialchars($name !== '' ? $name : ('Attendee #' . $position), ENT_QUOTES, 'UTF-8');
+        $safePackage = htmlspecialchars($package !== '' ? $package : '-', ENT_QUOTES, 'UTF-8');
+        $proofHtml = '<span style="color:#5a6b86;">Tidak ada</span>';
+        if ($proof !== '') {
+            $proofUrl = app_base_url() . '/uploads/' . rawurlencode($proof);
+            $safeProofUrl = htmlspecialchars($proofUrl, ENT_QUOTES, 'UTF-8');
+            $proofHtml = '<a href="' . $safeProofUrl . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1658ad;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;padding:8px 12px;border-radius:8px;">Bukti #' . $position . '</a>';
+        }
+        $rows .= '<tr>
+            <td style="padding:10px 0;border-bottom:1px solid #e6ecf8;color:#1f3559;font-weight:700;">#' . $position . '</td>
+            <td style="padding:10px 0;border-bottom:1px solid #e6ecf8;color:#1f3559;">' . $safeName . '</td>
+            <td style="padding:10px 0;border-bottom:1px solid #e6ecf8;color:#1f3559;">' . $safePackage . '</td>
+            <td style="padding:10px 0;border-bottom:1px solid #e6ecf8;text-align:right;">' . $proofHtml . '</td>
+          </tr>';
+    }
+    return $rows;
+}
+
+function send_admin_order_paid_email(array $order, array $items, string $toEmail, array $attendeeDetails = []): bool {
     $subject = 'Asthapora - Order Paid #' . (int)($order['id'] ?? 0);
     $safeName = htmlspecialchars((string)($order['full_name'] ?? '-'), ENT_QUOTES, 'UTF-8');
     $safeEmail = htmlspecialchars((string)($order['email'] ?? '-'), ENT_QUOTES, 'UTF-8');
@@ -582,7 +610,7 @@ function send_admin_order_paid_email(array $order, array $items, string $toEmail
           </tr>';
     }
 
-    $paymentProofHtml = render_payment_proof_buttons(get_order_payment_proof_paths($order));
+    $attendeeRows = render_admin_attendee_rows($attendeeDetails);
 
     $body = '
       <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
@@ -615,7 +643,19 @@ function send_admin_order_paid_email(array $order, array $items, string $toEmail
               </thead>
               <tbody>' . $rows . '</tbody>
             </table>
-            <div style="margin-top:16px;">' . $paymentProofHtml . '</div>
+            ' . ($attendeeRows !== ''
+                ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:16px;border-collapse:collapse;font-size:14px;color:#0c1b36;">
+                    <thead>
+                      <tr>
+                        <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">No</th>
+                        <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Attendee</th>
+                        <th align="left" style="text-align:left;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Package</th>
+                        <th align="right" style="text-align:right;padding:10px 0;border-bottom:1px solid #e6ecf8;font-size:12px;letter-spacing:0.4px;text-transform:uppercase;color:#5a6b86;">Bukti</th>
+                      </tr>
+                    </thead>
+                    <tbody>' . $attendeeRows . '</tbody>
+                  </table>'
+                : '') . '
           </div>
         </div>
       </div>
@@ -624,7 +664,7 @@ function send_admin_order_paid_email(array $order, array $items, string $toEmail
     return smtp_send($toEmail, $subject, $body);
 }
 
-function notify_admins_new_paid_order(PDO $db, array $order, array $items): array {
+function notify_admins_new_paid_order(PDO $db, array $order, array $items, array $attendeeDetails = []): array {
     ensure_admin_notification_schema($db);
     $result = ['total' => 0, 'sent' => 0];
 
@@ -640,7 +680,7 @@ function notify_admins_new_paid_order(PDO $db, array $order, array $items): arra
             continue;
         }
         $result['total']++;
-        if (send_admin_order_paid_email($order, $items, $email)) {
+        if (send_admin_order_paid_email($order, $items, $email, $attendeeDetails)) {
             $result['sent']++;
         }
     }

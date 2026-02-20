@@ -331,6 +331,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'payment_proof' => $attendeeProofNames[$idx + 1] ?? null,
                 ];
             }
+            $attendeeDetailsForAdmin = [];
+            foreach ($attendeeRows as $row) {
+                $pkgId = (int)($row['package_id'] ?? 0);
+                $attendeeDetailsForAdmin[] = [
+                    'name' => (string)($row['name'] ?? ''),
+                    'position_no' => (int)($row['position_no'] ?? 0),
+                    'package' => (string)($packageNamesById[$pkgId] ?? ($pkgId > 0 ? ('Package #' . $pkgId) : '-')),
+                    'payment_proof' => (string)($row['payment_proof'] ?? ''),
+                ];
+            }
 
             try {
                 $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, package_id, payment_proof, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
@@ -383,7 +393,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'payment_proof' => $primaryProof,
                 'payment_proofs' => $proofPayloadForNotifications,
                 'created_at' => date('Y-m-d H:i:s'),
-            ], $items);
+            ], $items, $attendeeDetailsForAdmin);
             redirect('/thankyou?order=' . $orderId);
         }
     }
