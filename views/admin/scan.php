@@ -808,6 +808,18 @@ body.ad-overlay-active * {
   object-fit: contain;
   filter: saturate(1.18) brightness(1.05) drop-shadow(0 2px 12px rgba(0,0,0,0.65));
   opacity: 1;
+  transform-origin: 50% 50%;
+  animation: logoGearSpin 2.8s steps(18, end) infinite, logoGearJitter 0.22s steps(2, end) infinite;
+}
+
+@keyframes logoGearSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes logoGearJitter {
+  0%, 100% { filter: saturate(1.18) brightness(1.05) drop-shadow(0 2px 12px rgba(0,0,0,0.65)); }
+  50% { filter: saturate(1.26) brightness(1.12) drop-shadow(0 2px 16px rgba(0,0,0,0.72)); }
 }
 
 /* ─── Responsive ─────────────────────────────── */

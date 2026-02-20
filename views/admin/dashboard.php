@@ -426,6 +426,81 @@ if ($selectedStatus === 'paid' || $selectedStatus === 'accepted' || $selectedSta
 elseif ($selectedStatus === 'pending') { $whereParts[] = "o.status = 'pending'"; }
 $whereSql = ' WHERE ' . implode(' AND ', $whereParts);
 
+if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
+    $exportWhereParts = ["o.status = 'accepted'"];
+    $exportParams = [];
+    if ($selectedOrderId > 0) { $exportWhereParts[] = "o.id = ?"; $exportParams[] = $selectedOrderId; }
+    if ($selectedPackage > 0) { $exportWhereParts[] = "EXISTS (SELECT 1 FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id AND p.id = ?)"; $exportParams[] = $selectedPackage; }
+    if ($selectedName !== '') { $exportWhereParts[] = "u.full_name LIKE ?"; $exportParams[] = '%' . $selectedName . '%'; }
+    if ($selectedEmail !== '') { $exportWhereParts[] = "u.email LIKE ?"; $exportParams[] = '%' . $selectedEmail . '%'; }
+    if ($selectedDate !== '') { $exportWhereParts[] = "DATE(o.created_at) = ?"; $exportParams[] = $selectedDate; }
+    $exportWhereSql = ' WHERE ' . implode(' AND ', $exportWhereParts);
+
+    $exportSql = "SELECT
+        o.id,
+        u.full_name,
+        u.phone,
+        u.email,
+        u.instagram,
+        o.total,
+        o.created_at,
+        COALESCE((
+            SELECT GROUP_CONCAT(CONCAT(p.name, ' x', oi.qty) SEPARATOR ', ')
+            FROM order_items oi
+            JOIN packages p ON p.id = oi.package_id
+            WHERE oi.order_id = o.id
+        ), '') AS items
+        FROM orders o
+        JOIN users u ON u.id = o.user_id" . $exportWhereSql . "
+        ORDER BY o.created_at DESC, o.id DESC";
+
+    $exportStmt = $db->prepare($exportSql);
+    $exportStmt->execute($exportParams);
+    $exportRows = $exportStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $escapeCell = static function ($value): string {
+        $text = trim((string)$value);
+        $text = str_replace(["\r", "\n", "\t"], [' ', ' ', ' '], $text);
+        if ($text !== '' && preg_match('/^[=\-+@]/', $text)) $text = "'" . $text;
+        return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    };
+
+    $fileName = 'Order_report-' . date('Ymd-His') . '.xls';
+    header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $fileName . '"');
+    header('Cache-Control: max-age=0');
+
+    echo "\xEF\xBB\xBF";
+    echo "<html><head><meta charset=\"UTF-8\"></head><body>";
+    echo "<table border=\"1\" cellspacing=\"0\" cellpadding=\"6\">";
+    echo "<tr>";
+    echo "<th>Order ID</th>";
+    echo "<th>Nama</th>";
+    echo "<th>No. HP</th>";
+    echo "<th>Email</th>";
+    echo "<th>Instagram</th>";
+    echo "<th>Paket</th>";
+    echo "<th>Total</th>";
+    echo "<th>Tanggal Dibuat</th>";
+    echo "<th>Status</th>";
+    echo "</tr>";
+    foreach ($exportRows as $row) {
+        echo "<tr>";
+        echo "<td>" . $escapeCell($row['id'] ?? '') . "</td>";
+        echo "<td>" . $escapeCell($row['full_name'] ?? '') . "</td>";
+        echo "<td>" . $escapeCell($row['phone'] ?? '') . "</td>";
+        echo "<td>" . $escapeCell($row['email'] ?? '') . "</td>";
+        echo "<td>" . $escapeCell($row['instagram'] ?? '') . "</td>";
+        echo "<td>" . $escapeCell($row['items'] ?? '') . "</td>";
+        echo "<td>" . (int)($row['total'] ?? 0) . "</td>";
+        echo "<td>" . $escapeCell($row['created_at'] ?? '') . "</td>";
+        echo "<td>accepted</td>";
+        echo "</tr>";
+    }
+    echo "</table></body></html>";
+    exit;
+}
+
 $acceptedSummaryStmt = $db->prepare("SELECT
     COUNT(*) AS accepted_orders,
     COALESCE(SUM(o.total), 0) AS total_revenue
@@ -555,6 +630,13 @@ if ($selectedName !== '') $paginationBaseParams['name'] = $selectedName;
 if ($selectedEmail !== '') $paginationBaseParams['email'] = $selectedEmail;
 if ($selectedDate !== '') $paginationBaseParams['created_date'] = $selectedDate;
 if ($selectedStatus !== '') $paginationBaseParams['status'] = $selectedStatus;
+$exportQueryParams = ['export' => 'excel'];
+if ($selectedOrderId > 0) $exportQueryParams['filter_order_id'] = $selectedOrderId;
+if ($selectedPackage > 0) $exportQueryParams['package'] = $selectedPackage;
+if ($selectedName !== '') $exportQueryParams['name'] = $selectedName;
+if ($selectedEmail !== '') $exportQueryParams['email'] = $selectedEmail;
+if ($selectedDate !== '') $exportQueryParams['created_date'] = $selectedDate;
+$exportExcelUrl = '/admin/dashboard?' . http_build_query($exportQueryParams);
 
 $extraHead = <<<'HTML'
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1914,6 +1996,7 @@ render_header([
         </div>
         <div class="dashboard-head-actions">
           <a class="btn ghost" href="/admin/scan"><i class="bi bi-qr-code-scan"></i> Scan QR</a>
+          <a class="btn ghost" href="<?= h($exportExcelUrl) ?>"><i class="bi bi-file-earmark-excel"></i> Export Excel</a>
           <button class="btn ghost" type="button" id="openAdminEmailModal">
             <i class="bi bi-envelope-check"></i> Email Admin
           </button>
