@@ -1047,6 +1047,16 @@ render_header([
   function gL(g){return g==='male'?'Laki-laki':g==='female'?'Perempuan':'Unknown';}
   function gI(g){return g==='male'?'bi-gender-male':g==='female'?'bi-gender-female':'bi-gender-ambiguous';}
   function gA(g){return g==='female'?'/assets/img/perempuan.png':'/assets/img/laki.png';}
+  var welcomeAvatarPool = {
+    male: ['/assets/img/laki.png','/assets/img/laki1.png','/assets/img/laki2.png'],
+    female: ['/assets/img/perempuan.png','/assets/img/perempuan1.png','/assets/img/perempuan2.png']
+  };
+  function gAW(g){
+    var key = g==='female' ? 'female' : 'male';
+    var pool = welcomeAvatarPool[key] || [];
+    if(!pool.length) return gA(g);
+    return pool[Math.floor(Math.random() * pool.length)] + '?v=' + Date.now();
+  }
   function showErr(m){errMsg.textContent=m||'Terjadi kesalahan.';show(err);}
 
   function showPicker(data,token){
@@ -1083,7 +1093,7 @@ render_header([
     welcome.style.animation='none';void welcome.offsetWidth;welcome.style.animation='';
     var wa=document.getElementById('welcomeAvatar'),wi=document.getElementById('welcomeImg');
     if(wa) wa.className='welcome-avatar '+g;
-    if(wi) wi.src=gA(g);
+    if(wi) wi.src=gAW(g);
     wName.textContent=name;
     if(wPkg){if(data.package){wPkg.textContent=data.package;wPkg.style.display='block';}else{wPkg.textContent='';wPkg.style.display='none';}}
     show(welcome);
