@@ -783,3 +783,67 @@ function send_order_status_email(array $order, string $toEmail): bool {
     return smtp_send($toEmail, $subject, $body);
 }
 
+function send_attendee_package_changed_email(array $order, string $toEmail, array $change): bool {
+    $token = extract_qr_token((string)($order['qr_token'] ?? ''));
+    if ($token === '') {
+        return false;
+    }
+
+    $scanUrl = build_qr_checkin_url($token);
+    $qrImageUrl = build_qr_image_url($scanUrl);
+    $safeName = htmlspecialchars((string)($order['full_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $safeAttendee = htmlspecialchars((string)($change['attendee_name'] ?? '-'), ENT_QUOTES, 'UTF-8');
+    $safeOldPackage = htmlspecialchars((string)($change['old_package'] ?? '-'), ENT_QUOTES, 'UTF-8');
+    $safeNewPackage = htmlspecialchars((string)($change['new_package'] ?? '-'), ENT_QUOTES, 'UTF-8');
+    $safeOrderId = (int)($order['id'] ?? 0);
+    $safeQrImage = htmlspecialchars($qrImageUrl, ENT_QUOTES, 'UTF-8');
+    $safeToken = htmlspecialchars($token, ENT_QUOTES, 'UTF-8');
+    $safeScanUrl = htmlspecialchars($scanUrl, ENT_QUOTES, 'UTF-8');
+
+    $subject = 'Asthapora - QR Baru Order #' . $safeOrderId;
+    $body = '
+      <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
+        <div style="max-width:540px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
+          <div style="background:#1e5ed8;color:#ffffff;padding:18px 22px;font-size:18px;font-weight:700;">
+            Asthapora - Update Package Attendee
+          </div>
+          <div style="padding:22px;">
+            <p style="margin:0 0 10px;font-size:15px;color:#0c1b36;">Halo ' . $safeName . ',</p>
+            <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#5a6b86;">
+              Package attendee untuk order <strong>#' . $safeOrderId . '</strong> sudah diperbarui oleh admin.
+            </p>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 14px;background:#f7faff;border:1px solid #dbe6ff;border-radius:12px;">
+              <tr>
+                <td style="padding:12px 14px;font-size:13px;line-height:1.6;color:#1f3559;">
+                  <div><strong>Attendee:</strong> ' . $safeAttendee . '</div>
+                  <div><strong>Package Lama:</strong> ' . $safeOldPackage . '</div>
+                  <div><strong>Package Baru:</strong> ' . $safeNewPackage . '</div>
+                </td>
+              </tr>
+            </table>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:14px;background:#f2f8ff;border:1px solid #cde2ff;border-radius:12px;">
+              <tr>
+                <td style="padding:14px 14px 10px;font-size:13px;line-height:1.6;color:#24518f;">
+                  <div style="font-weight:700;color:#123e7b;margin-bottom:8px;">QR Ticket Baru</div>
+                  <div>Gunakan QR terbaru ini saat check-in.</div>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding:0 14px 10px;">
+                  <img src="' . $safeQrImage . '" alt="QR Ticket Asthapora" width="220" height="220" style="display:block;width:220px;max-width:100%;height:auto;border:1px solid #b9d5ff;border-radius:10px;background:#ffffff;padding:8px;">
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 14px 12px;font-size:12px;color:#4f6d98;word-break:break-word;overflow-wrap:anywhere;">
+                  Token cadangan: <span style="font-family:monospace;word-break:break-all;overflow-wrap:anywhere;">' . $safeToken . '</span><br>
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    ';
+
+    return smtp_send($toEmail, $subject, $body);
+}
+

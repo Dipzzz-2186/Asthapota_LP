@@ -337,6 +337,127 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash['error'] = 'Gagal menghapus iklan.';
             }
         }
+    } elseif ($dashboardAction === 'change_attendee_package') {
+        $orderId = (int)($_POST['order_id'] ?? 0);
+        $attendeeId = (int)($_POST['attendee_id'] ?? 0);
+        $newPackageId = (int)($_POST['new_package_id'] ?? 0);
+
+        if ($orderId <= 0 || $attendeeId <= 0 || $newPackageId <= 0) {
+            $flash['error'] = 'Data perubahan package attendee tidak valid.';
+        } else {
+            try {
+                $pkgStmt = $db->prepare('SELECT id, name, price FROM packages WHERE id = ? LIMIT 1');
+                $pkgStmt->execute([$newPackageId]);
+                $newPackageRow = $pkgStmt->fetch(PDO::FETCH_ASSOC);
+                if (!$newPackageRow) {
+                    $flash['error'] = 'Package baru tidak ditemukan.';
+                } else {
+                    $detailStmt = $db->prepare(
+                        'SELECT
+                            o.id,
+                            o.status,
+                            o.qr_token,
+                            u.email,
+                            u.full_name,
+                            oa.id AS attendee_id,
+                            oa.attendee_name,
+                            oa.checked_in_at,
+                            oa.package_id AS old_package_id,
+                            pold.name AS old_package_name
+                         FROM orders o
+                         JOIN users u ON u.id = o.user_id
+                         JOIN order_attendees oa ON oa.order_id = o.id
+                         LEFT JOIN packages pold ON pold.id = oa.package_id
+                         WHERE o.id = ? AND oa.id = ?
+                         LIMIT 1'
+                    );
+                    $detailStmt->execute([$orderId, $attendeeId]);
+                    $row = $detailStmt->fetch(PDO::FETCH_ASSOC);
+
+                    if (!$row) {
+                        $flash['error'] = 'Attendee tidak ditemukan pada order ini.';
+                    } elseif ((string)($row['status'] ?? '') !== 'accepted') {
+                        $flash['error'] = 'Package attendee hanya bisa diubah untuk order dengan status accepted.';
+                    } elseif (!empty($row['checked_in_at'])) {
+                        $flash['error'] = 'Package attendee yang sudah check-in tidak bisa diubah.';
+                    } else {
+                        $oldPackageId = (int)($row['old_package_id'] ?? 0);
+                        if ($oldPackageId === $newPackageId) {
+                            $flash['success'] = 'Package attendee sudah sesuai, tidak ada perubahan.';
+                        } else {
+                            $newQrToken = strtolower(bin2hex(random_bytes(24)));
+                            $now = date('Y-m-d H:i:s');
+                            $db->beginTransaction();
+
+                            $updAttendee = $db->prepare('UPDATE order_attendees SET package_id = ? WHERE id = ? AND order_id = ?');
+                            $updAttendee->execute([$newPackageId, $attendeeId, $orderId]);
+                            if ($updAttendee->rowCount() <= 0) {
+                                throw new RuntimeException('Gagal memperbarui package attendee.');
+                            }
+
+                            // Move exactly 1 ticket in order_items: old package -> new package.
+                            $oldItemStmt = $db->prepare('SELECT qty FROM order_items WHERE order_id = ? AND package_id = ? LIMIT 1');
+                            $oldItemStmt->execute([$orderId, $oldPackageId]);
+                            $oldQty = (int)($oldItemStmt->fetchColumn() ?: 0);
+                            if ($oldQty <= 0) {
+                                throw new RuntimeException('Data order_items untuk package lama tidak valid.');
+                            }
+
+                            if ($oldQty <= 1) {
+                                $delOldItemStmt = $db->prepare('DELETE FROM order_items WHERE order_id = ? AND package_id = ?');
+                                $delOldItemStmt->execute([$orderId, $oldPackageId]);
+                            } else {
+                                $decOldItemStmt = $db->prepare('UPDATE order_items SET qty = qty - 1 WHERE order_id = ? AND package_id = ?');
+                                $decOldItemStmt->execute([$orderId, $oldPackageId]);
+                            }
+
+                            $newItemStmt = $db->prepare('SELECT qty FROM order_items WHERE order_id = ? AND package_id = ? LIMIT 1');
+                            $newItemStmt->execute([$orderId, $newPackageId]);
+                            $newQty = (int)($newItemStmt->fetchColumn() ?: 0);
+                            if ($newQty > 0) {
+                                $incNewItemStmt = $db->prepare('UPDATE order_items SET qty = qty + 1 WHERE order_id = ? AND package_id = ?');
+                                $incNewItemStmt->execute([$orderId, $newPackageId]);
+                            } else {
+                                $insNewItemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
+                                $insNewItemStmt->execute([$orderId, $newPackageId, 1, max(0, (int)($newPackageRow['price'] ?? 0))]);
+                            }
+
+                            $updOrder = $db->prepare('UPDATE orders SET qr_token = ?, qr_sent_at = ?, checked_in_at = NULL WHERE id = ?');
+                            $updOrder->execute([$newQrToken, $now, $orderId]);
+                            try {
+                                $db->prepare('UPDATE order_attendees SET checked_in_at = NULL WHERE order_id = ?')->execute([$orderId]);
+                            } catch (Throwable $e) {
+                            }
+                            $db->commit();
+
+                            $sent = send_attendee_package_changed_email(
+                                [
+                                    'id' => (int)$row['id'],
+                                    'full_name' => (string)($row['full_name'] ?? ''),
+                                    'qr_token' => $newQrToken,
+                                ],
+                                (string)($row['email'] ?? ''),
+                                [
+                                    'attendee_name' => (string)($row['attendee_name'] ?? ''),
+                                    'old_package' => (string)($row['old_package_name'] ?? '-'),
+                                    'new_package' => (string)($newPackageRow['name'] ?? '-'),
+                                ]
+                            );
+                            $flash['success'] = $sent
+                                ? 'Package attendee berhasil diubah. QR baru sudah dikirim ke email user.'
+                                : 'Package attendee berhasil diubah, tapi email QR baru gagal dikirim.';
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                if ($db->inTransaction()) {
+                    $db->rollBack();
+                }
+                if ($flash['error'] === '') {
+                    $flash['error'] = 'Gagal mengubah package attendee.';
+                }
+            }
+        }
     } else {
         $orderId = (int)($_POST['order_id'] ?? 0);
         $action = $_POST['action'] ?? '';
@@ -573,6 +694,8 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $orderItemDetailsMap = [];
 $orderTicketCountMap = [];
 $orderAttendeeMap = [];
+$orderAttendeePackageSummaryMap = [];
+$orderAttendeeCountMap = [];
 $orderIds = array_values(array_unique(array_map(static function ($row) { return (int)($row['id'] ?? 0); }, $orders)));
 
 if ($orderIds) {
@@ -591,7 +714,7 @@ if ($orderIds) {
         $orderTicketCountMap[$oid] = ($orderTicketCountMap[$oid] ?? 0) + $qty;
     }
     try {
-        $attendeeSql = "SELECT oa.order_id, oa.attendee_name, oa.position_no, oa.checked_in_at, p.name AS package_name
+        $attendeeSql = "SELECT oa.id AS attendee_id, oa.order_id, oa.attendee_name, oa.position_no, oa.checked_in_at, oa.package_id, p.name AS package_name, p.price AS package_price
             FROM order_attendees oa
             LEFT JOIN packages p ON p.id = oa.package_id
             WHERE oa.order_id IN ($inPlaceholders)
@@ -604,13 +727,59 @@ if ($orderIds) {
             if ($oid <= 0) continue;
             if (!isset($orderAttendeeMap[$oid])) $orderAttendeeMap[$oid] = [];
             $orderAttendeeMap[$oid][] = [
+                'attendee_id' => (int)($row['attendee_id'] ?? 0),
                 'position_no' => (int)($row['position_no'] ?? 0),
                 'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
                 'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
+                'package_id' => (int)($row['package_id'] ?? 0),
                 'package_name' => trim((string)($row['package_name'] ?? '')),
             ];
+            $orderAttendeeCountMap[$oid] = ($orderAttendeeCountMap[$oid] ?? 0) + 1;
+
+            $packageId = (int)($row['package_id'] ?? 0);
+            if ($packageId > 0) {
+                if (!isset($orderAttendeePackageSummaryMap[$oid])) {
+                    $orderAttendeePackageSummaryMap[$oid] = [];
+                }
+                if (!isset($orderAttendeePackageSummaryMap[$oid][$packageId])) {
+                    $orderAttendeePackageSummaryMap[$oid][$packageId] = [
+                        'package_name' => trim((string)($row['package_name'] ?? ('Package #' . $packageId))),
+                        'qty' => 0,
+                        'price' => max(0, (int)($row['package_price'] ?? 0)),
+                    ];
+                }
+                $orderAttendeePackageSummaryMap[$oid][$packageId]['qty']++;
+            }
         }
     } catch (Throwable $e) { $orderAttendeeMap = []; }
+
+    foreach ($orderAttendeeCountMap as $oid => $attendeeCount) {
+        if ($attendeeCount <= 0) {
+            continue;
+        }
+        // Attendee rows are source-of-truth after package reassignment.
+        $orderTicketCountMap[$oid] = (int)$attendeeCount;
+        if (!isset($orderAttendeePackageSummaryMap[$oid])) {
+            continue;
+        }
+        $normalizedItems = [];
+        foreach ($orderAttendeePackageSummaryMap[$oid] as $summary) {
+            $qty = max(0, (int)($summary['qty'] ?? 0));
+            $price = max(0, (int)($summary['price'] ?? 0));
+            $normalizedItems[] = [
+                'package_name' => (string)($summary['package_name'] ?? ''),
+                'qty' => $qty,
+                'price' => $price,
+                'subtotal' => $qty * $price,
+            ];
+        }
+        usort($normalizedItems, static function (array $a, array $b): int {
+            return strcmp((string)($a['package_name'] ?? ''), (string)($b['package_name'] ?? ''));
+        });
+        if ($normalizedItems) {
+            $orderItemDetailsMap[$oid] = $normalizedItems;
+        }
+    }
 
     $orderProofPathsMap = [];
     foreach ($orders as $row) {
@@ -1764,6 +1933,36 @@ $extraHead = <<<'HTML'
   .detail-title .bi { color: var(--primary); font-size: 14px; }
   .detail-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
   .detail-list li { border: 1px solid var(--stroke); border-radius: 9px; background: var(--surface-2, #f8faff); padding: 9px 12px; font-size: 12.5px; line-height: 1.5; font-weight: 500; color: var(--text); }
+  .detail-package-wrap {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .detail-package-select {
+    min-width: 160px;
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    background: #fff;
+    color: #1d2b45;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 8px;
+  }
+  .detail-package-submit {
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--primary);
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 5px 9px;
+    cursor: pointer;
+  }
+  .detail-package-submit:hover {
+    border-color: var(--primary);
+    background: rgba(0, 102, 255, 0.08);
+  }
   .detail-empty { color: var(--muted); font-size: 13px; padding: 4px 2px; font-weight: 500; }
   .proof-gallery-card { max-width: min(96vw, 640px); }
   .proof-gallery-body {
@@ -2398,6 +2597,20 @@ render_header([
     <input type="hidden" name="dashboard_action" value="order_decision">
     <input type="hidden" name="order_id" id="confirmOrderId" value="">
     <input type="hidden" name="action" id="confirmAction" value="">
+    <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
+    <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
+    <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
+    <input type="hidden" name="name" value="<?= h($selectedName) ?>">
+    <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
+    <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
+    <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+  </form>
+
+  <form method="post" action="/admin/dashboard" id="attendeePackageForm" style="display:none;">
+    <input type="hidden" name="dashboard_action" value="change_attendee_package">
+    <input type="hidden" name="order_id" id="attendeePackageOrderId" value="">
+    <input type="hidden" name="attendee_id" id="attendeePackageAttendeeId" value="">
+    <input type="hidden" name="new_package_id" id="attendeePackageNewPackageId" value="">
     <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
     <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
     <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
@@ -3119,6 +3332,16 @@ render_header([
       var detailAttendees = document.getElementById('orderDetailAttendees');
       var detailAttendeesEmpty = document.getElementById('orderDetailAttendeesEmpty');
       var closeBtn = modal.querySelector('.proof-close');
+      var packageForm = document.getElementById('attendeePackageForm');
+      var packageFormOrderId = document.getElementById('attendeePackageOrderId');
+      var packageFormAttendeeId = document.getElementById('attendeePackageAttendeeId');
+      var packageFormNewPackageId = document.getElementById('attendeePackageNewPackageId');
+      var packageOptions = <?= json_encode(array_values(array_map(static function (array $pkg): array {
+        return [
+          'id' => (int)($pkg['id'] ?? 0),
+          'name' => (string)($pkg['name'] ?? '-'),
+        ];
+      }, $packages)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
       function asCurrency(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
       function formatDate(raw) { if (!raw) return '-'; var d = new Date(raw); return isNaN(d.getTime()) ? String(raw) : d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
@@ -3126,6 +3349,14 @@ render_header([
       function escapeHtml(t) { return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
       function clearList(el) { while (el.firstChild) el.removeChild(el.firstChild); }
       function statusLabel(s) { return s === 'paid' ? 'Paid' : s === 'accepted' ? 'Accepted' : s === 'rejected' ? 'Rejected' : (s || '-'); }
+      function submitPackageChange(orderId, attendeeId, packageId) {
+        if (!packageForm || !packageFormOrderId || !packageFormAttendeeId || !packageFormNewPackageId) return;
+        packageFormOrderId.value = String(orderId || '');
+        packageFormAttendeeId.value = String(attendeeId || '');
+        packageFormNewPackageId.value = String(packageId || '');
+        if (!packageFormOrderId.value || !packageFormAttendeeId.value || !packageFormNewPackageId.value) return;
+        packageForm.submit();
+      }
 
       function openDetail(rawJson) {
         var payload = {}; try { payload = JSON.parse(rawJson || '{}'); } catch (err) {}
@@ -3154,6 +3385,8 @@ render_header([
         attendeesArr.forEach(function(at) {
           var li = document.createElement('li');
           var pos = Number(at && at.position_no ? at.position_no : 0);
+          var attendeeId = Number(at && at.attendee_id ? at.attendee_id : 0);
+          var packageId = Number(at && at.package_id ? at.package_id : 0);
           var name = at && at.attendee_name ? String(at.attendee_name) : '-';
           var pkg = at && at.package_name ? String(at.package_name) : '';
           var checkedInAt = at && at.checked_in_at ? String(at.checked_in_at) : '';
@@ -3163,12 +3396,46 @@ render_header([
             + (pkg ? ' <span style="color:#0f5ea8;font-weight:700;font-size:11.5px;">[' + escapeHtml(pkg) + ']</span>' : '')
             + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>'
             + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '');
-        detailAttendees.appendChild(li);
-      });
-      detailAttendeesEmpty.style.display = attendeesArr.length ? 'none' : 'block';
-        modal.classList.add('show'); modal.setAttribute('aria-hidden', 'false');
+          if (attendeeId > 0 && String(payload.status || '') === 'accepted' && !checkedInAt) {
+            var wrap = document.createElement('div');
+            wrap.className = 'detail-package-wrap';
+            var select = document.createElement('select');
+            select.className = 'detail-package-select';
+            packageOptions.forEach(function(option) {
+              var optionId = Number(option && option.id ? option.id : 0);
+              if (optionId <= 0) return;
+              var optionName = String(option && option.name ? option.name : '-');
+              var opt = document.createElement('option');
+              opt.value = String(optionId);
+              opt.textContent = optionName + (optionId === packageId ? ' (saat ini)' : '');
+              if (optionId === packageId) {
+                opt.selected = true;
+              }
+              select.appendChild(opt);
+            });
+            var applyBtn = document.createElement('button');
+            applyBtn.type = 'button';
+            applyBtn.className = 'detail-package-submit';
+            applyBtn.textContent = 'Pilih Package';
+            applyBtn.addEventListener('click', function() {
+              var chosenId = Number(select.value || 0);
+              if (chosenId <= 0 || chosenId === packageId) return;
+              submitPackageChange(orderId, attendeeId, chosenId);
+            });
+            wrap.appendChild(select);
+            wrap.appendChild(applyBtn);
+            li.appendChild(wrap);
+          }
+          detailAttendees.appendChild(li);
+        });
+        detailAttendeesEmpty.style.display = attendeesArr.length ? 'none' : 'block';
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
       }
-      function closeDetail() { modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true'); }
+      function closeDetail() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+      }
       document.querySelectorAll('[data-order-detail]').forEach(function(btn) { btn.addEventListener('click', function() { openDetail(btn.getAttribute('data-order-detail') || '{}'); }); });
       closeBtn.addEventListener('click', closeDetail);
       modal.addEventListener('click', function(e) { if (e.target === modal) closeDetail(); });

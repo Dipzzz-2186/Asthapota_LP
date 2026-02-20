@@ -113,7 +113,8 @@ CREATE TABLE `packages` (
 INSERT INTO `packages` (`id`, `code`, `name`, `price`, `description`) VALUES
 (1, 'A', 'Package A', 375000, '1 hour of Coaching\n1 hour of Open Play\nFREE Dinner\nFREE Takjil\nFREE Goodie Bag\nFREE Photo Booth'),
 (2, 'B', 'Package B', 275000, '2 hours of Open Play\nFREE Dinner\nFREE Takjil\nFREE Goodie Bag\nFREE Photo Booth'),
-(3, 'C', 'Package C', 100000, 'Dinner\nTakjil');
+(3, 'C', 'Package C', 100000, 'Dinner\nTakjil'),
+(4, 'D', 'Package D', 0, '');
 
 -- --------------------------------------------------------
 
