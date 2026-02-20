@@ -1683,34 +1683,30 @@ $extraHead = <<<'HTML'
   .detail-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
   .detail-list li { border: 1px solid var(--stroke); border-radius: 9px; background: var(--surface-2, #f8faff); padding: 9px 12px; font-size: 12.5px; line-height: 1.5; font-weight: 500; color: var(--text); }
   .detail-empty { color: var(--muted); font-size: 13px; padding: 4px 2px; font-weight: 500; }
-  .detail-proof-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
-  .detail-proof-item {
+  .proof-gallery-card { max-width: min(96vw, 640px); }
+  .proof-gallery-body {
+    padding: 14px 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .proof-gallery-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    background: var(--surface);
     padding: 10px 12px;
     border-radius: 10px;
     border: 1px solid var(--stroke);
-    background: var(--surface-2, #f8faff);
-    font-size: 12.5px;
-    font-weight: 500;
+    gap: 10px;
+  }
+  .proof-gallery-item span {
+    font-size: 13px;
+    font-weight: 600;
     color: var(--text);
   }
-  .detail-proof-item .proof-label {
-    flex: 1;
-    min-width: 0;
-    font-weight: 600;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-    font-size: 11.5px;
-    color: var(--muted);
-  }
-  .detail-proof-item .proof-link {
-    justify-content: center;
-    padding: 6px 10px;
-    font-size: 12px;
-    border-radius: 8px;
+  .proof-gallery-item button {
+    min-width: 110px;
   }
 
   /* ─── Animations ─────────────────────────────────────────── */
@@ -2115,8 +2111,8 @@ render_header([
                   <?php endif; ?>
                 </td>
                 <td>
-                  <?php if ($firstProof): ?>
-                    <button class="proof-link" type="button" data-proof="/uploads/<?= h($firstProof) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View</button>
+                  <?php if ($proofPaths): ?>
+                    <button class="proof-link proof-gallery-trigger" type="button" data-proof-gallery="<?= h(json_encode($proofPaths, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View </button>
                   <?php else: ?><span style="color:var(--muted);font-size:12px;">—</span><?php endif; ?>
                 </td>
                 <td>
@@ -2201,11 +2197,11 @@ render_header([
               </div>
 
               <!-- Proof row -->
-              <?php if ($firstProof): ?>
+              <?php if ($proofPaths): ?>
               <div class="order-card-row">
                 <div class="order-card-label">Bukti</div>
                 <div>
-                  <button class="proof-link" type="button" data-proof="/uploads/<?= h($firstProof) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View Proof</button>
+                  <button class="proof-link proof-gallery-trigger" type="button" data-proof-gallery="<?= h(json_encode($proofPaths, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View Proof (<?= count($proofPaths) ?>)</button>
                 </div>
               </div>
               <?php endif; ?>
@@ -2245,6 +2241,16 @@ render_header([
   </main>
 
   <!-- ─── Modals ───────────────────────────────────────────── -->
+  <div class="proof-modal" id="proofGalleryModal" aria-hidden="true">
+    <div class="proof-card proof-gallery-card" role="dialog" aria-modal="true" aria-labelledby="proofGalleryTitle">
+      <div class="proof-head">
+        <div class="proof-title" id="proofGalleryTitle"><i class="bi bi-image"></i> Bukti Pembayaran</div>
+        <button class="proof-close" type="button" aria-label="Close" data-proof-gallery-close><i class="bi bi-x-lg"></i></button>
+      </div>
+      <div class="proof-gallery-body" id="proofGalleryList"></div>
+    </div>
+  </div>
+
   <div class="proof-modal" id="proofModal" aria-hidden="true">
     <div class="proof-card" role="dialog" aria-modal="true" aria-labelledby="proofTitle">
       <div class="proof-head">
@@ -2299,11 +2305,6 @@ render_header([
             <div class="detail-title"><i class="bi bi-people"></i> Attendees</div>
             <ul class="detail-list" id="orderDetailAttendees"></ul>
             <div class="detail-empty" id="orderDetailAttendeesEmpty">No attendee data available.</div>
-          </div>
-          <div class="detail-box detail-proof-box">
-            <div class="detail-title"><i class="bi bi-image"></i> Bukti Pembayaran</div>
-            <div class="detail-proof-list" id="orderDetailProofs"></div>
-            <div class="detail-empty" id="orderDetailProofsEmpty">Belum ada bukti pembayaran.</div>
           </div>
         </div>
       </div>
@@ -3034,8 +3035,6 @@ render_header([
       var detailItemsEmpty = document.getElementById('orderDetailItemsEmpty');
       var detailAttendees = document.getElementById('orderDetailAttendees');
       var detailAttendeesEmpty = document.getElementById('orderDetailAttendeesEmpty');
-      var detailProofs = document.getElementById('orderDetailProofs');
-      var detailProofsEmpty = document.getElementById('orderDetailProofsEmpty');
       var closeBtn = modal.querySelector('.proof-close');
 
       function asCurrency(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
@@ -3084,29 +3083,6 @@ render_header([
         detailAttendees.appendChild(li);
       });
       detailAttendeesEmpty.style.display = attendeesArr.length ? 'none' : 'block';
-      clearList(detailProofs);
-      var proofList = Array.isArray(payload.proofs) ? payload.proofs : [];
-      var safeProofs = proofList.filter(function(path) { return path && typeof path === 'string'; });
-      safeProofs.forEach(function(path, idx) {
-        var proofItem = document.createElement('div');
-        proofItem.className = 'detail-proof-item';
-        var proofLabel = document.createElement('span');
-        proofLabel.className = 'proof-label';
-        proofLabel.textContent = 'Bukti ' + (idx + 1);
-        var proofBtn = document.createElement('button');
-        proofBtn.className = 'proof-link';
-        proofBtn.setAttribute('type', 'button');
-        proofBtn.setAttribute('data-proof', '/uploads/' + encodeURIComponent(path));
-        proofBtn.setAttribute('data-order', escapeHtml('#' + (orderId || '-')));
-        proofBtn.innerHTML = '<i class="bi bi-file-earmark-image"></i> Lihat';
-        proofItem.appendChild(proofLabel);
-        proofItem.appendChild(proofBtn);
-        detailProofs.appendChild(proofItem);
-      });
-      detailProofsEmpty.style.display = safeProofs.length ? 'none' : 'block';
-      if (typeof attachProofLinks === 'function') {
-        attachProofLinks(detailProofs);
-      }
         modal.classList.add('show'); modal.setAttribute('aria-hidden', 'false');
       }
       function closeDetail() { modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true'); }
@@ -3149,6 +3125,94 @@ render_header([
       window.addEventListener('mouseup', function(){if(!isDragging)return;isDragging=false;img.classList.remove('dragging');});
       closeBtn.addEventListener('click', close); modal.addEventListener('click', function(e){if(e.target===modal)close();}); document.addEventListener('keydown', function(e){if(e.key==='Escape'&&modal.classList.contains('show'))close();});
       window.attachProofLinks = attachProofLinks;
+    })();
+  </script>
+
+  <script>
+    (function() {
+      var galleryModal = document.getElementById('proofGalleryModal');
+      var galleryList = document.getElementById('proofGalleryList');
+      var galleryClose = galleryModal ? galleryModal.querySelector('[data-proof-gallery-close]') : null;
+      var openClass = 'show';
+
+      function clearGallery() {
+        if (!galleryList) return;
+        while (galleryList.firstChild) {
+          galleryList.removeChild(galleryList.firstChild);
+        }
+      }
+
+      function safeParseProofs(raw) {
+        try {
+          var parsed = JSON.parse(raw || '[]');
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+          return [];
+        }
+      }
+
+      function openGallery(proofs, label) {
+        if (!galleryModal || !galleryList) return;
+        clearGallery();
+        var safeProofs = Array.isArray(proofs) ? proofs.filter(Boolean) : [];
+        if (!safeProofs.length) {
+          var empty = document.createElement('div');
+          empty.className = 'detail-empty';
+          empty.textContent = 'Belum ada bukti pembayaran.';
+          galleryList.appendChild(empty);
+        } else {
+          safeProofs.forEach(function(path, idx) {
+            var item = document.createElement('div');
+            item.className = 'proof-gallery-item';
+            var labelNode = document.createElement('span');
+            labelNode.textContent = 'Bukti ' + (idx + 1);
+            var btn = document.createElement('button');
+            btn.className = 'proof-link';
+            btn.type = 'button';
+            btn.setAttribute('data-proof', '/uploads/' + encodeURIComponent(path));
+            btn.setAttribute('data-order', label || '');
+            btn.innerHTML = '<i class="bi bi-file-earmark-image"></i> Lihat';
+            item.appendChild(labelNode);
+            item.appendChild(btn);
+            galleryList.appendChild(item);
+          });
+          if (typeof window.attachProofLinks === 'function') {
+            window.attachProofLinks(galleryList);
+          }
+        }
+        galleryModal.classList.add(openClass);
+        galleryModal.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeGallery() {
+        if (!galleryModal) return;
+        galleryModal.classList.remove(openClass);
+        galleryModal.setAttribute('aria-hidden', 'true');
+      }
+
+      document.querySelectorAll('.proof-gallery-trigger').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var rawProofs = btn.getAttribute('data-proof-gallery') || '[]';
+          var proofs = safeParseProofs(rawProofs);
+          openGallery(proofs, btn.getAttribute('data-order') || '');
+        });
+      });
+
+      if (galleryClose) {
+        galleryClose.addEventListener('click', closeGallery);
+      }
+      if (galleryModal) {
+        galleryModal.addEventListener('click', function(e) {
+          if (e.target === galleryModal) {
+            closeGallery();
+          }
+        });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && galleryModal.classList.contains(openClass)) {
+            closeGallery();
+          }
+        });
+      }
     })();
   </script>
 
