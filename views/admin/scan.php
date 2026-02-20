@@ -223,7 +223,7 @@ body.admin-page::after { display: none !important; }
 .btn-fs {
   width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center;
   background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.09);
-  color:rgba(241,245,249,0.45); font-size:14px; cursor:pointer; transition:0.15s; flex-shrink:0;
+  color:rgb(255, 255, 255); font-size:14px; cursor:pointer; transition:0.15s; flex-shrink:0;
 }
 .btn-fs:hover { background:rgba(255,255,255,0.1); color:#f1f5f9; }
 
@@ -806,8 +806,8 @@ body.ad-overlay-active * {
   max-height: clamp(60px, 8vw, 110px);
   max-width: clamp(140px, 22vw, 280px);
   object-fit: contain;
-  filter: brightness(0) invert(1) drop-shadow(0 2px 12px rgba(0,0,0,0.7));
-  opacity: 0.95;
+  filter: saturate(1.18) brightness(1.05) drop-shadow(0 2px 12px rgba(0,0,0,0.65));
+  opacity: 1;
 }
 
 /* ─── Responsive ─────────────────────────────── */
