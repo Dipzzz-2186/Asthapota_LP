@@ -469,22 +469,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             $db->commit();
 
-                            $sent = send_attendee_package_changed_email(
-                                [
-                                    'id' => (int)$row['id'],
-                                    'full_name' => (string)($row['full_name'] ?? ''),
-                                    'qr_token' => (string)($row['qr_token'] ?? ''),
-                                ],
-                                (string)($row['email'] ?? ''),
-                                [
-                                    'attendee_name' => (string)($row['attendee_name'] ?? ''),
-                                    'old_package' => (string)($row['old_package_name'] ?? '-'),
-                                    'new_package' => (string)($newPackageRow['name'] ?? '-'),
-                                ]
-                            );
-                            $flash['success'] = $sent
-                                ? 'Package attendee berhasil diubah. Notifikasi email sudah dikirim ke user.'
-                                : 'Package attendee berhasil diubah, tapi email notifikasi gagal dikirim.';
+                            $flash['success'] = 'Package attendee berhasil diubah.';
                         }
                     }
                 }
