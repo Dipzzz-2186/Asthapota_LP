@@ -254,21 +254,22 @@ body.admin-page::after { display: none !important; }
 }
 
 #result-head {
-  position: fixed;
-  top: 40%;
+  position: absolute;
+  top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:8px;
+  margin-top: -60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   padding: 8px 16px;
-  pointer-events:none;
+  pointer-events: none;
   width: min(92vw, 760px);
-  text-align:center;
-  animation: resultHeadFloat 1.2s ease both;
+  text-align: center;
   z-index: 15;
 }
+
 #result-head::before {
   content: '';
   position:absolute;
@@ -432,17 +433,11 @@ body.admin-page::after { display: none !important; }
 .welcome-avatar img { width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 8px 40px rgba(0,0,0,0.5)); }
 .welcome-greeting { font-size:clamp(22px,3vw,48px); font-weight:600; color:rgba(255,255,255,0.98); letter-spacing:0.08em; margin-bottom:12px; line-height:1.2; text-shadow:0 2px 12px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.55); animation:welcomeTitleIn 0.75s cubic-bezier(.16,.8,.2,1) both; }
 .welcome-name {
-  font-size: clamp(30px, min(6vw, 8vh), 82px);
-  font-weight: 900;
-  color: #fff;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  margin-bottom: 2px;
-  max-width: min(90vw, 720px);
-  text-shadow: 0 2px 4px rgba(0,0,0,1), 0 8px 30px rgba(0,0,0,0.9), 0 20px 60px rgba(0,0,0,0.5);
-  word-wrap: break-word;
-  hyphens: auto;
-  animation: welcomeNameIn 0.95s cubic-bezier(.14,.82,.2,1) both;
+  font-size:clamp(32px,min(8vw,10vh),120px); font-weight:900; color:#fff;
+  letter-spacing:-0.04em; line-height:1; margin-bottom:0; max-width:min(92vw,880px);
+  text-shadow:0 2px 4px rgba(0,0,0,1),0 8px 30px rgba(0,0,0,0.9),0 20px 60px rgba(0,0,0,0.5);
+  word-wrap:break-word; hyphens:auto; white-space:normal;
+  animation:welcomeNameIn 0.95s cubic-bezier(.14,.82,.2,1) both;
 }
 .welcome-package { font-size:clamp(13px,1.6vw,15px); font-weight:700; letter-spacing:0.3em; text-transform:uppercase; color:rgba(255,255,255,0.9); margin-top:10px; text-shadow:0 2px 12px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.55); animation:welcomePackageIn 1.05s ease both, welcomePackageGlow 2.6s ease-in-out infinite 1s; }
 .welcome-badge,.welcome-time,.welcome-tags { display:none!important; }
@@ -716,6 +711,21 @@ body.ad-overlay-active * {
   background: #000;
 }
 
+/* ─── Result Head Logo ───────────────────────── */
+.result-head-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+.result-head-logo img {
+  max-height: clamp(60px, 8vw, 110px);
+  max-width: clamp(140px, 22vw, 280px);
+  object-fit: contain;
+  filter: brightness(0) invert(1) drop-shadow(0 2px 12px rgba(0,0,0,0.7));
+  opacity: 0.95;
+}
+
 /* ─── Responsive ─────────────────────────────── */
 @media (max-width: 1080px) {
   #topbar { padding: 12px 20px; min-height: 62px; }
@@ -796,6 +806,7 @@ body.ad-overlay-active * {
     drop-shadow(0 1px 1px rgba(0,0,0,0.95))
     drop-shadow(0 0 8px rgba(0,0,0,0.55));
 }
+
 </style>
 HTML;
 
@@ -826,9 +837,11 @@ render_header([
 
   <div id="stage">
     <div id="result-head" aria-live="polite">
+      <div class="result-head-logo">
+        <img src="/assets/img/LogoTitleAsthapora.png" alt="Logo" id="resultHeadLogo">
+      </div>
       <div class="idle-title">Temu Padel</div>
       <div class="idle-subtitle">Welcome</div>
-      <div class="idle-hint"><i class="bi bi-qr-code-scan idle-hint-icon" aria-hidden="true"></i> Scan QR tiket di pojok kiri bawah</div>
     </div>
     <!-- 1. Idle -->
     <div id="idle-screen">
