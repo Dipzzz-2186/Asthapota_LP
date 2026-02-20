@@ -72,6 +72,8 @@ CREATE TABLE `order_attendees` (
   `gender` enum('Laki-laki','Perempuan') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Laki-laki',
   `attendee_gender` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `position_no` int NOT NULL,
+  `package_id` int DEFAULT NULL,
+  `payment_proof` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `checked_in_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -14,6 +14,7 @@ $db = get_db();
 ensure_order_qr_schema($db);
 ensure_order_attendee_checkin_schema($db);
 ensure_order_attendee_package_schema($db);
+ensure_order_attendee_payment_schema($db);
 ensure_admin_notification_schema($db);
 $flash = ['success' => '', 'error' => ''];
 $selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
@@ -514,7 +515,7 @@ if ($orderIds) {
         $orderTicketCountMap[$oid] = ($orderTicketCountMap[$oid] ?? 0) + $qty;
     }
     try {
-        $attendeeSql = "SELECT oa.order_id, oa.attendee_name, oa.position_no, oa.checked_in_at, p.name AS package_name
+        $attendeeSql = "SELECT oa.order_id, oa.attendee_name, oa.position_no, oa.checked_in_at, oa.payment_proof, p.name AS package_name
             FROM order_attendees oa
             LEFT JOIN packages p ON p.id = oa.package_id
             WHERE oa.order_id IN ($inPlaceholders)
@@ -531,6 +532,7 @@ if ($orderIds) {
                 'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
                 'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
                 'package_name' => trim((string)($row['package_name'] ?? '')),
+                'payment_proof' => trim((string)($row['payment_proof'] ?? '')),
             ];
         }
     } catch (Throwable $e) { $orderAttendeeMap = []; }
@@ -3012,9 +3014,17 @@ render_header([
             + (pkg ? ' <span style="color:#0f5ea8;font-weight:700;font-size:11.5px;">[' + escapeHtml(pkg) + ']</span>' : '')
             + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>'
             + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '');
+          var proofPath = at && at.payment_proof ? String(at.payment_proof).trim() : '';
+          if (proofPath) {
+            var proofUrl = '/uploads/' + encodeURIComponent(proofPath);
+            li.innerHTML += ' <button class="proof-link detail-proof" type="button" data-proof="' + escapeHtml(proofUrl) + '" data-order="' + escapeHtml('#' + (orderId || '-') + ' — ' + name) + '"><i class="bi bi-file-earmark-image"></i> View Proof</button>';
+          }
           detailAttendees.appendChild(li);
         });
         detailAttendeesEmpty.style.display = attendeesArr.length ? 'none' : 'block';
+        if (typeof attachProofLinks === 'function') {
+          attachProofLinks(detailAttendees);
+        }
         modal.classList.add('show'); modal.setAttribute('aria-hidden', 'false');
       }
       function closeDetail() { modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true'); }
@@ -3039,8 +3049,16 @@ render_header([
       function applyZ(n) { scale = Math.min(maxS, Math.max(minS, n)); if (scale===1){tx=0;ty=0;} applyT(); img.classList.toggle('zoomed',scale>1); zoomOutBtn.disabled=scale<=minS; zoomInBtn.disabled=scale>=maxS; }
       function open(src, label) { img.src=src; title.innerHTML='<i class="bi bi-image"></i> '+(label?'Proof '+label:'Payment Proof'); scale=1;tx=0;ty=0; img.style.transform='translate(0,0) scale(1)'; img.classList.remove('zoomed'); modal.classList.add('show'); modal.setAttribute('aria-hidden','false'); }
       function close() { modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); img.src=''; }
+      function attachProofLinks(scope) {
+        var root = scope || document;
+        root.querySelectorAll('.proof-link[data-proof]').forEach(function(btn) {
+          if (btn.dataset.proofBound === '1') { return; }
+          btn.dataset.proofBound = '1';
+          btn.addEventListener('click', function() { open(btn.getAttribute('data-proof'), btn.getAttribute('data-order')); });
+        });
+      }
 
-      document.querySelectorAll('.proof-link[data-proof]').forEach(function(btn) { btn.addEventListener('click', function() { open(btn.getAttribute('data-proof'), btn.getAttribute('data-order')); }); });
+      attachProofLinks();
       zoomInBtn.addEventListener('click', function(){applyZ(scale+step);}); zoomOutBtn.addEventListener('click', function(){applyZ(scale-step);}); zoomResetBtn.addEventListener('click', function(){applyZ(1);});
       img.addEventListener('click', function(){if(!img.classList.contains('zoomed'))applyZ(1.6);});
       img.addEventListener('wheel', function(e){e.preventDefault();applyZ(scale+(e.deltaY>0?-step:step));},{passive:false});
@@ -3048,6 +3066,7 @@ render_header([
       window.addEventListener('mousemove', function(e){if(!isDragging)return;tx=e.clientX-sx;ty=e.clientY-sy;applyT();});
       window.addEventListener('mouseup', function(){if(!isDragging)return;isDragging=false;img.classList.remove('dragging');});
       closeBtn.addEventListener('click', close); modal.addEventListener('click', function(e){if(e.target===modal)close();}); document.addEventListener('keydown', function(e){if(e.key==='Escape'&&modal.classList.contains('show'))close();});
+      window.attachProofLinks = attachProofLinks;
     })();
   </script>
 

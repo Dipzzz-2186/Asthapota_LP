@@ -22,6 +22,7 @@ if (
 $db = get_db();
 ensure_order_attendee_checkin_schema($db);
 ensure_order_attendee_package_schema($db);
+ensure_order_attendee_payment_schema($db);
 $userStmt = $db->prepare('SELECT id, full_name, phone, email, instagram, gender FROM users WHERE id = ?');
 $userStmt->execute([(int)$_SESSION['user_id']]);
 $user = $userStmt->fetch(PDO::FETCH_ASSOC);
@@ -67,6 +68,7 @@ $additionalAttendeeCount = max(0, $totalTickets - 1);
 $attendeeNames = array_fill(0, $additionalAttendeeCount, '');
 $attendeeGenders = array_fill(0, $additionalAttendeeCount, '');
 $attendeePackageIds = array_fill(0, $additionalAttendeeCount, 0);
+$attendeeProofNames = array_fill(0, $totalTickets, '');
 $allowedAttendeeGenders = ['Laki-laki', 'Perempuan'];
 $packageTicketCounts = [];
 $packageNamesById = [];
@@ -198,133 +200,206 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    $proofUploadCandidates = [];
+    $proofInput = $_FILES['attendee_payment_proofs'] ?? null;
+    if ($totalTickets <= 0) {
+        $errors[] = 'Unable to determine the attendee count for payment proof upload.';
+    } elseif (
+        !is_array($proofInput)
+        || !isset($proofInput['error'])
+        || !is_array($proofInput['error'])
+        || !isset($proofInput['tmp_name'])
+        || !is_array($proofInput['tmp_name'])
+    ) {
+        $errors[] = 'Please upload payment proof for each attendee.';
+    } else {
+        $allowedProofExts = ['jpg', 'jpeg', 'png'];
+        for ($i = 0; $i < $totalTickets; $i++) {
+            $labelNo = $i + 1;
+            $errorCode = $proofInput['error'][$i] ?? UPLOAD_ERR_NO_FILE;
+            if ($errorCode !== UPLOAD_ERR_OK) {
+                $errors[] = 'Please upload a valid payment proof for attendee #' . $labelNo . '.';
+                continue;
+            }
+            $tmpName = (string)($proofInput['tmp_name'][$i] ?? '');
+            $size = (int)($proofInput['size'][$i] ?? 0);
+            $originalName = trim((string)($proofInput['name'][$i] ?? ''));
+            if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+                $errors[] = 'Please upload a valid payment proof for attendee #' . $labelNo . '.';
+                continue;
+            }
+            if ($size > 2 * 1024 * 1024) {
+                $errors[] = 'Payment proof for attendee #' . $labelNo . ' is too large. Max 2MB.';
+                continue;
+            }
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowedProofExts, true)) {
+                $errors[] = 'Only JPG or PNG allowed for attendee #' . $labelNo . '.';
+                continue;
+            }
+            $proofUploadCandidates[$i] = [
+                'tmp_name' => $tmpName,
+                'ext' => $ext,
+            ];
+        }
+    }
+
     $_SESSION['order_draft']['attendee_names'] = $attendeeNames;
     $_SESSION['order_draft']['attendee_genders'] = $attendeeGenders;
     $_SESSION['order_draft']['attendee_package_ids'] = $attendeePackageIds;
     $_SESSION['order_draft']['owner_package_id'] = $ownerPackageId;
 
     if (!$errors) {
-        if (!isset($_FILES['payment_proof']) || $_FILES['payment_proof']['error'] !== UPLOAD_ERR_OK) {
-            $errors[] = 'Please upload a valid payment proof.';
-        } else {
-            $file = $_FILES['payment_proof'];
-            if ($file['size'] > 2 * 1024 * 1024) {
-                $errors[] = 'File is too large. Max 2MB.';
-            } else {
-                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                if (!in_array($ext, ['jpg', 'jpeg', 'png'])) {
-                    $errors[] = 'Only JPG or PNG allowed.';
-                } else {
-                    $name = 'proof_u' . (int)$_SESSION['user_id'] . '_' . time() . '_' . mt_rand(1000, 9999) . '.' . $ext;
-                    $uploadDir = $CONFIG['upload_dir'];
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0775, true);
-                    }
-                    $target = $uploadDir . '/' . $name;
-                    if (!move_uploaded_file($file['tmp_name'], $target)) {
-                        $errors[] = 'Failed to upload file.';
-                    } else {
-                        $orderId = 0;
-                        try {
-                            $db->beginTransaction();
-                            $stmt = $db->prepare('INSERT INTO orders (user_id, total, status, payment_proof, created_at) VALUES (?, ?, ?, ?, ?)');
-                            $stmt->execute([(int)$_SESSION['user_id'], (int)$total, 'paid', $name, date('c')]);
-                            $orderId = (int)$db->lastInsertId();
+        $uploadDir = $CONFIG['upload_dir'];
+        if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true)) {
+            $errors[] = 'Failed to prepare upload directory for payment proofs.';
+        }
+    }
 
-                            $itemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
-                            foreach ($items as $it) {
-                                $itemStmt->execute([$orderId, $it['package_id'], $it['qty'], $it['price']]);
-                            }
+    if (!$errors) {
+        $movedProofTargets = [];
+        $proofTimestamp = time();
+        foreach ($proofUploadCandidates as $index => $candidate) {
+            $proofName = 'proof_u' . (int)$_SESSION['user_id'] . '_' . $proofTimestamp . '_' . ($index + 1) . '_' . mt_rand(1000, 9999) . '.' . $candidate['ext'];
+            $target = $uploadDir . '/' . $proofName;
+            if (!move_uploaded_file($candidate['tmp_name'], $target)) {
+                $errors[] = 'Failed to upload payment proof for attendee #' . ($index + 1) . '.';
+                break;
+            }
+            $movedProofTargets[] = $target;
+            $attendeeProofNames[$index] = $proofName;
+        }
 
-                            $db->commit();
-                        } catch (Throwable $e) {
-                            if ($db->inTransaction()) {
-                                $db->rollBack();
-                            }
-                            if (is_file($target)) {
-                                @unlink($target);
-                            }
-                            $errors[] = 'Failed to save your order. Please try again.';
-                        }
-
-                        if ($orderId > 0) {
-                            if ($ownerPackageId <= 0) {
-                                $ownerPackageId = $defaultPackageId;
-                            }
-
-                            $attendeeRows = [
-                                [
-                                    'name' => (string)$user['full_name'],
-                                    'gender' => $ownerGender,
-                                    'position_no' => 1,
-                                    'package_id' => $ownerPackageId > 0 ? (int)$ownerPackageId : null,
-                                ],
-                            ];
-                            foreach ($attendeeNames as $idx => $attendeeName) {
-                                $attendeeRows[] = [
-                                    'name' => (string)$attendeeName,
-                                    'gender' => (string)($attendeeGenders[$idx] ?? ''),
-                                    'position_no' => $idx + 2,
-                                    'package_id' => (int)($attendeePackageIds[$idx] ?? 0) > 0 ? (int)$attendeePackageIds[$idx] : null,
-                                ];
-                            }
-
-                            try {
-                                $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, package_id, created_at) VALUES (?, ?, ?, ?, ?, ?)');
-                                foreach ($attendeeRows as $row) {
-                                    $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], $row['package_id'], date('Y-m-d H:i:s')]);
-                                }
-                            } catch (Throwable $e) {
-                                // Fallback for older attendee schema without package_id.
-                                try {
-                                    $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
-                                    foreach ($attendeeRows as $row) {
-                                        $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], date('Y-m-d H:i:s')]);
-                                    }
-                                } catch (Throwable $e) {
-                                    // Fallback for older attendee schema with attendee_gender.
-                                    try {
-                                        $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, attendee_gender, position_no, created_at) VALUES (?, ?, ?, ?, ?)');
-                                        foreach ($attendeeRows as $row) {
-                                            $legacyGender = $row['position_no'] === 1 ? null : $row['gender'];
-                                            $attendeeStmt->execute([$orderId, $row['name'], $legacyGender, $row['position_no'], date('Y-m-d H:i:s')]);
-                                        }
-                                    } catch (Throwable $e) {
-                                        // Keep order success even when attendee table does not exist.
-                                    }
-                                }
-                            }
-
-                            unset($_SESSION['order_draft']);
-                            send_invoice_email([
-                                'id' => $orderId,
-                                'full_name' => $user['full_name'],
-                                'email' => $user['email'],
-                                'phone' => $user['phone'],
-                                'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
-                                'status' => 'paid',
-                                'total' => $total,
-                                'payment_proof' => $name,
-                                'created_at' => date('Y-m-d H:i:s'),
-                            ], $items, (string)$user['email']);
-                            notify_admins_new_paid_order($db, [
-                                'id' => $orderId,
-                                'full_name' => $user['full_name'],
-                                'email' => $user['email'],
-                                'phone' => $user['phone'],
-                                'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
-                                'status' => 'paid',
-                                'total' => $total,
-                                'payment_proof' => $name,
-                                'created_at' => date('Y-m-d H:i:s'),
-                            ], $items);
-                            redirect('/thankyou?order=' . $orderId);
-                        }
-                    }
+        if ($errors) {
+            foreach ($movedProofTargets as $uploadedPath) {
+                if (is_file($uploadedPath)) {
+                    @unlink($uploadedPath);
                 }
             }
         }
     }
+
+    if (!$errors) {
+        $orderId = 0;
+        $proofPayload = array_values(array_filter($attendeeProofNames, static fn ($path) => $path !== ''));
+        $primaryProof = $proofPayload[0] ?? null;
+
+        try {
+            $db->beginTransaction();
+            $stmt = $db->prepare('INSERT INTO orders (user_id, total, status, payment_proof, created_at) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([(int)$_SESSION['user_id'], (int)$total, 'paid', $primaryProof, date('c')]);
+            $orderId = (int)$db->lastInsertId();
+
+            $itemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
+            foreach ($items as $it) {
+                $itemStmt->execute([$orderId, $it['package_id'], $it['qty'], $it['price']]);
+            }
+
+            $db->commit();
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            foreach ($movedProofTargets as $uploadedPath) {
+                if (is_file($uploadedPath)) {
+                    @unlink($uploadedPath);
+                }
+            }
+            $errors[] = 'Failed to save your order. Please try again.';
+        }
+
+        if ($orderId > 0) {
+            if ($ownerPackageId <= 0) {
+                $ownerPackageId = $defaultPackageId;
+            }
+
+            $attendeeRows = [
+                [
+                    'name' => (string)$user['full_name'],
+                    'gender' => $ownerGender,
+                    'position_no' => 1,
+                    'package_id' => $ownerPackageId > 0 ? (int)$ownerPackageId : null,
+                    'payment_proof' => $attendeeProofNames[0] ?? null,
+                ],
+            ];
+            foreach ($attendeeNames as $idx => $attendeeName) {
+                $attendeeRows[] = [
+                    'name' => (string)$attendeeName,
+                    'gender' => (string)($attendeeGenders[$idx] ?? ''),
+                    'position_no' => $idx + 2,
+                    'package_id' => (int)($attendeePackageIds[$idx] ?? 0) > 0 ? (int)$attendeePackageIds[$idx] : null,
+                    'payment_proof' => $attendeeProofNames[$idx + 1] ?? null,
+                ];
+            }
+
+            try {
+                $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, package_id, payment_proof, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                foreach ($attendeeRows as $row) {
+                    $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], $row['package_id'], $row['payment_proof'], date('Y-m-d H:i:s')]);
+                }
+            } catch (Throwable $e) {
+                // Fallback for older attendee schema without package_id.
+                try {
+                    $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, gender, position_no, payment_proof, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+                    foreach ($attendeeRows as $row) {
+                        $attendeeStmt->execute([$orderId, $row['name'], $row['gender'], $row['position_no'], $row['payment_proof'], date('Y-m-d H:i:s')]);
+                    }
+                } catch (Throwable $e) {
+                    // Fallback for older attendee schema with attendee_gender.
+                    try {
+                        $attendeeStmt = $db->prepare('INSERT INTO order_attendees (order_id, attendee_name, attendee_gender, position_no, payment_proof, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+                        foreach ($attendeeRows as $row) {
+                            $legacyGender = $row['position_no'] === 1 ? null : $row['gender'];
+                            $attendeeStmt->execute([$orderId, $row['name'], $legacyGender, $row['position_no'], $row['payment_proof'], date('Y-m-d H:i:s')]);
+                        }
+                    } catch (Throwable $e) {
+                        // Keep order success even when attendee table does not exist.
+                    }
+                }
+            }
+
+            unset($_SESSION['order_draft']);
+            $proofPayloadForNotifications = $proofPayload;
+            send_invoice_email([
+                'id' => $orderId,
+                'full_name' => $user['full_name'],
+                'email' => $user['email'],
+                'phone' => $user['phone'],
+                'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
+                'status' => 'paid',
+                'total' => $total,
+                'payment_proof' => $primaryProof,
+                'payment_proofs' => $proofPayloadForNotifications,
+                'created_at' => date('Y-m-d H:i:s'),
+            ], $items, (string)$user['email']);
+            notify_admins_new_paid_order($db, [
+                'id' => $orderId,
+                'full_name' => $user['full_name'],
+                'email' => $user['email'],
+                'phone' => $user['phone'],
+                'instagram' => $instagramLabel !== '' ? $instagramLabel : '-',
+                'status' => 'paid',
+                'total' => $total,
+                'payment_proof' => $primaryProof,
+                'payment_proofs' => $proofPayloadForNotifications,
+                'created_at' => date('Y-m-d H:i:s'),
+            ], $items);
+            redirect('/thankyou?order=' . $orderId);
+        }
+    }
+}
+
+$attendeeProofInputs = [];
+$ownerDisplay = trim((string)$user['full_name']);
+$ownerLabel = 'Attendee #1' . ($ownerDisplay !== '' ? ' — ' . $ownerDisplay : ' (Pemilik akun)');
+$attendeeProofInputs[] = ['index' => 0, 'label' => $ownerLabel];
+for ($i = 0; $i < $additionalAttendeeCount; $i++) {
+    $displayName = trim((string)($attendeeNames[$i] ?? ''));
+    $label = 'Attendee #' . ($i + 2);
+    if ($displayName !== '') {
+        $label .= ' — ' . $displayName;
+    }
+    $attendeeProofInputs[] = ['index' => $i + 1, 'label' => $label];
 }
 ?>
 <!doctype html>
@@ -551,6 +626,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .upload-box input[type="file"]::file-selector-button:hover {
       transform: translateY(-1px);
       background: #dbe9ff;
+    }
+
+    .proof-upload-note {
+      font-size: 13px;
+      color: #d2e3ff;
+      margin-bottom: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .proof-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    }
+
+    .proof-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+      color: #eaf1ff;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .proof-field input[type="file"] {
+      width: 100%;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 8px 6px;
+    }
+
+    .proof-field-label {
+      font-weight: 600;
+      color: #f7fbff;
+    }
+
+    .proof-field-note {
+      font-size: 12px;
+      color: #a5b3cf;
     }
 
     .attendee-grid {
@@ -799,7 +918,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </button>
         </div>
 
-        <div class="section-title"><i class="bi bi-cloud-arrow-up"></i> Upload Your Payment Proof</div>
+        <div class="section-title"><i class="bi bi-cloud-arrow-up"></i> Upload Bukti Pembayaran</div>
 
         <?php if ($errors): ?>
           <div class="alert">
@@ -811,14 +930,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="post" enctype="multipart/form-data" id="orderSubmitForm">
           <div class="upload-box">
-            <input type="file" name="payment_proof" id="paymentProofInput" accept="image/*" required>
+            <?php if ($attendeeProofInputs): ?>
+              <p class="proof-upload-note"><i class="bi bi-info-circle"></i> Upload satu bukti pembayaran per peserta (JPG/PNG, maks 2MB per file).</p>
+              <div class="proof-grid">
+                <?php foreach ($attendeeProofInputs as $input): ?>
+                  <label class="proof-field" for="attendeeProofInput_<?= (int)$input['index'] ?>">
+                    <span class="proof-field-label"><?= h($input['label']) ?></span>
+                    <input
+                      type="file"
+                      id="attendeeProofInput_<?= (int)$input['index'] ?>"
+                      name="attendee_payment_proofs[]"
+                      form="orderSubmitForm"
+                      accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                      data-proof-input
+                      data-proof-label="<?= h($input['label']) ?>"
+                      required
+                    >
+                    <span class="proof-field-note">Max 2MB &middot; JPG/PNG</span>
+                  </label>
+                <?php endforeach; ?>
+              </div>
+            <?php endif; ?>
             <div class="proof-preview" id="proofPreviewWrap" aria-live="polite">
-              <div class="proof-preview-label"><i class="bi bi-image"></i> Live Preview</div>
+              <div class="proof-preview-label"><i class="bi bi-image"></i> Live Preview <span id="proofPreviewLabel">Pilih file untuk melihat preview</span></div>
               <img id="proofPreviewImage" src="" alt="Payment proof preview">
             </div>
           </div>
           <div style="margin-top:16px;">
-            <button class="btn primary" type="submit"><i class="bi bi-upload"></i> Upload Proof</button>
+            <button class="btn primary" type="submit"><i class="bi bi-upload"></i> Submit Bukti</button>
           </div>
         </form>
       </section>
@@ -886,32 +1025,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
       }
 
-      var proofInput = document.getElementById('paymentProofInput');
+      var proofInputs = Array.prototype.slice.call(document.querySelectorAll('[data-proof-input]'));
       var proofPreviewWrap = document.getElementById('proofPreviewWrap');
       var proofPreviewImage = document.getElementById('proofPreviewImage');
+      var proofPreviewLabel = document.getElementById('proofPreviewLabel');
       var packageLimits = <?= json_encode(array_map('intval', $packageTicketCounts), JSON_UNESCAPED_UNICODE) ?>;
       var packageSelectionEnabled = <?= $requiresPackageSelection ? 'true' : 'false' ?>;
 
-      if (proofInput && proofPreviewWrap && proofPreviewImage) {
-        proofInput.addEventListener('change', function () {
-          var file = proofInput.files && proofInput.files[0] ? proofInput.files[0] : null;
+      function resetProofPreview() {
+        proofPreviewImage.removeAttribute('src');
+        proofPreviewWrap.classList.remove('is-visible');
+        if (proofPreviewLabel) {
+          proofPreviewLabel.textContent = 'Pilih file untuk melihat preview';
+        }
+      }
 
-          if (!file || !file.type || file.type.indexOf('image/') !== 0) {
-            proofPreviewImage.removeAttribute('src');
-            proofPreviewWrap.classList.remove('is-visible');
-            return;
-          }
+      function showProofPreview(event, label) {
+        var result = event && event.target && event.target.result ? event.target.result : '';
+        proofPreviewImage.src = result;
+        proofPreviewWrap.classList.toggle('is-visible', !!result);
+        if (proofPreviewLabel) {
+          proofPreviewLabel.textContent = label || 'Preview';
+        }
+      }
 
-          var reader = new FileReader();
-          reader.onload = function (event) {
-            proofPreviewImage.src = event.target && event.target.result ? event.target.result : '';
-            proofPreviewWrap.classList.toggle('is-visible', !!proofPreviewImage.src);
-          };
-          reader.onerror = function () {
-            proofPreviewImage.removeAttribute('src');
-            proofPreviewWrap.classList.remove('is-visible');
-          };
-          reader.readAsDataURL(file);
+      if (proofInputs.length && proofPreviewWrap && proofPreviewImage) {
+        proofInputs.forEach(function (input) {
+          input.addEventListener('change', function () {
+            var file = input.files && input.files[0] ? input.files[0] : null;
+            var labelText = input.getAttribute('data-proof-label') || '';
+            if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+              resetProofPreview();
+              return;
+            }
+            var reader = new FileReader();
+            reader.onload = function (event) {
+              showProofPreview(event, labelText);
+            };
+            reader.onerror = function () {
+              resetProofPreview();
+            };
+            reader.readAsDataURL(file);
+          });
         });
       }
 

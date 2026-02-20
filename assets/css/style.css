@@ -1730,6 +1730,15 @@ table.admin-table tbody tr:hover {
   display: flex;
 }
 
+#proofModal,
+#confirmModal {
+  z-index: 1300;
+}
+
+#orderDetailModal {
+  z-index: 1150;
+}
+
 .proof-card {
   background: var(--surface);
   border-radius: var(--radius-lg);

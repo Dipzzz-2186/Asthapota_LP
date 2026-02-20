@@ -145,6 +145,65 @@ function send_admin_email_link_otp(string $email, string $otp): bool {
     return smtp_send($email, $subject, $body);
 }
 
+function normalize_payment_proof_filename(string $value): string {
+    $filename = trim((string)$value);
+    if ($filename === '') {
+        return '';
+    }
+    $filename = str_replace('\\', '/', $filename);
+    $filename = basename($filename);
+    if ($filename === '.' || $filename === '..') {
+        return '';
+    }
+    return $filename;
+}
+
+function get_order_payment_proof_paths(array $order): array {
+    $paths = [];
+    $addPath = static function ($input) use (&$paths) {
+        $safe = normalize_payment_proof_filename($input);
+        if ($safe === '' || in_array($safe, $paths, true)) {
+            return;
+        }
+        $paths[] = $safe;
+    };
+
+    if (!empty($order['payment_proofs']) && is_array($order['payment_proofs'])) {
+        foreach ($order['payment_proofs'] as $item) {
+            $addPath($item);
+        }
+    }
+
+    $rawField = trim((string)($order['payment_proof'] ?? ''));
+    if ($rawField !== '') {
+        $decoded = json_decode($rawField, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            foreach ($decoded as $item) {
+                $addPath($item);
+            }
+        } else {
+            $addPath($rawField);
+        }
+    }
+
+    return $paths;
+}
+
+function render_payment_proof_buttons(array $proofPaths): string {
+    if (!$proofPaths) {
+        return '<span style="color:#5a6b86;">Tidak ada</span>';
+    }
+    $total = count($proofPaths);
+    $buttons = '';
+    foreach ($proofPaths as $index => $fileName) {
+        $label = $total === 1 ? 'Lihat Bukti Pembayaran' : 'Bukti ' . ($index + 1) . ' dari ' . $total;
+        $proofUrl = app_base_url() . '/uploads/' . rawurlencode($fileName);
+        $safeProofUrl = htmlspecialchars($proofUrl, ENT_QUOTES, 'UTF-8');
+        $buttons .= '<div style="margin-top:6px;"><a href="' . $safeProofUrl . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1658ad;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;padding:10px 14px;border-radius:10px;">' . $label . '</a></div>';
+    }
+    return $buttons;
+}
+
 function send_invoice_email(array $order, array $items, string $toEmail): bool {
     $subject = 'Asthapora - Invoice Order #' . (int)$order['id'];
 
@@ -160,25 +219,7 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
         </tr>';
     }
 
-    $paymentProofButton = '';
-    $paymentProofRaw = trim((string)($order['payment_proof'] ?? ''));
-    if ($paymentProofRaw !== '') {
-        $paymentProofFile = basename(str_replace('\\', '/', $paymentProofRaw));
-        if ($paymentProofFile !== '' && $paymentProofFile !== '.' && $paymentProofFile !== '..') {
-            $proofUrl = app_base_url() . '/uploads/' . rawurlencode($paymentProofFile);
-            $safeProofUrl = htmlspecialchars($proofUrl, ENT_QUOTES, 'UTF-8');
-            $paymentProofButton = '
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:12px;">
-                      <tr>
-                        <td align="left">
-                          <a href="' . $safeProofUrl . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1658ad;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;padding:10px 14px;border-radius:10px;">
-                            Lihat Bukti Pembayaran
-                          </a>
-                        </td>
-                      </tr>
-                    </table>';
-        }
-    }
+    $paymentProofButton = render_payment_proof_buttons(get_order_payment_proof_paths($order));
 
     $body = '
       <div style="margin:0;padding:0;background:#eef3ff;font-family:Arial,Helvetica,sans-serif;">
@@ -250,7 +291,7 @@ function send_invoice_email(array $order, array $items, string $toEmail): bool {
                         </td>
                       </tr>
                     </table>
-                    ' . $paymentProofButton . '
+                    <div style="margin-top:16px;">' . $paymentProofButton . '</div>
                   </td>
                 </tr>
               </table>
@@ -469,6 +510,33 @@ function ensure_order_attendee_package_schema(PDO $db): void {
     }
 }
 
+function ensure_order_attendee_payment_schema(PDO $db): void {
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $currentDb = (string)$db->query('SELECT DATABASE()')->fetchColumn();
+        if ($currentDb === '') {
+            return;
+        }
+
+        $checkStmt = $db->prepare(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_attendees' AND COLUMN_NAME = 'payment_proof'"
+        );
+        $checkStmt->execute([$currentDb]);
+        $exists = (int)$checkStmt->fetchColumn() > 0;
+        if (!$exists) {
+            $db->exec("ALTER TABLE order_attendees ADD COLUMN payment_proof VARCHAR(255) NULL AFTER package_id");
+        }
+    } catch (Throwable $e) {
+        // Keep app functional even if schema migration fails.
+    }
+}
+
 function ensure_admin_notification_schema(PDO $db): void {
     static $checked = false;
     if ($checked) {
@@ -514,16 +582,7 @@ function send_admin_order_paid_email(array $order, array $items, string $toEmail
           </tr>';
     }
 
-    $paymentProofHtml = '<span style="color:#5a6b86;">Tidak ada</span>';
-    $paymentProofRaw = trim((string)($order['payment_proof'] ?? ''));
-    if ($paymentProofRaw !== '') {
-        $paymentProofFile = basename(str_replace('\\', '/', $paymentProofRaw));
-        if ($paymentProofFile !== '' && $paymentProofFile !== '.' && $paymentProofFile !== '..') {
-            $proofUrl = app_base_url() . '/uploads/' . rawurlencode($paymentProofFile);
-            $safeProofUrl = htmlspecialchars($proofUrl, ENT_QUOTES, 'UTF-8');
-            $paymentProofHtml = '<a href="' . $safeProofUrl . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1658ad;color:#fff;text-decoration:none;font-weight:700;font-size:12px;padding:9px 12px;border-radius:9px;">Lihat Bukti Pembayaran</a>';
-        }
-    }
+    $paymentProofHtml = render_payment_proof_buttons(get_order_payment_proof_paths($order));
 
     $body = '
       <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
