@@ -185,7 +185,7 @@ body.admin-page::after { display: none !important; }
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: url('/assets/img/wallpapeh3.jpg') center/cover fixed;
+  background: url('/assets/img/wallpapeh4.jpg') center/cover fixed;
   background-color: #07091a;
 }
 
@@ -209,7 +209,7 @@ body.admin-page::after { display: none !important; }
 #clockDate {
   font-size: 13px; letter-spacing: 0.3em; text-transform: uppercase;
   color: rgba(255,255,255,0.75); font-weight: 700;
-  text-shadow: 0 1px 8px rgba(0,0,0,0.6);
+  text-shadow: 0 1px 8px rgba(0,0,0,0 .6);
 }
 
 .btn-back {
@@ -473,7 +473,7 @@ body.admin-page::after { display: none !important; }
   word-wrap:break-word; hyphens:auto;
   animation:welcomeNameIn 0.95s cubic-bezier(.14,.82,.2,1) both;
 }
-.welcome-package { font-size:clamp(16px,2.4vw,20px); font-weight:600; letter-spacing:0.35em; text-transform:uppercase; color:rgba(56,189,248,0.95); margin-top:10px; text-shadow:0 2px 12px rgba(0,0,0,0.6); animation:welcomePackageIn 1.05s ease both, welcomePackageGlow 2.6s ease-in-out infinite 1s; }
+.welcome-package { font-size:clamp(13px,1.8vw,16px); font-weight:600; letter-spacing:0.35em; text-transform:uppercase; color:rgba(56,189,248,0.95); margin-top:12px; text-shadow:0 2px 12px rgba(0,0,0,0.6); animation:welcomePackageIn 1.05s ease both, welcomePackageGlow 2.6s ease-in-out infinite 1s; }
 .welcome-badge,.welcome-time,.welcome-tags { display:none!important; }
 @keyframes welcomeAura{
   0%,100%{ transform:scale(1); opacity:0.88; }
@@ -781,7 +781,7 @@ body.ad-overlay-active * {
   #welcome-screen { padding: 12px; top: 62px; }
   .welcome-panel { width: min(94vw, 760px); border-radius: 22px; transform: none; }
   .welcome-greeting { margin-bottom: 10px; }
-  .welcome-name { font-size: clamp(42px, 15vw, 96px); line-height: 0.98; }
+.welcome-name { font-size: clamp(32px, 10vw, 58px); line-height: 1.05; }
   .welcome-package { letter-spacing: 0.2em; }
 }
 
@@ -1069,6 +1069,10 @@ render_header([
     var att=Array.isArray(data.attendees)?data.attendees:[];
     var total=Number(data.total_tickets||att.length||0),checked=Number(data.checked_in_count||0),remain=Number(data.remaining_count||0);
     var g=gN(data.order_gender);
+    if(att.length===1 && Number(att[0].id||0)>0 && !att[0].checked_in_at){
+      setTimeout(function(){ doCheckin(token,Number(att[0].id||0),att[0].name||''); }, 0);
+      return;
+    }
     pOrder.innerHTML='<div class="picker-avatar '+g+'"><img src="'+gA(g)+'" alt=""></div>'+
       '<div class="picker-order-info"><div class="picker-order-name">'+esc(data.order_name||'-')+'</div>'+
       '<div class="picker-order-meta"><span class="tag">#'+esc(String(data.order_id||'-'))+'</span>'+
