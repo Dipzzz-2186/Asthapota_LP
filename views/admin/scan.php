@@ -623,7 +623,6 @@ body.admin-page::after { display: none !important; }
 .widget-head-left{display:flex;align-items:center;gap:6px;}
 .widget-head-icon{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#38bdf8,#818cf8);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex-shrink:0;}
 .widget-head-title{font-size:11px;font-weight:700;color:#f1f5f9;}
-.widget-toggle{font-size:11px;color:rgba(241,245,249,0.35);transition:0.2s;}
 .widget-body{padding:8px;}
 .mini-qr-box{border-radius:8px;overflow:hidden;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.07);position:relative;width:100%;aspect-ratio:1;max-height:150px;}
 #qr-reader{width:100%;height:100%;}
@@ -653,7 +652,6 @@ body.admin-page::after { display: none !important; }
 .widget-submit{width:28px;height:28px;border-radius:7px;padding:0;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;border:1px solid rgba(56,189,248,0.22);background:rgba(56,189,248,0.1);color:#38bdf8;display:flex;align-items:center;justify-content:center;transition:0.15s;}
 .widget-submit:hover{background:rgba(56,189,248,0.2);}
 #scanner-widget.collapsed .widget-body{display:none;}
-#scanner-widget.collapsed .widget-toggle{transform:rotate(180deg);}
 
 /* ─── Logo Strip ─────────────────────────────── */
 .logo-strip {
@@ -974,7 +972,6 @@ render_header([
       <button type="button" class="scanner-close-btn" id="scannerCloseBtn" aria-label="Tutup scanner">
         <i class="bi bi-x"></i>
       </button>
-      <i class="bi bi-chevron-up widget-toggle"></i>
     </div>
     <div class="widget-body">
       <div class="mini-qr-box">
