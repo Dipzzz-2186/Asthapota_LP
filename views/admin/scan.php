@@ -386,39 +386,23 @@ body.admin-page::after { display: none !important; }
   text-align:center;
   position:fixed;
   top:70px; left:0; right:0; bottom:88px;
-  padding: clamp(12px,2vh,24px) clamp(16px,4vw,56px);
+  padding: clamp(6px,2vh,14px) clamp(10px,4vw,28px);
   animation: welcomeIn 0.6s cubic-bezier(0.22,1,0.36,1);
   overflow:hidden;
   isolation:isolate;
   z-index:10;
   background: transparent;
 }
-#welcome-screen::before {
-  content:'';
-  position:absolute;
-  inset:0;
-  background: linear-gradient(180deg, rgba(1,5,16,0.35) 0%, rgba(1,5,16,0.25) 60%, rgba(1,5,16,0.1) 100%);
-  z-index:-3;
-  opacity:0.65;
-}
+#welcome-screen::before,
 #welcome-screen::after {
-  content:'';
-  position:absolute;
-  inset:-5% -8%;
-  background:
-    radial-gradient(circle at center, rgba(255,255,255,0.15), transparent 70%);
-  filter: blur(20px);
-  opacity: 0.75;
-  z-index:-2;
-  animation: welcomeAura 6.8s ease-in-out infinite;
+  display:none;
 }
 @keyframes welcomeIn { from{opacity:0;transform:scale(0.96) translateY(30px);} to{opacity:1;transform:scale(1) translateY(0);} }
 .welcome-panel{
-  width:min(92vw, 980px);
-  max-height: 100%;
-  overflow-y: auto;
+  width:auto;
+  max-width: min(92vw, 760px);
   transform: none;
-  border-radius: 28px;
+  border-radius: 0;
   border: none;
   background: transparent;
   box-shadow: none;
@@ -428,13 +412,10 @@ body.admin-page::after { display: none !important; }
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  padding: clamp(24px, 5vh, 48px) clamp(20px, 5vw, 60px);
+  padding:0;
   position:relative;
-  overflow:hidden;
+  overflow:visible;
   animation:none;
-}
-.welcome-panel::before{
-  display:none;
 }
 .welcome-panel > *{ position:relative; z-index:1; }
 .welcome-avatar { width:clamp(140px,18vw,220px); height:clamp(140px,18vw,220px); margin-bottom:clamp(24px,3vw,40px); position:relative; animation:floaty 2.8s ease-in-out infinite; flex-shrink:0; }
