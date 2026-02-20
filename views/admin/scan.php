@@ -432,11 +432,17 @@ body.admin-page::after { display: none !important; }
 .welcome-avatar img { width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 8px 40px rgba(0,0,0,0.5)); }
 .welcome-greeting { font-size:clamp(22px,3vw,48px); font-weight:600; color:rgba(255,255,255,0.98); letter-spacing:0.08em; margin-bottom:12px; line-height:1.2; text-shadow:0 2px 12px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.55); animation:welcomeTitleIn 0.75s cubic-bezier(.16,.8,.2,1) both; }
 .welcome-name {
-  font-size:clamp(48px,10vw,140px); font-weight:900; color:#fff;
-  letter-spacing:-0.04em; line-height:0.95; margin-bottom:0; max-width:1200px;
-  text-shadow:0 2px 4px rgba(0,0,0,1),0 8px 30px rgba(0,0,0,0.9),0 20px 60px rgba(0,0,0,0.5);
-  word-wrap:break-word; hyphens:auto;
-  animation:welcomeNameIn 0.95s cubic-bezier(.14,.82,.2,1) both;
+  font-size: clamp(30px, min(6vw, 8vh), 82px);
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-bottom: 2px;
+  max-width: min(90vw, 720px);
+  text-shadow: 0 2px 4px rgba(0,0,0,1), 0 8px 30px rgba(0,0,0,0.9), 0 20px 60px rgba(0,0,0,0.5);
+  word-wrap: break-word;
+  hyphens: auto;
+  animation: welcomeNameIn 0.95s cubic-bezier(.14,.82,.2,1) both;
 }
 .welcome-package { font-size:clamp(13px,1.6vw,15px); font-weight:700; letter-spacing:0.3em; text-transform:uppercase; color:rgba(255,255,255,0.9); margin-top:10px; text-shadow:0 2px 12px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.55); animation:welcomePackageIn 1.05s ease both, welcomePackageGlow 2.6s ease-in-out infinite 1s; }
 .welcome-badge,.welcome-time,.welcome-tags { display:none!important; }
