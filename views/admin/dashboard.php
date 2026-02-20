@@ -417,8 +417,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if (!$row) {
                         $flash['error'] = 'Attendee tidak ditemukan pada order ini.';
-                    } elseif ((string)($row['status'] ?? '') !== 'accepted') {
-                        $flash['error'] = 'Package attendee hanya bisa diubah untuk order dengan status accepted.';
+                    } elseif ((string)($row['status'] ?? '') === 'rejected') {
+                        $flash['error'] = 'Package attendee tidak bisa diubah untuk order dengan status rejected.';
                     } elseif (!empty($row['checked_in_at'])) {
                         $flash['error'] = 'Package attendee yang sudah check-in tidak bisa diubah.';
                     } else {
@@ -426,8 +426,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if ($oldPackageId === $newPackageId) {
                             $flash['success'] = 'Package attendee sudah sesuai, tidak ada perubahan.';
                         } else {
-                            $newQrToken = strtolower(bin2hex(random_bytes(24)));
-                            $now = date('Y-m-d H:i:s');
                             $db->beginTransaction();
 
                             $updAttendee = $db->prepare('UPDATE order_attendees SET package_id = ? WHERE id = ? AND order_id = ?');
@@ -463,19 +461,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $insNewItemStmt->execute([$orderId, $newPackageId, 1, max(0, (int)($newPackageRow['price'] ?? 0))]);
                             }
 
-                            $updOrder = $db->prepare('UPDATE orders SET qr_token = ?, qr_sent_at = ?, checked_in_at = NULL WHERE id = ?');
-                            $updOrder->execute([$newQrToken, $now, $orderId]);
-                            try {
-                                $db->prepare('UPDATE order_attendees SET checked_in_at = NULL WHERE order_id = ?')->execute([$orderId]);
-                            } catch (Throwable $e) {
-                            }
                             $db->commit();
 
                             $sent = send_attendee_package_changed_email(
                                 [
                                     'id' => (int)$row['id'],
                                     'full_name' => (string)($row['full_name'] ?? ''),
-                                    'qr_token' => $newQrToken,
+                                    'qr_token' => (string)($row['qr_token'] ?? ''),
                                 ],
                                 (string)($row['email'] ?? ''),
                                 [
@@ -485,8 +477,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ]
                             );
                             $flash['success'] = $sent
-                                ? 'Package attendee berhasil diubah. QR baru sudah dikirim ke email user.'
-                                : 'Package attendee berhasil diubah, tapi email QR baru gagal dikirim.';
+                                ? 'Package attendee berhasil diubah. Notifikasi email sudah dikirim ke user.'
+                                : 'Package attendee berhasil diubah, tapi email notifikasi gagal dikirim.';
                         }
                     }
                 }
@@ -3629,7 +3621,7 @@ render_header([
             courtWrap.appendChild(courtBtn);
             li.appendChild(courtWrap);
           }
-          if (attendeeId > 0 && String(payload.status || '') === 'accepted' && !checkedInAt) {
+          if (attendeeId > 0 && String(payload.status || '').toLowerCase() !== 'rejected' && !checkedInAt) {
             var wrap = document.createElement('div');
             wrap.className = 'detail-package-wrap';
             var select = document.createElement('select');

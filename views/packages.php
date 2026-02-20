@@ -12,6 +12,11 @@ if (!$can_order) {
 
 $db = get_db();
 $packages = $db->query('SELECT * FROM packages ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
+$allowedPackageNames = ['a', 'b', 'c', 'package a', 'package b', 'package c'];
+$packages = array_values(array_filter($packages, function ($pkg) use ($allowedPackageNames) {
+    $name = strtolower(trim((string)($pkg['name'] ?? '')));
+    return in_array($name, $allowedPackageNames, true);
+}));
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
