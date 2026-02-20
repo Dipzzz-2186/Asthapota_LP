@@ -3545,6 +3545,14 @@ render_header([
       function openDetail(rawJson) {
         var payload = {}; try { payload = JSON.parse(rawJson || '{}'); } catch (err) {}
         var orderId = Number(payload.order_id || 0);
+        var items = Array.isArray(payload.items) ? payload.items : [];
+        var computedTotal = items.reduce(function(sum, it) {
+          var qty = Number(it && it.qty ? it.qty : 0);
+          var price = Number(it && it.price ? it.price : 0);
+          var subtotal = Number(it && it.subtotal ? it.subtotal : (qty * price));
+          return sum + (isNaN(subtotal) ? 0 : subtotal);
+        }, 0);
+        var displayTotal = computedTotal > 0 ? computedTotal : Number(payload.total || 0);
         title.innerHTML = '<i class="bi bi-receipt"></i> Order Detail #' + (orderId || '-');
         var ticketCount = Number(payload.ticket_count || 0);
         var attendeesArr = Array.isArray(payload.attendees) ? payload.attendees : [];
@@ -3554,10 +3562,9 @@ render_header([
           '<div class="detail-chip"><span class="chip-label">Status</span><span class="chip-value">' + escapeHtml(statusLabel(payload.status || '')) + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Tickets</span><span class="chip-value">' + ticketCount + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Hadir</span><span class="chip-value">' + arrivedCount + '/' + ticketCount + '</span></div>' +
-          '<div class="detail-chip"><span class="chip-label">Total</span><span class="chip-value">' + asCurrency(payload.total || 0) + '</span></div>' +
+          '<div class="detail-chip"><span class="chip-label">Total</span><span class="chip-value">' + asCurrency(displayTotal) + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Created</span><span class="chip-value">' + escapeHtml(formatDate(payload.created_at)) + '</span></div>';
         clearList(detailItems);
-        var items = Array.isArray(payload.items) ? payload.items : [];
         items.forEach(function(it) {
           var li = document.createElement('li');
           var qty = Number(it && it.qty ? it.qty : 0), price = Number(it && it.price ? it.price : 0);
