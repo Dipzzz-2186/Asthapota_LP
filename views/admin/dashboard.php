@@ -461,6 +461,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $insNewItemStmt->execute([$orderId, $newPackageId, 1, max(0, (int)($newPackageRow['price'] ?? 0))]);
                             }
 
+                            $totalStmt = $db->prepare('SELECT COALESCE(SUM(qty * price), 0) FROM order_items WHERE order_id = ?');
+                            $totalStmt->execute([$orderId]);
+                            $recalculatedTotal = (int)($totalStmt->fetchColumn() ?: 0);
+                            $updTotalStmt = $db->prepare('UPDATE orders SET total = ? WHERE id = ?');
+                            $updTotalStmt->execute([$recalculatedTotal, $orderId]);
+
                             $db->commit();
 
                             $sent = send_attendee_package_changed_email(
