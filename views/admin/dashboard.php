@@ -382,6 +382,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $orderId = (int)($_POST['order_id'] ?? 0);
         $attendeeId = (int)($_POST['attendee_id'] ?? 0);
         $newPackageId = (int)($_POST['new_package_id'] ?? 0);
+        $updatedPackageName = '';
+        $updatedOrderTotal = null;
 
         if ($orderId <= 0 || $attendeeId <= 0 || $newPackageId <= 0) {
             $flash['error'] = 'Data perubahan package attendee tidak valid.';
@@ -425,6 +427,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $oldPackageId = (int)($row['old_package_id'] ?? 0);
                         if ($oldPackageId === $newPackageId) {
                             $flash['success'] = 'Package attendee sudah sesuai, tidak ada perubahan.';
+                            $updatedPackageName = (string)($row['old_package_name'] ?? '');
                         } else {
                             $db->beginTransaction();
 
@@ -466,6 +469,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $recalculatedTotal = (int)($totalStmt->fetchColumn() ?: 0);
                             $updTotalStmt = $db->prepare('UPDATE orders SET total = ? WHERE id = ?');
                             $updTotalStmt->execute([$recalculatedTotal, $orderId]);
+                            $updatedPackageName = (string)($newPackageRow['name'] ?? '');
+                            $updatedOrderTotal = $recalculatedTotal;
 
                             $db->commit();
 
@@ -481,6 +486,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $flash['error'] = 'Gagal mengubah package attendee.';
                 }
             }
+        }
+
+        if ($isAjaxRequest) {
+            header('Content-Type: application/json; charset=UTF-8');
+            echo json_encode([
+                'ok' => $flash['error'] === '',
+                'message' => $flash['error'] !== '' ? $flash['error'] : $flash['success'],
+                'order_id' => $orderId > 0 ? $orderId : null,
+                'attendee_id' => $attendeeId > 0 ? $attendeeId : null,
+                'package_id' => $newPackageId > 0 ? $newPackageId : null,
+                'package_name' => $updatedPackageName,
+                'order_total' => $updatedOrderTotal,
+            ]);
+            exit;
         }
     } else {
         $orderId = (int)($_POST['order_id'] ?? 0);
@@ -2036,6 +2055,39 @@ $extraHead = <<<'HTML'
   .order-detail-body { padding: 16px 18px 20px; max-height: calc(90vh - 70px); overflow-y: auto; }
 
   .detail-head { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--stroke); }
+  .screen-notice {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 2200;
+    min-width: 260px;
+    max-width: min(460px, calc(100vw - 24px));
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    box-shadow: 0 12px 30px rgba(9, 20, 39, 0.24);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.45;
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .screen-notice.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .screen-notice.is-success {
+    background: #ecf9f0;
+    border-color: #b7e8c6;
+    color: #1d7a3c;
+  }
+  .screen-notice.is-error {
+    background: #fff1f1;
+    border-color: #f2c5c5;
+    color: #b33434;
+  }
   .detail-chip {
     display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px;
     border-radius: 999px; border: 1.5px solid var(--stroke); background: var(--surface);
@@ -2766,6 +2818,8 @@ render_header([
     <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
   </form>
 
+  <div class="screen-notice" id="screenNotice" role="status" aria-live="polite"></div>
+
   <form method="post" action="/admin/dashboard" id="attendeePackageForm" style="display:none;">
     <input type="hidden" name="dashboard_action" value="change_attendee_package">
     <input type="hidden" name="order_id" id="attendeePackageOrderId" value="">
@@ -3487,6 +3541,7 @@ render_header([
       if (!modal) return;
       var title = document.getElementById('orderDetailTitle');
       var detailHead = document.getElementById('orderDetailHead');
+      var screenNotice = document.getElementById('screenNotice');
       var detailItems = document.getElementById('orderDetailItems');
       var detailItemsEmpty = document.getElementById('orderDetailItemsEmpty');
       var detailAttendees = document.getElementById('orderDetailAttendees');
@@ -3511,13 +3566,47 @@ render_header([
       function statusLabel(s) { return s === 'paid' ? 'Paid' : s === 'accepted' ? 'Accepted' : s === 'rejected' ? 'Rejected' : (s || '-'); }
       function courtLabel(courtNo) { return Number(courtNo) > 0 ? ('Court ' + Number(courtNo)) : ''; }
       function toCourtNo(raw) { var n = Number(raw || 0); return n >= 1 && n <= 6 ? n : 0; }
+      var detailNoticeTimer = null;
+      function showDetailNotice(message, type) {
+        if (!screenNotice) {
+          if (message) alert(String(message));
+          return;
+        }
+        if (detailNoticeTimer) { clearTimeout(detailNoticeTimer); detailNoticeTimer = null; }
+        var isError = type === 'error';
+        var text = String(message || '');
+        screenNotice.classList.remove('show', 'is-success', 'is-error');
+        screenNotice.textContent = text ? ((isError ? 'Gagal: ' : 'Berhasil: ') + text) : '';
+        if (!text) {
+          return;
+        }
+        screenNotice.classList.add(isError ? 'is-error' : 'is-success');
+        screenNotice.classList.add('show');
+        detailNoticeTimer = setTimeout(function() {
+          screenNotice.classList.remove('show', 'is-success', 'is-error');
+          screenNotice.textContent = '';
+          detailNoticeTimer = null;
+        }, 4500);
+      }
       function submitPackageChange(orderId, attendeeId, packageId) {
-        if (!packageForm || !packageFormOrderId || !packageFormAttendeeId || !packageFormNewPackageId) return;
-        packageFormOrderId.value = String(orderId || '');
-        packageFormAttendeeId.value = String(attendeeId || '');
-        packageFormNewPackageId.value = String(packageId || '');
-        if (!packageFormOrderId.value || !packageFormAttendeeId.value || !packageFormNewPackageId.value) return;
-        packageForm.submit();
+        var body = new URLSearchParams();
+        body.append('dashboard_action', 'change_attendee_package');
+        body.append('order_id', String(Number(orderId || 0)));
+        body.append('attendee_id', String(Number(attendeeId || 0)));
+        body.append('new_package_id', String(Number(packageId || 0)));
+        return fetch('/admin/dashboard', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: body.toString()
+        }).then(function(res) {
+          return res.json().catch(function() {
+            return { ok: false, message: 'Response server tidak valid.' };
+          });
+        });
       }
       function saveCourt(orderId, attendeeId, courtNo) {
         var body = new URLSearchParams();
@@ -3568,9 +3657,29 @@ render_header([
           btn.setAttribute('data-court-missing', String(Math.max(0, latestMissingCount)));
         });
       }
+      function syncPayloadPackageChange(orderId, attendeeId, packageId, packageName, orderTotal) {
+        document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
+          var raw = btn.getAttribute('data-order-detail') || '{}';
+          var payload = {};
+          try { payload = JSON.parse(raw); } catch (err) { payload = {}; }
+          if (Number(payload.order_id || 0) !== Number(orderId || 0)) return;
+          var attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
+          attendees.forEach(function(at) {
+            if (Number(at && at.attendee_id ? at.attendee_id : 0) === Number(attendeeId || 0)) {
+              at.package_id = Number(packageId || 0);
+              at.package_name = String(packageName || at.package_name || '');
+            }
+          });
+          if (orderTotal !== null && orderTotal !== undefined && orderTotal !== '') {
+            payload.total = Number(orderTotal || 0);
+          }
+          btn.setAttribute('data-order-detail', JSON.stringify(payload));
+        });
+      }
 
       function openDetail(rawJson) {
         var payload = {}; try { payload = JSON.parse(rawJson || '{}'); } catch (err) {}
+        showDetailNotice('', 'success');
         var orderId = Number(payload.order_id || 0);
         var items = Array.isArray(payload.items) ? payload.items : [];
         var computedTotal = items.reduce(function(sum, it) {
@@ -3614,7 +3723,7 @@ render_header([
           var arrivedColor = checkedInAt ? '#1f7a45' : '#b44';
           var courtBadge = court ? ' <span class="attendee-court-badge" style="color:#4f46e5;font-weight:700;font-size:11.5px;">[' + escapeHtml(court) + ']</span>' : '';
           li.innerHTML = '<div class="detail-attendee-main">' + escapeHtml((pos > 0 ? '#' + pos + ' — ' : '') + name)
-            + (pkg ? ' <span style="color:#0f5ea8;font-weight:700;font-size:11.5px;">[' + escapeHtml(pkg) + ']</span>' : '')
+            + (pkg ? ' <span class="attendee-package-badge" style="color:#0f5ea8;font-weight:700;font-size:11.5px;">[' + escapeHtml(pkg) + ']</span>' : '')
             + courtBadge
             + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>'
             + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '')
@@ -3667,10 +3776,55 @@ render_header([
             applyBtn.type = 'button';
             applyBtn.className = 'detail-package-submit';
             applyBtn.textContent = 'Pilih Package';
+            var currentPackageId = packageId;
             applyBtn.addEventListener('click', function() {
               var chosenId = Number(select.value || 0);
-              if (chosenId <= 0 || chosenId === packageId) return;
-              submitPackageChange(orderId, attendeeId, chosenId);
+              if (chosenId <= 0 || chosenId === currentPackageId) return;
+              applyBtn.disabled = true;
+              select.disabled = true;
+              var originalLabel = applyBtn.textContent;
+              applyBtn.textContent = 'Menyimpan...';
+              submitPackageChange(orderId, attendeeId, chosenId)
+                .then(function(resp) {
+                  if (!resp || !resp.ok) {
+                    throw new Error(resp && resp.message ? String(resp.message) : 'Gagal mengubah package attendee.');
+                  }
+                  currentPackageId = chosenId;
+                  var selectedOption = packageOptions.find(function(option) {
+                    return Number(option && option.id ? option.id : 0) === chosenId;
+                  });
+                  var selectedPackageName = selectedOption ? String(selectedOption.name || '-') : String(resp.package_name || '-');
+                  var pkgBadge = li.querySelector('.attendee-package-badge');
+                  if (!pkgBadge) {
+                    pkgBadge = document.createElement('span');
+                    pkgBadge.className = 'attendee-package-badge';
+                    pkgBadge.style.color = '#0f5ea8';
+                    pkgBadge.style.fontWeight = '700';
+                    pkgBadge.style.fontSize = '11.5px';
+                    var mainWrap = li.querySelector('.detail-attendee-main');
+                    if (mainWrap) mainWrap.appendChild(document.createTextNode(' '));
+                    if (mainWrap) mainWrap.appendChild(pkgBadge);
+                  }
+                  pkgBadge.textContent = '[' + selectedPackageName + ']';
+                  Array.prototype.forEach.call(select.options, function(opt) {
+                    var oid = Number(opt.value || 0);
+                    var optRef = packageOptions.find(function(option) { return Number(option && option.id ? option.id : 0) === oid; });
+                    var baseName = optRef ? String(optRef.name || '-') : String(opt.textContent || '').replace(/\s*\(saat ini\)\s*$/i, '');
+                    opt.textContent = baseName + (oid === currentPackageId ? ' (saat ini)' : '');
+                  });
+                  syncPayloadPackageChange(orderId, attendeeId, currentPackageId, selectedPackageName, resp.order_total);
+                  showDetailNotice(resp.message || 'Package attendee berhasil diubah.', 'success');
+                  applyBtn.textContent = 'Tersimpan';
+                  setTimeout(function() { applyBtn.textContent = originalLabel; }, 900);
+                })
+                .catch(function(err) {
+                  showDetailNotice(err && err.message ? err.message : 'Gagal mengubah package attendee.', 'error');
+                  applyBtn.textContent = originalLabel;
+                })
+                .finally(function() {
+                  applyBtn.disabled = false;
+                  select.disabled = false;
+                });
             });
             wrap.appendChild(select);
             wrap.appendChild(applyBtn);
