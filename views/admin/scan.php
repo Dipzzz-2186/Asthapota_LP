@@ -1078,7 +1078,7 @@ render_header([
   var stageEl = document.getElementById('stage');
   var screens = [idle,picker,welcome];
   var scanner=null,scanning=false,busy=false,hwBuf='',hwTs=0;
-  var welcomeHoldMs = 30 * 1000;
+  var welcomeHoldMs = 8 * 1000;
   var DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   var MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
@@ -1265,7 +1265,7 @@ render_header([
     if(wCourt){var courtText=cLabel(data.court_no);if(courtText){wCourt.textContent=courtText;wCourt.style.display='block';}else{wCourt.textContent='';wCourt.style.display='none';}}
     show(welcome);
     clearTimeout(window._wt);
-    var holdMs = Math.max(30000, Number(welcomeHoldMs) || 0);
+    var holdMs = Math.max(8000, Number(welcomeHoldMs) || 0);
     window._wt=setTimeout(function(){show(idle);},holdMs);
   }
 

@@ -2002,6 +2002,18 @@ $extraHead = <<<'HTML'
   .sponsor-modal-close:hover { background: #eef4ff; border-color: #bfd2ff; color: var(--primary); }
 
   .sponsor-form { padding: 18px; display: grid; gap: 14px; overflow-y: auto; }
+  .warn-modal-body {
+    padding: 18px;
+    display: grid;
+    gap: 14px;
+  }
+  .warn-modal-message {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text);
+    font-weight: 600;
+  }
   .sponsor-field { display: grid; gap: 7px; }
   .sponsor-field label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .sponsor-field input[type="text"], .sponsor-field input[type="url"], .sponsor-field input[type="password"], .sponsor-field input[type="file"] {
@@ -2721,6 +2733,21 @@ render_header([
             <ul class="detail-list" id="orderDetailAttendees"></ul>
             <div class="detail-empty" id="orderDetailAttendeesEmpty">No attendee data available.</div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sponsor-modal" id="acceptWarnModal" aria-hidden="true">
+    <div class="sponsor-modal-card" role="dialog" aria-modal="true" aria-labelledby="acceptWarnTitle">
+      <div class="sponsor-modal-head">
+        <h2 class="sponsor-modal-title" id="acceptWarnTitle"><i class="bi bi-exclamation-triangle-fill"></i> Tidak Bisa Accept</h2>
+        <button class="sponsor-modal-close" type="button" id="acceptWarnClose" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <div class="warn-modal-body">
+        <p class="warn-modal-message" id="acceptWarnMessage">Masih ada attendee yang belum pilih court.</p>
+        <div class="sponsor-form-actions">
+          <button class="btn primary" type="button" id="acceptWarnOk"><i class="bi bi-check2"></i> OK</button>
         </div>
       </div>
     </div>
@@ -3839,6 +3866,10 @@ render_header([
     // ── Confirm Modal ──────────────────────────────────────────
     (function() {
       var modal = document.getElementById('confirmModal');
+      var warnModal = document.getElementById('acceptWarnModal');
+      var warnMessage = document.getElementById('acceptWarnMessage');
+      var warnCloseBtn = document.getElementById('acceptWarnClose');
+      var warnOkBtn = document.getElementById('acceptWarnOk');
       var img = document.getElementById('confirmProofImage');
       var title = document.getElementById('confirmTitle');
       var question = document.getElementById('confirmQuestion');
@@ -3860,6 +3891,22 @@ render_header([
         modal.classList.add('show'); modal.setAttribute('aria-hidden','false');
       }
       function close() { modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); img.src=''; }
+      function openWarn(message) {
+        if (!warnModal || !warnMessage) {
+          alert(message || 'Tidak bisa melanjutkan proses ini.');
+          return;
+        }
+        warnMessage.textContent = message || 'Tidak bisa melanjutkan proses ini.';
+        warnModal.classList.add('show');
+        warnModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('sponsor-modal-open');
+      }
+      function closeWarn() {
+        if (!warnModal) return;
+        warnModal.classList.remove('show');
+        warnModal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('sponsor-modal-open');
+      }
 
       document.querySelectorAll('[data-confirm-action]').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -3868,7 +3915,7 @@ render_header([
           var action=btn.getAttribute('data-confirm-action')||'';
           var missingCourtCount = Number(btn.getAttribute('data-court-missing') || 0);
           if (action === 'accept' && missingCourtCount > 0) {
-            alert('Tidak bisa Accept. Masih ada ' + missingCourtCount + ' attendee yang belum pilih court. Buka Detail dan pilih court dulu.');
+            openWarn('Tidak bisa Accept. Masih ada ' + missingCourtCount + ' attendee yang belum pilih court. Buka Detail dan pilih court dulu.');
             return;
           }
           if(!proof||!orderId||!action)return;
@@ -3887,7 +3934,10 @@ render_header([
       form.addEventListener('submit', function(e) { if(isSubmitting){e.preventDefault();return;} isSubmitting=true; submitBtn.disabled=true; submitBtn.innerHTML='<i class="bi bi-hourglass-split"></i> Processing...'; cancelBtn.disabled=true; closeBtn.disabled=true; });
       submitBtn.addEventListener('click', function() { form.submit(); });
       closeBtn.addEventListener('click', close); cancelBtn.addEventListener('click', close);
-      modal.addEventListener('click',function(e){if(e.target===modal)close();}); document.addEventListener('keydown',function(e){if(e.key==='Escape'&&modal.classList.contains('show'))close();});
+      if (warnCloseBtn) warnCloseBtn.addEventListener('click', closeWarn);
+      if (warnOkBtn) warnOkBtn.addEventListener('click', closeWarn);
+      if (warnModal) warnModal.addEventListener('click', function(e){ if (e.target === warnModal) closeWarn(); });
+      modal.addEventListener('click',function(e){if(e.target===modal)close();}); document.addEventListener('keydown',function(e){if(e.key==='Escape'&&modal.classList.contains('show'))close(); if(e.key==='Escape'&&warnModal&&warnModal.classList.contains('show'))closeWarn();});
     })();
   </script>
 
