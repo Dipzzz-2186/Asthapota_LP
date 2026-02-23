@@ -808,7 +808,7 @@ $countStmt = $db->prepare($countSql);
 $countStmt->execute($params);
 $filteredOrderCount = (int)($countStmt->fetchColumn() ?: 0);
 
-$perPage = 20;
+$perPage = 10;
 $totalPages = max(1, (int)ceil($filteredOrderCount / $perPage));
 $currentPage = min($selectedPage, $totalPages);
 $offset = ($currentPage - 1) * $perPage;
@@ -1175,6 +1175,38 @@ $extraHead = <<<'HTML'
   }
 
   /* ─── Filter Card ────────────────────────────────────────── */
+  .dashboard-split-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+    margin-top: 6px;
+  }
+  .dashboard-filter-column,
+  .dashboard-data-column {
+    min-width: 0;
+  }
+  .dashboard-filter-column {
+    position: sticky;
+    top: 86px;
+    align-self: start;
+  }
+  .dashboard-filter-column .filter-card {
+    margin-bottom: 0;
+  }
+  .dashboard-data-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 0 2px;
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
   .filter-card {
     border-radius: 16px;
     border: 1px solid var(--stroke);
@@ -2384,12 +2416,17 @@ $extraHead = <<<'HTML'
   @media (max-width: 1200px) {
     .stat-grid { grid-template-columns: repeat(2, 1fr); }
     .court-grid { grid-template-columns: repeat(3, 1fr); }
+    .dashboard-split-layout {
+      grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    }
   }
 
   /* Tablet: collapse table → cards */
   @media (max-width: 900px) {
     .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
     .court-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .dashboard-split-layout { grid-template-columns: 1fr; gap: 12px; }
+    .dashboard-filter-column { position: static; top: auto; }
     .detail-grid { grid-template-columns: 1fr; }
     #orderDetailModal .proof-title { font-size: 16px; }
     .order-detail-body { padding: 12px 14px 16px; }
@@ -2509,6 +2546,11 @@ $extraHead = <<<'HTML'
       border-radius: 14px;
       margin-bottom: 14px;
     }
+    .dashboard-data-head {
+      margin-bottom: 6px;
+      font-size: 11px;
+      letter-spacing: 0.45px;
+    }
     .filter-toggle-btn {
       padding: 2px 1px;
     }
@@ -2595,7 +2637,6 @@ render_header([
         </div>
         <div class="dashboard-head-actions">
           <a class="btn ghost" href="/admin/scan"><i class="bi bi-qr-code-scan"></i> Scan QR</a>
-          <a class="btn ghost" href="<?= h($exportExcelUrl) ?>"><i class="bi bi-file-earmark-excel"></i> Export Excel</a>
           <button class="btn ghost" type="button" id="openAdminEmailModal">
             <i class="bi bi-envelope-check"></i> Email Admin
           </button>
@@ -2659,7 +2700,9 @@ render_header([
         </div>
       </div>
 
+      <div class="dashboard-split-layout">
       <!-- ── Filter Card ─────────────────────────────────────── -->
+      <aside class="dashboard-filter-column">
       <div class="card filter-card">
         <!-- Mobile toggle (hidden on desktop via CSS) -->
         <button
@@ -2738,6 +2781,12 @@ render_header([
           </div>
         </form>
         </div><!-- /.filter-collapsible -->
+      </div>
+      </aside>
+      <section class="dashboard-data-column">
+      <div class="dashboard-data-head">
+        <span><i class="bi bi-card-list"></i> Data Registrasi</span>
+        <a class="btn ghost small" href="<?= h($exportExcelUrl) ?>"><i class="bi bi-file-earmark-excel"></i> Export Excel</a>
       </div>
       <?php if ($flash['error']): ?>
         <div class="alert mb-16"><i class="bi bi-exclamation-triangle-fill"></i> <?= h($flash['error']) ?></div>
@@ -2961,6 +3010,8 @@ render_header([
         <?php endif; ?>
       </div>
       <?php endif; ?>
+      </section>
+      </div>
 
     </div>
   </main>
