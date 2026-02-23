@@ -170,7 +170,7 @@ html, body { height: 100%; background: #08091a; }
 
 body.admin-page {
   font-family: 'Plus Jakarta Sans', sans-serif;
-  background: url('/assets/img/wallpapeh3.jpg') center/cover fixed;
+  background: url('/assets/img/wallapapeh67.jpeg') center/cover fixed;
   color: #f8fafc;
   font-size: 15px;
 }
@@ -186,7 +186,7 @@ body.admin-page::after { display: none !important; }
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: url('/assets/img/wallpapeh4.jpg') center/cover fixed;
+  background: url('/assets/img/wallapapeh67.jpeg') center/cover fixed;
   background-color: #07091a;
 }
 
@@ -209,7 +209,7 @@ body.admin-page::after { display: none !important; }
 }
 #clockDate {
   font-size: 13px; letter-spacing: 0.3em; text-transform: uppercase;
-  color: rgba(255,255,255,0.75); font-weight: 700;
+  color: rgba(255, 255, 255, 0.93); font-weight: 700;
   text-shadow: 0 1px 8px rgba(0,0,0,0 .6);
 }
 
@@ -256,10 +256,10 @@ body.admin-page::after { display: none !important; }
 
 #result-head {
   position: absolute;
-  top: 50%;
+  top: 37%;
   left: 50%;
   transform: translate(-50%, -50%);
-  margin-top: -60px;
+  margin-top: -72px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -287,7 +287,7 @@ body.admin-page::after { display: none !important; }
   100% { box-shadow: 0 12px 30px rgba(56,189,248,0.24); }
 }
 #stage.stage--scanned #result-head {
-  top: clamp(56px, 9vh, 106px);
+  top: clamp(-10px, 1.5vh, 24px);
   bottom: auto;
   left: 50%;
   transform: translate(-50%, 0);
@@ -355,12 +355,18 @@ body.admin-page::after { display: none !important; }
 }
 
 .idle-subtitle {
-  font-size: clamp(13px, 1.8vw, 17px);
+  font-size: clamp(20px, 3vw, 27px);
   letter-spacing: 0.38em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.85);
-  font-weight: 600;
+  color: rgba(255,255,255,0.95);
+  font-weight: 800;
   text-shadow: 0 1px 6px rgba(0,0,0,0.55), 0 4px 16px rgba(0,0,0,0.35);
+}
+.idle-subtitle.idle-subtitle--brand {
+  font-size: clamp(18px, 2.4vw, 30px);
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  margin-bottom: -10px;
 }
 
 .idle-hint {
@@ -387,7 +393,7 @@ body.admin-page::after { display: none !important; }
   display:none; flex-direction:column; align-items:center; justify-content:center;
   text-align:center;
   position:fixed;
-  top:70px; left:0; right:0; bottom:88px;
+  top:20px; left:0; right:0; bottom:88px;
   padding: clamp(6px,2vh,14px) clamp(10px,4vw,28px);
   animation: welcomeIn 0.6s cubic-bezier(0.22,1,0.36,1);
   overflow:hidden;
@@ -695,8 +701,8 @@ body.admin-page::after { display: none !important; }
 
 .logo-slide {
   flex: 0 0 auto;
-  width: 120px;
-  height: 60px;
+  width: 152px;
+  height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -715,8 +721,8 @@ body.admin-page::after { display: none !important; }
 }
 
 .logo-link img {
-  max-width: 96px;
-  max-height: 42px;
+  max-width: 132px;
+  max-height: 58px;
   object-fit: contain;
   filter: brightness(0) invert(1) drop-shadow(0 0 10px rgba(255,255,255,0.35));
   opacity: 0.9;
@@ -846,8 +852,8 @@ body.ad-overlay-active * {
   .btn-back { padding: 5px 10px; font-size: 12px; }
   .btn-fs { width: 32px; height: 32px; }
   #result-head { width: min(95vw, 560px); gap: 6px; }
-  #stage.stage--scanned #result-head { top: 76px; }
-  #stage.stage--picker #result-head { top: 56px; }
+  #stage.stage--scanned #result-head { top: 0; }
+  #stage.stage--picker #result-head { top: 0; }
   .idle-title { font-size: clamp(30px, 9vw, 48px); }
   .idle-subtitle { font-size: 12px; letter-spacing: 0.24em; }
   .idle-hint { font-size: 12px; }
@@ -876,8 +882,8 @@ body.ad-overlay-active * {
   .btn-checkin, .done-badge { width: 100%; justify-content: center; }
   .idle-hint::before, .idle-hint::after { display: none; }
   #result-head { width: min(95vw, 520px); }
-  #stage.stage--scanned #result-head { top: 70px; }
-  #stage.stage--picker #result-head { top: 50px; }
+  #stage.stage--scanned #result-head { top: -4px; }
+  #stage.stage--picker #result-head { top: -6px; }
   #stage.stage--picker #picker-screen { padding-top: 86px; }
   #welcome-screen { padding: 12px; top: 56px; }
   .welcome-panel { width: min(94vw, 520px); border-radius: 18px; padding: 22px 16px; transform: none; }
@@ -923,16 +929,16 @@ render_header([
 
   <header id="topbar">
     <div class="topbar-left">
-      <div class="clock-block">
-        <span id="clock"></span>
-        <span id="clockDate"></span>
-      </div>
-    </div>
-    <div class="topbar-right">
       <button class="btn-fs" id="btnFs" type="button" title="Fullscreen">
         <i class="bi bi-fullscreen" id="fsIcon"></i>
       </button>
       <a class="btn-back" href="/admin/dashboard"><i class="bi bi-arrow-left"></i></a>
+    </div>
+    <div class="topbar-right">
+      <div class="clock-block">
+        <span id="clock"></span>
+        <span id="clockDate"></span>
+      </div>
     </div>
   </header>
 
@@ -941,12 +947,12 @@ render_header([
       <div class="result-head-logo">
         <img src="/assets/img/LogoTitleAsthapora.png" alt="Logo" id="resultHeadLogo">
       </div>
-      <div class="idle-title">Temu Padel</div>
+      <div class="idle-subtitle idle-subtitle--brand">MONKEYBAR X BAPORA</div>
+      <div class="idle-title">TEMU PADEL</div>
       <div class="idle-subtitle">Welcome</div>
     </div>
     <!-- 1. Idle -->
     <div id="idle-screen">
-      <div class="idle-qr-ring"><i class="bi bi-qr-code"></i></div>
     </div>
     <!-- 2. Picker -->
     <div id="picker-screen">
@@ -972,48 +978,6 @@ render_header([
         <div class="err-msg" id="errMsg">—</div>
         <button type="button" class="err-close" id="errCloseBtn">Tutup</button>
       </div>
-    </div>
-  </div>
-  <!-- Scanner launcher -->
-  <button id="scanner-widget-launcher" class="scanner-launcher" type="button" aria-label="Buka scanner">
-    <i class="bi bi-qr-code-scan" aria-hidden="true"></i>
-    <span>Scanner</span>
-  </button>
-
-  <!-- Scanner widget -->
-  <div id="scanner-widget" class="hidden collapsed">
-    <div class="widget-head" id="widgetToggleBtn">
-      <div class="widget-head-left">
-        <div class="widget-head-icon"><i class="bi bi-qr-code-scan"></i></div>
-        <span class="widget-head-title">Scanner</span>
-      </div>
-      <button type="button" class="scanner-close-btn" id="scannerCloseBtn" aria-label="Tutup scanner">
-        <i class="bi bi-x"></i>
-      </button>
-    </div>
-    <div class="widget-body">
-      <div class="mini-qr-box">
-        <div id="qr-reader"></div>
-        <div class="qr-idle" id="qrIdle">
-          <div class="qr-idle-icon"><i class="bi bi-qr-code"></i></div>
-          <div class="qr-idle-label">Klik Start</div>
-        </div>
-        <div class="scan-line" id="scanLine"></div>
-        <div class="corner tl"></div><div class="corner tr"></div>
-        <div class="corner bl"></div><div class="corner br"></div>
-      </div>
-      <div class="widget-controls">
-        <button class="wbtn primary" id="btnStart" type="button"><i class="bi bi-camera-video"></i> Start</button>
-        <button class="wbtn ghost"   id="btnStop"  type="button"><i class="bi bi-stop-circle"></i> Stop</button>
-      </div>
-      <div class="widget-divider">manual</div>
-      <form id="manualForm" method="post" action="/admin/scan">
-        <div class="widget-input-row">
-          <input class="widget-input" id="manualToken" name="token" type="text"
-            placeholder="Token / URL..." value="<?= h($prefillToken) ?>" autocomplete="off">
-          <button class="widget-submit" type="submit"><i class="bi bi-search"></i></button>
-        </div>
-      </form>
     </div>
   </div>
 
@@ -1237,7 +1201,9 @@ render_header([
   });
 
   /* Widget */
-  wToggle.addEventListener('click',function(){widget.classList.toggle('collapsed');});
+  if(wToggle && widget){
+    wToggle.addEventListener('click',function(){widget.classList.toggle('collapsed');});
+  }
   if(widgetLauncher){
     widgetLauncher.addEventListener('click',function(e){e.preventDefault(); showScannerWidget(true);});
   }
@@ -1363,24 +1329,31 @@ render_header([
     return scanner.stop().catch(function(){}).then(function(){return scanner.clear().catch(function(){});});
   }
 
-  btnStart.addEventListener('click',function(){
-    if(scanning)return;
-    if(typeof Html5Qrcode==='undefined'){showErr('Library scanner gagal dimuat.');return;}
-    notifyCameraState(true);
-    if(qrIdle)qrIdle.style.display='none';if(scanLine)scanLine.classList.add('on');
-    scanner=new Html5Qrcode('qr-reader');
-    scanner.start({facingMode:'environment'},{fps:10,qrbox:160},
-      function(text){stopCam().finally(function(){verify(text);});},
-      function(){}
-    ).then(function(){scanning=true;})
-    .catch(function(){
-      notifyCameraState(false);
-      if(qrIdle)qrIdle.style.display='';if(scanLine)scanLine.classList.remove('on');
-      showErr('Izinkan akses kamera atau gunakan input manual.');
+  if(btnStart){
+    btnStart.addEventListener('click',function(){
+      if(scanning)return;
+      if(typeof Html5Qrcode==='undefined'){showErr('Library scanner gagal dimuat.');return;}
+      if(!document.getElementById('qr-reader')){showErr('Area scanner tidak ditemukan.');return;}
+      notifyCameraState(true);
+      if(qrIdle)qrIdle.style.display='none';if(scanLine)scanLine.classList.add('on');
+      scanner=new Html5Qrcode('qr-reader');
+      scanner.start({facingMode:'environment'},{fps:10,qrbox:160},
+        function(text){stopCam().finally(function(){verify(text);});},
+        function(){}
+      ).then(function(){scanning=true;})
+      .catch(function(){
+        notifyCameraState(false);
+        if(qrIdle)qrIdle.style.display='';if(scanLine)scanLine.classList.remove('on');
+        showErr('Izinkan akses kamera atau gunakan input manual.');
+      });
     });
-  });
-  btnStop.addEventListener('click',stopCam);
-  mForm.addEventListener('submit',function(e){e.preventDefault();primeWelcomeAudio();verify(mInput.value||'');});
+  }
+  if(btnStop){
+    btnStop.addEventListener('click',stopCam);
+  }
+  if(mForm){
+    mForm.addEventListener('submit',function(e){e.preventDefault();primeWelcomeAudio();verify(mInput ? (mInput.value||'') : '');});
+  }
   ['pointerdown','keydown','touchstart'].forEach(function(evt){
     document.addEventListener(evt, primeWelcomeAudio, { once:true, passive:true });
   });
