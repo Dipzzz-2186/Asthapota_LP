@@ -449,8 +449,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if (!$row) {
                         $flash['error'] = 'Attendee tidak ditemukan pada order ini.';
-                    } elseif ((string)($row['status'] ?? '') === 'rejected') {
-                        $flash['error'] = 'Package attendee tidak bisa diubah untuk order dengan status rejected.';
+                    } elseif ((string)($row['status'] ?? '') !== 'accepted') {
+                        $flash['error'] = 'Package attendee hanya bisa diubah setelah order di-accept.';
                     } elseif (!empty($row['checked_in_at'])) {
                         $flash['error'] = 'Package attendee yang sudah check-in tidak bisa diubah.';
                     } else {
@@ -4308,7 +4308,7 @@ render_header([
           if (attendeeId > 0 && !checkedInAt && !isPackageC) {
             appendCourtActions(li, orderId, attendeeId, courtNo > 0 ? courtNo : 1);
           }
-          if (attendeeId > 0 && String(payload.status || '').toLowerCase() !== 'rejected' && !checkedInAt) {
+          if (attendeeId > 0 && String(payload.status || '').toLowerCase() === 'accepted' && !checkedInAt) {
             var wrap = document.createElement('div');
             wrap.className = 'detail-package-wrap';
             var select = document.createElement('select');
