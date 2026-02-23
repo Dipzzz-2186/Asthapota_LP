@@ -628,7 +628,7 @@ try {
     $dashboardAds = [];
 }
 
-$packages = $db->query("SELECT id, name FROM packages ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+$packages = $db->query("SELECT id, name, price FROM packages ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 
 $whereParts = ['1=1'];
 $params = [];
@@ -3605,6 +3605,7 @@ render_header([
         return [
           'id' => (int)($pkg['id'] ?? 0),
           'name' => (string)($pkg['name'] ?? '-'),
+          'price' => max(0, (int)($pkg['price'] ?? 0)),
         ];
       }, $packages)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
@@ -3708,6 +3709,39 @@ render_header([
         });
       }
       function syncPayloadPackageChange(orderId, attendeeId, packageId, packageName, orderTotal) {
+        function rebuildItemsFromAttendees(attendees) {
+          var summary = {};
+          (Array.isArray(attendees) ? attendees : []).forEach(function(at) {
+            var pid = Number(at && at.package_id ? at.package_id : 0);
+            if (pid <= 0) return;
+            var pkgRef = packageOptions.find(function(option) {
+              return Number(option && option.id ? option.id : 0) === pid;
+            });
+            var key = String(pid);
+            if (!summary[key]) {
+              summary[key] = {
+                package_name: (at && at.package_name ? String(at.package_name) : '') || (pkgRef ? String(pkgRef.name || '-') : ('Package #' + pid)),
+                qty: 0,
+                price: pkgRef ? Number(pkgRef.price || 0) : 0
+              };
+            }
+            summary[key].qty += 1;
+          });
+          return Object.keys(summary).map(function(key) {
+            var row = summary[key];
+            var qty = Number(row && row.qty ? row.qty : 0);
+            var price = Number(row && row.price ? row.price : 0);
+            return {
+              package_name: String(row && row.package_name ? row.package_name : '-'),
+              qty: qty,
+              price: price,
+              subtotal: qty * price
+            };
+          }).sort(function(a, b) {
+            return String(a && a.package_name ? a.package_name : '').localeCompare(String(b && b.package_name ? b.package_name : ''));
+          });
+        }
+
         document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
           var raw = btn.getAttribute('data-order-detail') || '{}';
           var payload = {};
@@ -3720,11 +3754,53 @@ render_header([
               at.package_name = String(packageName || at.package_name || '');
             }
           });
+          payload.items = rebuildItemsFromAttendees(attendees);
+          payload.ticket_count = attendees.length;
           if (orderTotal !== null && orderTotal !== undefined && orderTotal !== '') {
             payload.total = Number(orderTotal || 0);
+          } else {
+            payload.total = payload.items.reduce(function(sum, it) {
+              return sum + Number(it && it.subtotal ? it.subtotal : 0);
+            }, 0);
           }
           btn.setAttribute('data-order-detail', JSON.stringify(payload));
         });
+      }
+      function renderDetailItems(items) {
+        clearList(detailItems);
+        (Array.isArray(items) ? items : []).forEach(function(it) {
+          var li = document.createElement('li');
+          var qty = Number(it && it.qty ? it.qty : 0);
+          var price = Number(it && it.price ? it.price : 0);
+          li.textContent = (it && it.package_name ? String(it.package_name) : '-') + ' ×' + qty + ' @ ' + asCurrency(price) + ' = ' + asCurrency(Number(it && it.subtotal ? it.subtotal : qty * price));
+          detailItems.appendChild(li);
+        });
+        detailItemsEmpty.style.display = (Array.isArray(items) && items.length) ? 'none' : 'block';
+      }
+      function refreshOpenDetailBreakdown(orderId) {
+        if (!modal.classList.contains('show')) return;
+        var targetBtn = null;
+        document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
+          if (targetBtn) return;
+          var raw = btn.getAttribute('data-order-detail') || '{}';
+          var payload = {};
+          try { payload = JSON.parse(raw); } catch (err) { payload = {}; }
+          if (Number(payload.order_id || 0) === Number(orderId || 0)) {
+            targetBtn = btn;
+          }
+        });
+        if (!targetBtn) return;
+        var latestPayload = {};
+        try { latestPayload = JSON.parse(targetBtn.getAttribute('data-order-detail') || '{}'); } catch (err) { latestPayload = {}; }
+        var latestItems = Array.isArray(latestPayload.items) ? latestPayload.items : [];
+        renderDetailItems(latestItems);
+        var computedTotal = latestItems.reduce(function(sum, it) {
+          return sum + Number(it && it.subtotal ? it.subtotal : 0);
+        }, 0);
+        var totalValueEl = document.getElementById('orderDetailTotalValue');
+        if (totalValueEl) {
+          totalValueEl.textContent = asCurrency(computedTotal > 0 ? computedTotal : Number(latestPayload.total || 0));
+        }
       }
 
       function openDetail(rawJson) {
@@ -3748,16 +3824,9 @@ render_header([
           '<div class="detail-chip"><span class="chip-label">Status</span><span class="chip-value">' + escapeHtml(statusLabel(payload.status || '')) + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Tickets</span><span class="chip-value">' + ticketCount + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Hadir</span><span class="chip-value">' + arrivedCount + '/' + ticketCount + '</span></div>' +
-          '<div class="detail-chip"><span class="chip-label">Total</span><span class="chip-value">' + asCurrency(displayTotal) + '</span></div>' +
+          '<div class="detail-chip"><span class="chip-label">Total</span><span class="chip-value" id="orderDetailTotalValue">' + asCurrency(displayTotal) + '</span></div>' +
           '<div class="detail-chip"><span class="chip-label">Created</span><span class="chip-value">' + escapeHtml(formatDate(payload.created_at)) + '</span></div>';
-        clearList(detailItems);
-        items.forEach(function(it) {
-          var li = document.createElement('li');
-          var qty = Number(it && it.qty ? it.qty : 0), price = Number(it && it.price ? it.price : 0);
-          li.textContent = (it && it.package_name ? String(it.package_name) : '-') + ' ×' + qty + ' @ ' + asCurrency(price) + ' = ' + asCurrency(Number(it && it.subtotal ? it.subtotal : qty * price));
-          detailItems.appendChild(li);
-        });
-        detailItemsEmpty.style.display = items.length ? 'none' : 'block';
+        renderDetailItems(items);
         clearList(detailAttendees);
         attendeesArr.forEach(function(at) {
           var li = document.createElement('li');
@@ -3863,6 +3932,7 @@ render_header([
                     opt.textContent = baseName + (oid === currentPackageId ? ' (saat ini)' : '');
                   });
                   syncPayloadPackageChange(orderId, attendeeId, currentPackageId, selectedPackageName, resp.order_total);
+                  refreshOpenDetailBreakdown(orderId);
                   showDetailNotice(resp.message || 'Package attendee berhasil diubah.', 'success');
                   applyBtn.textContent = 'Tersimpan';
                   setTimeout(function() { applyBtn.textContent = originalLabel; }, 900);
