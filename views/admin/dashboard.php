@@ -1232,7 +1232,7 @@ $extraHead = <<<'HTML'
   }
 
   .filter-collapsible {
-    overflow: hidden;
+    overflow: visible;
     transition: max-height 0.3s ease, opacity 0.22s ease;
   }
 
@@ -1259,9 +1259,12 @@ $extraHead = <<<'HTML'
   }
   .dashboard-filter-form .filter-label .bi { color: var(--primary); }
 
-  .filter-field { display: grid; gap: 6px; }
-  .filter-field-status { padding-right: 12px; }
-  .filter-field-package { padding-left: 12px; }
+  .filter-field { display: grid; gap: 6px; min-width: 0; }
+  .filter-field-status,
+  .filter-field-package {
+    padding: 0;
+    box-sizing: border-box;
+  }
 
   .field-label {
     font-size: 11px;
@@ -2398,6 +2401,7 @@ $extraHead = <<<'HTML'
     /* Show filter toggle, hide desktop label */
     .filter-toggle-btn { display: flex; }
     .dashboard-filter-form .filter-label { display: none; }
+    .filter-collapsible { overflow: hidden; }
   }
 
   /* Mobile */
