@@ -1177,7 +1177,7 @@ $extraHead = <<<'HTML'
   /* ─── Filter Card ────────────────────────────────────────── */
   .dashboard-split-layout {
     display: grid;
-    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
     gap: 14px;
     align-items: start;
     margin-top: 6px;
@@ -1882,8 +1882,23 @@ $extraHead = <<<'HTML'
   .table-wrap {
     border-radius: 16px;
     border: 1px solid var(--stroke);
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    scrollbar-width: thin;
+    -ms-overflow-style: auto;
+  }
+  .table-wrap::-webkit-scrollbar {
+    display: block !important;
+    height: 9px;
+  }
+  .table-wrap::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, 0.2);
+    border-radius: 999px;
+  }
+  .table-wrap::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.55);
+    border-radius: 999px;
   }
 
   table.admin-table {
@@ -1919,9 +1934,6 @@ $extraHead = <<<'HTML'
   table.admin-table tbody tr { transition: background 0.15s ease; }
   table.admin-table tbody tr:hover { background: rgba(0,102,255,0.025); }
   table.admin-table tbody tr:last-child td { border-bottom: none; }
-
-  table.admin-table th:nth-child(3),
-  table.admin-table td:nth-child(3) { width: 210px; }
 
   .admin-contact { display: grid; gap: 4px; }
   .admin-contact-line {
@@ -1992,12 +2004,13 @@ $extraHead = <<<'HTML'
   }
 
   .action-group .btn.small {
-    padding: 5px 10px;
-    font-size: 12px;
+    padding: 5px 9px;
+    font-size: 11.5px;
     border-radius: 8px;
-    height: 32px;
+    height: 31px;
     font-weight: 700;
     white-space: nowrap;
+    min-width: 0;
     transition: all 0.17s ease;
   }
   .action-group .btn.primary:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,102,255,0.3); }
@@ -2417,7 +2430,7 @@ $extraHead = <<<'HTML'
     .stat-grid { grid-template-columns: repeat(2, 1fr); }
     .court-grid { grid-template-columns: repeat(3, 1fr); }
     .dashboard-split-layout {
-      grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+      grid-template-columns: minmax(200px, 248px) minmax(0, 1fr);
     }
   }
 
