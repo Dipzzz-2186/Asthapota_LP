@@ -17,6 +17,16 @@ ensure_order_attendee_package_schema($db);
 ensure_order_attendee_payment_schema($db);
 ensure_order_attendee_court_schema($db);
 ensure_admin_notification_schema($db);
+try {
+    $clearPackageCCourtStmt = $db->prepare(
+        "UPDATE order_attendees oa
+         LEFT JOIN packages p ON p.id = oa.package_id
+         SET oa.court_no = NULL
+         WHERE oa.court_no IS NOT NULL
+           AND LOWER(TRIM(COALESCE(p.name, ''))) = 'package c'"
+    );
+    $clearPackageCCourtStmt->execute();
+} catch (Throwable $e) {}
 $flash = ['success' => '', 'error' => ''];
 $selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
 $selectedOrderId = ctype_digit($selectedOrderIdRaw) ? (int)$selectedOrderIdRaw : 0;
@@ -346,6 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $orderId = (int)($_POST['order_id'] ?? 0);
         $attendeeId = (int)($_POST['attendee_id'] ?? 0);
         $courtNo = (int)($_POST['court_no'] ?? 0);
+        $responseCourtNo = ($courtNo >= 1 && $courtNo <= 6) ? $courtNo : null;
 
         if ($orderId <= 0 || $attendeeId <= 0) {
             $flash['error'] = 'Data attendee tidak valid.';
@@ -353,18 +364,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash['error'] = 'Court harus dipilih dari 1 sampai 6.';
         } else {
             try {
-                $updateCourtStmt = $db->prepare('UPDATE order_attendees SET court_no = ? WHERE id = ? AND order_id = ? LIMIT 1');
-                $updateCourtStmt->execute([$courtNo, $attendeeId, $orderId]);
-                if ($updateCourtStmt->rowCount() > 0) {
-                    $flash['success'] = 'Court attendee berhasil diperbarui.';
+                $attendeeStmt = $db->prepare(
+                    'SELECT oa.id, p.name AS package_name
+                     FROM order_attendees oa
+                     LEFT JOIN packages p ON p.id = oa.package_id
+                     WHERE oa.id = ? AND oa.order_id = ? LIMIT 1'
+                );
+                $attendeeStmt->execute([$attendeeId, $orderId]);
+                $attendeeRow = $attendeeStmt->fetch(PDO::FETCH_ASSOC);
+                if (!$attendeeRow) {
+                    $flash['error'] = 'Attendee tidak ditemukan pada order ini.';
                 } else {
-                    $existsStmt = $db->prepare('SELECT id FROM order_attendees WHERE id = ? AND order_id = ? LIMIT 1');
-                    $existsStmt->execute([$attendeeId, $orderId]);
-                    $exists = $existsStmt->fetch(PDO::FETCH_ASSOC);
-                    if ($exists) {
-                        $flash['success'] = 'Court attendee sudah sesuai.';
+                    $packageName = trim((string)($attendeeRow['package_name'] ?? ''));
+                    if (strcasecmp($packageName, 'Package C') === 0) {
+                        $clearStmt = $db->prepare('UPDATE order_attendees SET court_no = NULL WHERE id = ? AND order_id = ? LIMIT 1');
+                        $clearStmt->execute([$attendeeId, $orderId]);
+                        $responseCourtNo = null;
+                        $flash['success'] = 'Package C tidak menggunakan court. Nilai court dikosongkan.';
                     } else {
-                        $flash['error'] = 'Attendee tidak ditemukan pada order ini.';
+                        $updateCourtStmt = $db->prepare('UPDATE order_attendees SET court_no = ? WHERE id = ? AND order_id = ? LIMIT 1');
+                        $updateCourtStmt->execute([$courtNo, $attendeeId, $orderId]);
+                        if ($updateCourtStmt->rowCount() > 0) {
+                            $flash['success'] = 'Court attendee berhasil diperbarui.';
+                        } else {
+                            $flash['success'] = 'Court attendee sudah sesuai.';
+                        }
                     }
                 }
             } catch (Throwable $e) {
@@ -377,7 +401,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode([
                 'ok' => $flash['error'] === '',
                 'message' => $flash['error'] !== '' ? $flash['error'] : $flash['success'],
-                'court_no' => $courtNo >= 1 && $courtNo <= 6 ? $courtNo : null,
+                'court_no' => $responseCourtNo,
             ]);
             exit;
         }
@@ -439,8 +463,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         } else {
                             $db->beginTransaction();
 
-                            $updAttendee = $db->prepare('UPDATE order_attendees SET package_id = ? WHERE id = ? AND order_id = ?');
-                            $updAttendee->execute([$newPackageId, $attendeeId, $orderId]);
+                            $newPackageName = trim((string)($newPackageRow['name'] ?? ''));
+                            $isNewPackageC = strcasecmp($newPackageName, 'Package C') === 0;
+                            if ($isNewPackageC) {
+                                $updAttendee = $db->prepare('UPDATE order_attendees SET package_id = ?, court_no = NULL WHERE id = ? AND order_id = ?');
+                                $updAttendee->execute([$newPackageId, $attendeeId, $orderId]);
+                            } else {
+                                $updAttendee = $db->prepare('UPDATE order_attendees SET package_id = ? WHERE id = ? AND order_id = ?');
+                                $updAttendee->execute([$newPackageId, $attendeeId, $orderId]);
+                            }
                             if ($updAttendee->rowCount() <= 0) {
                                 throw new RuntimeException('Gagal memperbarui package attendee.');
                             }
@@ -3912,6 +3943,39 @@ render_header([
         var normalized = String(rawName == null ? '' : rawName).trim().toLowerCase();
         return normalized === 'package c';
       }
+      function appendCourtActions(li, orderId, attendeeId, selectedCourt) {
+        if (!li || li.querySelector('.detail-attendee-court-actions')) return;
+        var safeCourt = toCourtNo(selectedCourt) || 1;
+        var courtWrap = document.createElement('div');
+        courtWrap.className = 'detail-attendee-court-actions';
+        var courtSelect = document.createElement('select');
+        courtSelect.className = 'detail-court-select';
+        courtSelect.setAttribute('data-role', 'court-select');
+        for (var cn = 1; cn <= 6; cn++) {
+          var courtOption = document.createElement('option');
+          courtOption.value = String(cn);
+          courtOption.textContent = 'Court ' + cn;
+          if (cn === safeCourt) {
+            courtOption.selected = true;
+          }
+          courtSelect.appendChild(courtOption);
+        }
+        var courtBtn = document.createElement('button');
+        courtBtn.type = 'button';
+        courtBtn.className = 'detail-court-btn';
+        courtBtn.setAttribute('data-save-court', '1');
+        courtBtn.setAttribute('data-order-id', String(orderId));
+        courtBtn.setAttribute('data-attendee-id', String(attendeeId));
+        courtBtn.textContent = 'Pilih court';
+        courtWrap.appendChild(courtSelect);
+        courtWrap.appendChild(courtBtn);
+        var packageWrap = li.querySelector('.detail-package-wrap');
+        if (packageWrap) {
+          li.insertBefore(courtWrap, packageWrap);
+        } else {
+          li.appendChild(courtWrap);
+        }
+      }
       var detailNoticeTimer = null;
       function showDetailNotice(message, type) {
         if (!screenNotice) {
@@ -4081,6 +4145,7 @@ render_header([
       function syncPayloadPackageChange(orderId, attendeeId, packageId, packageName, orderTotal) {
         var previousPackageId = 0;
         var latestMissingCount = 0;
+        var nextIsPackageC = isPackageCName(packageName);
         document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
           var raw = btn.getAttribute('data-order-detail') || '{}';
           var payload = {};
@@ -4094,6 +4159,9 @@ render_header([
               }
               at.package_id = Number(packageId || 0);
               at.package_name = String(packageName || at.package_name || '');
+              if (nextIsPackageC) {
+                at.court_no = 0;
+              }
             }
           });
           payload.items = rebuildItemsFromAttendees(attendees);
@@ -4207,31 +4275,7 @@ render_header([
             + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '')
             + '</div>';
           if (attendeeId > 0 && !checkedInAt && !isPackageC) {
-            var selectedCourt = courtNo > 0 ? courtNo : 1;
-            var courtWrap = document.createElement('div');
-            courtWrap.className = 'detail-attendee-court-actions';
-            var courtSelect = document.createElement('select');
-            courtSelect.className = 'detail-court-select';
-            courtSelect.setAttribute('data-role', 'court-select');
-            for (var cn = 1; cn <= 6; cn++) {
-              var courtOption = document.createElement('option');
-              courtOption.value = String(cn);
-              courtOption.textContent = 'Court ' + cn;
-              if (cn === selectedCourt) {
-                courtOption.selected = true;
-              }
-              courtSelect.appendChild(courtOption);
-            }
-            var courtBtn = document.createElement('button');
-            courtBtn.type = 'button';
-            courtBtn.className = 'detail-court-btn';
-            courtBtn.setAttribute('data-save-court', '1');
-            courtBtn.setAttribute('data-order-id', String(orderId));
-            courtBtn.setAttribute('data-attendee-id', String(attendeeId));
-            courtBtn.textContent = 'Pilih court';
-            courtWrap.appendChild(courtSelect);
-            courtWrap.appendChild(courtBtn);
-            li.appendChild(courtWrap);
+            appendCourtActions(li, orderId, attendeeId, courtNo > 0 ? courtNo : 1);
           }
           if (attendeeId > 0 && String(payload.status || '').toLowerCase() !== 'rejected' && !checkedInAt) {
             var wrap = document.createElement('div');
@@ -4286,8 +4330,15 @@ render_header([
                   pkgBadge.textContent = '[' + selectedPackageName + ']';
                   var selectedIsPackageC = isPackageCName(selectedPackageName);
                   var courtWrap = li.querySelector('.detail-attendee-court-actions');
+                  var courtBadgeEl = li.querySelector('.attendee-court-badge');
                   if (selectedIsPackageC && courtWrap) {
                     courtWrap.remove();
+                  }
+                  if (selectedIsPackageC && courtBadgeEl) {
+                    courtBadgeEl.remove();
+                  }
+                  if (!selectedIsPackageC && !courtWrap) {
+                    appendCourtActions(li, orderId, attendeeId, 1);
                   }
                   Array.prototype.forEach.call(select.options, function(opt) {
                     var oid = Number(opt.value || 0);
