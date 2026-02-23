@@ -21,6 +21,9 @@ $flash = ['success' => '', 'error' => ''];
 $selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
 $selectedOrderId = ctype_digit($selectedOrderIdRaw) ? (int)$selectedOrderIdRaw : 0;
 $selectedPackage = isset($_REQUEST['package']) ? (int)$_REQUEST['package'] : 0;
+$selectedCourtRaw = trim((string)($_REQUEST['court'] ?? ''));
+$selectedCourt = ctype_digit($selectedCourtRaw) ? (int)$selectedCourtRaw : 0;
+$selectedCourt = ($selectedCourt >= 1 && $selectedCourt <= 6) ? $selectedCourt : 0;
 $selectedName = trim((string)($_REQUEST['name'] ?? ''));
 $selectedEmail = trim((string)($_REQUEST['email'] ?? ''));
 $selectedDate = trim((string)($_REQUEST['created_date'] ?? ''));
@@ -594,6 +597,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $_SESSION['dashboard_flash'] = $flash;
     $redirectParams = [];
     if ($selectedPackage > 0) $redirectParams['package'] = $selectedPackage;
+    if ($selectedCourt > 0) $redirectParams['court'] = $selectedCourt;
     if ($selectedOrderId > 0) $redirectParams['filter_order_id'] = $selectedOrderId;
     if ($selectedName !== '') $redirectParams['name'] = $selectedName;
     if ($selectedEmail !== '') $redirectParams['email'] = $selectedEmail;
@@ -634,6 +638,7 @@ $whereParts = ['1=1'];
 $params = [];
 if ($selectedOrderId > 0) { $whereParts[] = "o.id = ?"; $params[] = $selectedOrderId; }
 if ($selectedPackage > 0) { $whereParts[] = "EXISTS (SELECT 1 FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id AND p.id = ?)"; $params[] = $selectedPackage; }
+if ($selectedCourt > 0) { $whereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa WHERE oa.order_id = o.id AND oa.court_no = ?)"; $params[] = $selectedCourt; }
 if ($selectedName !== '') { $whereParts[] = "u.full_name LIKE ?"; $params[] = '%' . $selectedName . '%'; }
 if ($selectedEmail !== '') { $whereParts[] = "u.email LIKE ?"; $params[] = '%' . $selectedEmail . '%'; }
 if ($selectedDate !== '') { $whereParts[] = "DATE(o.created_at) = ?"; $params[] = $selectedDate; }
@@ -646,6 +651,7 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
     $exportParams = [];
     if ($selectedOrderId > 0) { $exportWhereParts[] = "o.id = ?"; $exportParams[] = $selectedOrderId; }
     if ($selectedPackage > 0) { $exportWhereParts[] = "EXISTS (SELECT 1 FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id AND p.id = ?)"; $exportParams[] = $selectedPackage; }
+    if ($selectedCourt > 0) { $exportWhereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa WHERE oa.order_id = o.id AND oa.court_no = ?)"; $exportParams[] = $selectedCourt; }
     if ($selectedName !== '') { $exportWhereParts[] = "u.full_name LIKE ?"; $exportParams[] = '%' . $selectedName . '%'; }
     if ($selectedEmail !== '') { $exportWhereParts[] = "u.email LIKE ?"; $exportParams[] = '%' . $selectedEmail . '%'; }
     if ($selectedDate !== '') { $exportWhereParts[] = "DATE(o.created_at) = ?"; $exportParams[] = $selectedDate; }
@@ -735,10 +741,21 @@ foreach ($packages as $pkg) {
         continue;
     }
     $packageSalesMap[$packageId] = [
+        'id' => $packageId,
         'name' => (string)($pkg['name'] ?? '-'),
         'qty' => 0,
     ];
 }
+
+$packageSalesWhereParts = ['1=1'];
+$packageSalesParams = [];
+if ($selectedOrderId > 0) { $packageSalesWhereParts[] = "o.id = ?"; $packageSalesParams[] = $selectedOrderId; }
+if ($selectedName !== '') { $packageSalesWhereParts[] = "u.full_name LIKE ?"; $packageSalesParams[] = '%' . $selectedName . '%'; }
+if ($selectedEmail !== '') { $packageSalesWhereParts[] = "u.email LIKE ?"; $packageSalesParams[] = '%' . $selectedEmail . '%'; }
+if ($selectedDate !== '') { $packageSalesWhereParts[] = "DATE(o.created_at) = ?"; $packageSalesParams[] = $selectedDate; }
+if ($selectedStatus === 'paid' || $selectedStatus === 'accepted' || $selectedStatus === 'rejected') { $packageSalesWhereParts[] = "o.status = ?"; $packageSalesParams[] = $selectedStatus; }
+elseif ($selectedStatus === 'pending') { $packageSalesWhereParts[] = "o.status = 'pending'"; }
+$packageSalesWhereSql = ' WHERE ' . implode(' AND ', $packageSalesWhereParts);
 
 $packageSalesSql = "SELECT
     p.id AS package_id,
@@ -746,10 +763,10 @@ $packageSalesSql = "SELECT
     FROM orders o
     JOIN users u ON u.id = o.user_id
     JOIN order_items oi ON oi.order_id = o.id
-    JOIN packages p ON p.id = oi.package_id" . $whereSql . "
+    JOIN packages p ON p.id = oi.package_id" . $packageSalesWhereSql . "
     GROUP BY p.id";
 $packageSalesStmt = $db->prepare($packageSalesSql);
-$packageSalesStmt->execute($params);
+$packageSalesStmt->execute($packageSalesParams);
 foreach ($packageSalesStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     $packageId = (int)($row['package_id'] ?? 0);
     if ($packageId <= 0 || !isset($packageSalesMap[$packageId])) {
@@ -758,6 +775,33 @@ foreach ($packageSalesStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     $packageSalesMap[$packageId]['qty'] = max(0, (int)($row['sold_qty'] ?? 0));
 }
 $packageSalesStats = array_values($packageSalesMap);
+
+$courtAttendeeCountMap = [
+    1 => 0,
+    2 => 0,
+    3 => 0,
+    4 => 0,
+    5 => 0,
+    6 => 0,
+];
+try {
+    $courtCountStmt = $db->prepare("SELECT oa.court_no, COUNT(*) AS total_attendees
+        FROM order_attendees oa
+        JOIN orders o ON o.id = oa.order_id
+        WHERE oa.court_no BETWEEN 1 AND 6
+          AND o.status IN ('paid', 'accepted')
+        GROUP BY oa.court_no");
+    $courtCountStmt->execute();
+    foreach ($courtCountStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $courtNo = (int)($row['court_no'] ?? 0);
+        if ($courtNo < 1 || $courtNo > 6) {
+            continue;
+        }
+        $courtAttendeeCountMap[$courtNo] = max(0, (int)($row['total_attendees'] ?? 0));
+    }
+} catch (Throwable $e) {
+    // Keep defaults (0) if query fails.
+}
 
 $countSql = "SELECT COUNT(*) AS total_records FROM orders o JOIN users u ON u.id = o.user_id" . $whereSql;
 $countStmt = $db->prepare($countSql);
@@ -823,21 +867,30 @@ if ($orderIds) {
             if (!isset($orderAttendeeMap[$oid])) $orderAttendeeMap[$oid] = [];
             if (!isset($orderMissingCourtCountMap[$oid])) $orderMissingCourtCountMap[$oid] = 0;
             $courtNo = (int)($row['court_no'] ?? 0);
+            $packageId = (int)($row['package_id'] ?? 0);
             if ($courtNo < 1 || $courtNo > 6) {
                 $orderMissingCourtCountMap[$oid]++;
             }
-            $orderAttendeeMap[$oid][] = [
-                'attendee_id' => (int)($row['attendee_id'] ?? 0),
-                'position_no' => (int)($row['position_no'] ?? 0),
-                'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
-                'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
-                'package_id' => (int)($row['package_id'] ?? 0),
-                'package_name' => trim((string)($row['package_name'] ?? '')),
-                'court_no' => $courtNo,
-            ];
+            $includeAttendeeInDetail = true;
+            if ($selectedCourt > 0 && $courtNo !== $selectedCourt) {
+                $includeAttendeeInDetail = false;
+            }
+            if ($selectedPackage > 0 && $packageId !== $selectedPackage) {
+                $includeAttendeeInDetail = false;
+            }
+            if ($includeAttendeeInDetail) {
+                $orderAttendeeMap[$oid][] = [
+                    'attendee_id' => (int)($row['attendee_id'] ?? 0),
+                    'position_no' => (int)($row['position_no'] ?? 0),
+                    'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
+                    'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
+                    'package_id' => $packageId,
+                    'package_name' => trim((string)($row['package_name'] ?? '')),
+                    'court_no' => $courtNo,
+                ];
+            }
             $orderAttendeeCountMap[$oid] = ($orderAttendeeCountMap[$oid] ?? 0) + 1;
 
-            $packageId = (int)($row['package_id'] ?? 0);
             if ($packageId > 0) {
                 if (!isset($orderAttendeePackageSummaryMap[$oid])) {
                     $orderAttendeePackageSummaryMap[$oid] = [];
@@ -890,12 +943,19 @@ if ($orderIds) {
     }
 }
 
-$hasActiveFilters = $selectedPackage > 0 || $selectedOrderId > 0 || $selectedName !== '' || $selectedEmail !== '' || $selectedDate !== '' || $selectedStatus !== '';
+$hasActiveFilters = $selectedPackage > 0 || $selectedCourt > 0 || $selectedOrderId > 0 || $selectedName !== '' || $selectedEmail !== '' || $selectedDate !== '' || $selectedStatus !== '';
 $startRow = $filteredOrderCount > 0 ? ($offset + 1) : 0;
 $endRow = min($offset + count($orders), $filteredOrderCount);
+$cardFilterBaseParams = [];
+if ($selectedOrderId > 0) $cardFilterBaseParams['filter_order_id'] = $selectedOrderId;
+if ($selectedName !== '') $cardFilterBaseParams['name'] = $selectedName;
+if ($selectedEmail !== '') $cardFilterBaseParams['email'] = $selectedEmail;
+if ($selectedDate !== '') $cardFilterBaseParams['created_date'] = $selectedDate;
+if ($selectedStatus !== '') $cardFilterBaseParams['status'] = $selectedStatus;
 $paginationBaseParams = [];
 if ($selectedOrderId > 0) $paginationBaseParams['filter_order_id'] = $selectedOrderId;
 if ($selectedPackage > 0) $paginationBaseParams['package'] = $selectedPackage;
+if ($selectedCourt > 0) $paginationBaseParams['court'] = $selectedCourt;
 if ($selectedName !== '') $paginationBaseParams['name'] = $selectedName;
 if ($selectedEmail !== '') $paginationBaseParams['email'] = $selectedEmail;
 if ($selectedDate !== '') $paginationBaseParams['created_date'] = $selectedDate;
@@ -903,6 +963,7 @@ if ($selectedStatus !== '') $paginationBaseParams['status'] = $selectedStatus;
 $exportQueryParams = ['export' => 'excel'];
 if ($selectedOrderId > 0) $exportQueryParams['filter_order_id'] = $selectedOrderId;
 if ($selectedPackage > 0) $exportQueryParams['package'] = $selectedPackage;
+if ($selectedCourt > 0) $exportQueryParams['court'] = $selectedCourt;
 if ($selectedName !== '') $exportQueryParams['name'] = $selectedName;
 if ($selectedEmail !== '') $exportQueryParams['email'] = $selectedEmail;
 if ($selectedDate !== '') $exportQueryParams['created_date'] = $selectedDate;
@@ -984,6 +1045,67 @@ $extraHead = <<<'HTML'
     gap: 12px;
     margin-bottom: 18px;
   }
+  .court-summary {
+    margin-bottom: 16px;
+  }
+  .court-summary-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+  }
+  .court-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .court-card {
+    background: var(--surface);
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    padding: 10px 11px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.03);
+    display: grid;
+    gap: 3px;
+  }
+  .court-card-link {
+    display: grid;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .court-card-link:focus-visible {
+    outline: 2px solid rgba(0, 102, 255, 0.45);
+    outline-offset: 1px;
+  }
+  .court-card.is-active {
+    border-color: rgba(0, 102, 255, 0.45);
+    box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.12);
+  }
+  .court-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+  }
+  .court-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.35px;
+    line-height: 1.05;
+  }
+  .court-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+  }
 
   .stat-card {
     position: relative;
@@ -995,6 +1117,20 @@ $extraHead = <<<'HTML'
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     cursor: default;
     animation: statCardIn 0.4s ease-out both;
+  }
+  .stat-card-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .stat-card-link:focus-visible {
+    outline: 2px solid rgba(0, 102, 255, 0.45);
+    outline-offset: 1px;
+  }
+  .stat-card.is-active {
+    border-color: rgba(0, 102, 255, 0.45);
+    box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.12);
   }
   .stat-card:nth-child(1) { animation-delay: 0.05s; }
   .stat-card:nth-child(2) { animation-delay: 0.10s; }
@@ -2244,11 +2380,13 @@ $extraHead = <<<'HTML'
   /* Large desktop: 4-col stats */
   @media (max-width: 1200px) {
     .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .court-grid { grid-template-columns: repeat(3, 1fr); }
   }
 
   /* Tablet: collapse table → cards */
   @media (max-width: 900px) {
     .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .court-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .detail-grid { grid-template-columns: 1fr; }
     #orderDetailModal .proof-title { font-size: 16px; }
     .order-detail-body { padding: 12px 14px 16px; }
@@ -2345,6 +2483,21 @@ $extraHead = <<<'HTML'
     .stat-value.small {
       font-size: 17px;
       line-height: 1.15;
+    }
+    .court-summary-head {
+      font-size: 11px;
+      margin-bottom: 7px;
+    }
+    .court-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .court-card {
+      border-radius: 11px;
+      padding: 10px;
+    }
+    .court-value {
+      font-size: 20px;
     }
 
     .filter-card {
@@ -2456,19 +2609,49 @@ render_header([
 
       <!-- ── Stat Cards ──────────────────────────────────────── -->
       <div class="stat-grid">
-        <div class="stat-card">
+        <?php
+          $allCardParams = $cardFilterBaseParams;
+          $allCardHref = '/admin/dashboard' . ($allCardParams ? ('?' . http_build_query($allCardParams)) : '');
+        ?>
+        <a class="stat-card stat-card-link<?= ($selectedPackage <= 0 && $selectedCourt <= 0) ? ' is-active' : '' ?>" href="<?= h($allCardHref) ?>">
           <div class="stat-label"><i class="bi bi-basket"></i> Total Orders Accepted</div>
           <div class="stat-value"><?= (int)$totalOrders ?></div>
-        </div>
+        </a>
         <?php foreach ($packageSalesStats as $packageStat): ?>
-          <div class="stat-card">
+          <?php
+            $packageCardParams = $cardFilterBaseParams;
+            $packageCardParams['package'] = (int)($packageStat['id'] ?? 0);
+            $packageCardHref = '/admin/dashboard?' . http_build_query($packageCardParams);
+            $isPackageActive = $selectedPackage === (int)($packageStat['id'] ?? 0) && $selectedCourt <= 0;
+          ?>
+          <a class="stat-card stat-card-link<?= $isPackageActive ? ' is-active' : '' ?>" href="<?= h($packageCardHref) ?>">
             <div class="stat-label"><i class="bi bi-box-seam"></i> <?= h($packageStat['name']) ?></div>
             <div class="stat-value"><?= (int)$packageStat['qty'] ?></div>
-          </div>
+          </a>
         <?php endforeach; ?>
         <div class="stat-card">
           <div class="stat-label"><i class="bi bi-cash-stack"></i> Revenue Accepted</div>
           <div class="stat-value small"><?= h(rupiah($totalRevenue)) ?></div>
+        </div>
+      </div>
+      <div class="court-summary">
+        <div class="court-summary-head">
+          <span><i class="bi bi-grid-3x3-gap"></i> Court Attendee</span>
+        </div>
+        <div class="court-grid">
+          <?php for ($courtNo = 1; $courtNo <= 6; $courtNo++): ?>
+            <?php
+              $courtCardParams = $cardFilterBaseParams;
+              $courtCardParams['court'] = $courtNo;
+              $courtCardHref = '/admin/dashboard?' . http_build_query($courtCardParams);
+              $isCourtActive = $selectedCourt === $courtNo && $selectedPackage <= 0;
+            ?>
+            <a class="court-card court-card-link<?= $isCourtActive ? ' is-active' : '' ?>" href="<?= h($courtCardHref) ?>">
+              <div class="court-label">Court <?= (int)$courtNo ?></div>
+              <div class="court-value"><?= (int)($courtAttendeeCountMap[$courtNo] ?? 0) ?></div>
+              <div class="court-sub">attendee</div>
+            </a>
+          <?php endfor; ?>
         </div>
       </div>
 
@@ -2487,7 +2670,7 @@ render_header([
             Filter Orders
             <?php if ($hasActiveFilters): ?>
               <span class="filter-active-count"><?php
-                $fc = (int)($selectedOrderId > 0) + (int)($selectedName !== '') + (int)($selectedEmail !== '') + (int)($selectedDate !== '') + (int)($selectedStatus !== '') + (int)($selectedPackage > 0);
+                $fc = (int)($selectedOrderId > 0) + (int)($selectedName !== '') + (int)($selectedEmail !== '') + (int)($selectedDate !== '') + (int)($selectedStatus !== '') + (int)($selectedPackage > 0) + (int)($selectedCourt > 0);
                 echo $fc;
               ?></span>
             <?php endif; ?>
@@ -2531,6 +2714,15 @@ render_header([
               <?php foreach ($packages as $p): ?>
                 <option value="<?= (int)$p['id'] ?>" <?= $selectedPackage === (int)$p['id'] ? 'selected' : '' ?>><?= h($p['name']) ?></option>
               <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="filter-field filter-field-package">
+            <label class="field-label" for="filterCourt">Court</label>
+            <select id="filterCourt" name="court">
+              <option value="0">Semua Court</option>
+              <?php for ($courtNo = 1; $courtNo <= 6; $courtNo++): ?>
+                <option value="<?= (int)$courtNo ?>" <?= $selectedCourt === $courtNo ? 'selected' : '' ?>>Court <?= (int)$courtNo ?></option>
+              <?php endfor; ?>
             </select>
           </div>
           <div class="filter-actions">
@@ -3680,35 +3872,7 @@ render_header([
         });
       }
       function syncPayloadToButtons(orderId, attendeeId, courtNo) {
-        var latestMissingCount = 0;
-        document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
-          var raw = btn.getAttribute('data-order-detail') || '{}';
-          var payload = {};
-          try { payload = JSON.parse(raw); } catch (err) { payload = {}; }
-          if (Number(payload.order_id || 0) !== Number(orderId || 0)) return;
-          var attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
-          attendees.forEach(function(at) {
-            if (Number(at && at.attendee_id ? at.attendee_id : 0) === Number(attendeeId || 0)) {
-              at.court_no = toCourtNo(courtNo);
-            }
-          });
-          var missingCount = attendees.filter(function(at) {
-            var cn = toCourtNo(at && at.court_no ? at.court_no : 0);
-            return cn <= 0;
-          }).length;
-          payload.missing_court_count = missingCount;
-          btn.setAttribute('data-order-detail', JSON.stringify(payload));
-          latestMissingCount = missingCount;
-          var warnTitle = missingCount > 0 ? ('Masih ada ' + missingCount + ' attendee belum pilih court. Klik Detail untuk lengkapi.') : '';
-          btn.setAttribute('data-tooltip', warnTitle);
-          btn.classList.toggle('detail-warning', missingCount > 0);
-        });
-        document.querySelectorAll('[data-confirm-action="accept"]').forEach(function(btn) {
-          if (Number(btn.getAttribute('data-order-id') || 0) !== Number(orderId || 0)) return;
-          btn.setAttribute('data-court-missing', String(Math.max(0, latestMissingCount)));
-        });
-      }
-      function syncPayloadPackageChange(orderId, attendeeId, packageId, packageName, orderTotal) {
+        var latestMissingCount = 0;        
         function rebuildItemsFromAttendees(attendees) {
           var summary = {};
           (Array.isArray(attendees) ? attendees : []).forEach(function(at) {
@@ -3741,7 +3905,34 @@ render_header([
             return String(a && a.package_name ? a.package_name : '').localeCompare(String(b && b.package_name ? b.package_name : ''));
           });
         }
-
+        document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
+          var raw = btn.getAttribute('data-order-detail') || '{}';
+          var payload = {};
+          try { payload = JSON.parse(raw); } catch (err) { payload = {}; }
+          if (Number(payload.order_id || 0) !== Number(orderId || 0)) return;
+          var attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
+          attendees.forEach(function(at) {
+            if (Number(at && at.attendee_id ? at.attendee_id : 0) === Number(attendeeId || 0)) {
+              at.court_no = toCourtNo(courtNo);
+            }
+          });
+          var missingCount = attendees.filter(function(at) {
+            var cn = toCourtNo(at && at.court_no ? at.court_no : 0);
+            return cn <= 0;
+          }).length;
+          payload.missing_court_count = missingCount;
+          btn.setAttribute('data-order-detail', JSON.stringify(payload));
+          latestMissingCount = missingCount;
+          var warnTitle = missingCount > 0 ? ('Masih ada ' + missingCount + ' attendee belum pilih court. Klik Detail untuk lengkapi.') : '';
+          btn.setAttribute('data-tooltip', warnTitle);
+          btn.classList.toggle('detail-warning', missingCount > 0);
+        });
+        document.querySelectorAll('[data-confirm-action="accept"]').forEach(function(btn) {
+          if (Number(btn.getAttribute('data-order-id') || 0) !== Number(orderId || 0)) return;
+          btn.setAttribute('data-court-missing', String(Math.max(0, latestMissingCount)));
+        });
+      }
+      function syncPayloadPackageChange(orderId, attendeeId, packageId, packageName, orderTotal) {
         document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
           var raw = btn.getAttribute('data-order-detail') || '{}';
           var payload = {};
@@ -3766,6 +3957,7 @@ render_header([
           btn.setAttribute('data-order-detail', JSON.stringify(payload));
         });
       }
+
       function renderDetailItems(items) {
         clearList(detailItems);
         (Array.isArray(items) ? items : []).forEach(function(it) {
