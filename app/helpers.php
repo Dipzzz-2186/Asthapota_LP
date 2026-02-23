@@ -393,6 +393,7 @@ function ensure_order_qr_schema(PDO $db): void {
             'qr_token' => "ALTER TABLE orders ADD COLUMN qr_token VARCHAR(64) NULL AFTER status",
             'qr_sent_at' => "ALTER TABLE orders ADD COLUMN qr_sent_at DATETIME NULL AFTER qr_token",
             'checked_in_at' => "ALTER TABLE orders ADD COLUMN checked_in_at DATETIME NULL AFTER qr_sent_at",
+            'package_qr_rotated_at' => "ALTER TABLE orders ADD COLUMN package_qr_rotated_at DATETIME NULL AFTER checked_in_at",
         ];
 
         $checkStmt = $db->prepare(

@@ -384,6 +384,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newPackageId = (int)($_POST['new_package_id'] ?? 0);
         $updatedPackageName = '';
         $updatedOrderTotal = null;
+        $packageChangeEmailPayload = null;
+        $packageChangeEmailMeta = null;
 
         if ($orderId <= 0 || $attendeeId <= 0 || $newPackageId <= 0) {
             $flash['error'] = 'Data perubahan package attendee tidak valid.';
@@ -400,6 +402,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             o.id,
                             o.status,
                             o.qr_token,
+                            o.package_qr_rotated_at,
                             u.email,
                             u.full_name,
                             oa.id AS attendee_id,
@@ -425,9 +428,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $flash['error'] = 'Package attendee yang sudah check-in tidak bisa diubah.';
                     } else {
                         $oldPackageId = (int)($row['old_package_id'] ?? 0);
+                        $oldPackageName = trim((string)($row['old_package_name'] ?? ''));
+                        $attendeeName = trim((string)($row['attendee_name'] ?? ''));
                         if ($oldPackageId === $newPackageId) {
                             $flash['success'] = 'Package attendee sudah sesuai, tidak ada perubahan.';
-                            $updatedPackageName = (string)($row['old_package_name'] ?? '');
+                            $updatedPackageName = $oldPackageName;
                         } else {
                             $db->beginTransaction();
 
@@ -469,12 +474,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $recalculatedTotal = (int)($totalStmt->fetchColumn() ?: 0);
                             $updTotalStmt = $db->prepare('UPDATE orders SET total = ? WHERE id = ?');
                             $updTotalStmt->execute([$recalculatedTotal, $orderId]);
+
                             $updatedPackageName = (string)($newPackageRow['name'] ?? '');
                             $updatedOrderTotal = $recalculatedTotal;
+
+                            $hasRotatedBefore = !empty($row['package_qr_rotated_at']);
+                            if (!$hasRotatedBefore) {
+                                // First package change only: issue and send a new QR token.
+                                $newQrToken = strtolower(bin2hex(random_bytes(24)));
+                                $rotateAt = date('Y-m-d H:i:s');
+                                $updQrStmt = $db->prepare('UPDATE orders SET qr_token = ?, qr_sent_at = ?, package_qr_rotated_at = ? WHERE id = ?');
+                                $updQrStmt->execute([$newQrToken, $rotateAt, $rotateAt, $orderId]);
+                                $packageChangeEmailPayload = [
+                                    'id' => $orderId,
+                                    'full_name' => (string)($row['full_name'] ?? ''),
+                                    'qr_token' => $newQrToken,
+                                ];
+                                $packageChangeEmailMeta = [
+                                    'attendee_name' => $attendeeName !== '' ? $attendeeName : ('Attendee #' . $attendeeId),
+                                    'old_package' => $oldPackageName !== '' ? $oldPackageName : ('Package #' . $oldPackageId),
+                                    'new_package' => $updatedPackageName !== '' ? $updatedPackageName : ('Package #' . $newPackageId),
+                                ];
+                            }
 
                             $db->commit();
 
                             $flash['success'] = 'Package attendee berhasil diubah.';
+                            $toEmail = strtolower(trim((string)($row['email'] ?? '')));
+                            if (
+                                $packageChangeEmailPayload !== null
+                                && $packageChangeEmailMeta !== null
+                                && $toEmail !== ''
+                                && filter_var($toEmail, FILTER_VALIDATE_EMAIL)
+                            ) {
+                                $emailSent = send_attendee_package_changed_email($packageChangeEmailPayload, $toEmail, $packageChangeEmailMeta);
+                                if (!$emailSent) {
+                                    $flash['success'] = 'Package attendee berhasil diubah, tetapi email QR baru gagal dikirim.';
+                                }
+                            }
                         }
                     }
                 }
