@@ -1079,8 +1079,54 @@ render_header([
   var screens = [idle,picker,welcome];
   var scanner=null,scanning=false,busy=false,hwBuf='',hwTs=0;
   var welcomeHoldMs = 8 * 1000;
+  var welcomeAudio = null;
   var DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
   var MONTHS=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+  function getWelcomeAudio(){
+    if (welcomeAudio) return welcomeAudio;
+    try {
+      welcomeAudio = new Audio('/assets/video/suara.mp3');
+      welcomeAudio.preload = 'auto';
+      welcomeAudio.volume = 1;
+      return welcomeAudio;
+    } catch (e) {
+      return null;
+    }
+  }
+  function primeWelcomeAudio(){
+    var audio = getWelcomeAudio();
+    if (!audio) return;
+    try {
+      audio.muted = true;
+      var p = audio.play();
+      if (p && typeof p.then === 'function') {
+        p.then(function(){
+          audio.pause();
+          audio.currentTime = 0;
+          audio.muted = false;
+        }).catch(function(){
+          audio.muted = false;
+        });
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.muted = false;
+      }
+    } catch (e) {
+      audio.muted = false;
+    }
+  }
+  function playWelcomeAudio(){
+    var audio = getWelcomeAudio();
+    if (!audio) return;
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.muted = false;
+      audio.play().catch(function(){});
+    } catch (e) {}
+  }
 
   function updateStageBanner(el) {
     if (!stageEl) return;
@@ -1302,6 +1348,7 @@ render_header([
     post({mode:'checkin',token:token||'',attendee_id:id||0})
       .then(function(d){
         if(!d||!d.ok){showErr((d&&d.message)||'Check-in gagal.');return;}
+        playWelcomeAudio();
         showWelcome(d,name);if(mInput)mInput.value='';
       })
       .catch(function(e){showErr(e&&e.message?e.message:'Gagal koneksi ke server.');})
@@ -1333,7 +1380,10 @@ render_header([
     });
   });
   btnStop.addEventListener('click',stopCam);
-  mForm.addEventListener('submit',function(e){e.preventDefault();verify(mInput.value||'');});
+  mForm.addEventListener('submit',function(e){e.preventDefault();primeWelcomeAudio();verify(mInput.value||'');});
+  ['pointerdown','keydown','touchstart'].forEach(function(evt){
+    document.addEventListener(evt, primeWelcomeAudio, { once:true, passive:true });
+  });
 
   /* Barcode gun */
   document.addEventListener('keydown',function(e){
