@@ -445,31 +445,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 throw new RuntimeException('Gagal memperbarui package attendee.');
                             }
 
-                            // Move exactly 1 ticket in order_items: old package -> new package.
-                            $oldItemStmt = $db->prepare('SELECT qty FROM order_items WHERE order_id = ? AND package_id = ? LIMIT 1');
-                            $oldItemStmt->execute([$orderId, $oldPackageId]);
-                            $oldQty = (int)($oldItemStmt->fetchColumn() ?: 0);
-                            if ($oldQty <= 0) {
-                                throw new RuntimeException('Data order_items untuk package lama tidak valid.');
-                            }
+                            // Rebuild order_items from attendee rows to avoid mismatch issues.
+                            $rebuildStmt = $db->prepare(
+                                'SELECT oa.package_id, COUNT(*) AS qty, COALESCE(MAX(p.price), 0) AS price
+                                 FROM order_attendees oa
+                                 LEFT JOIN packages p ON p.id = oa.package_id
+                                 WHERE oa.order_id = ? AND oa.package_id IS NOT NULL AND oa.package_id > 0
+                                 GROUP BY oa.package_id'
+                            );
+                            $rebuildStmt->execute([$orderId]);
+                            $rebuiltItems = $rebuildStmt->fetchAll(PDO::FETCH_ASSOC);
 
-                            if ($oldQty <= 1) {
-                                $delOldItemStmt = $db->prepare('DELETE FROM order_items WHERE order_id = ? AND package_id = ?');
-                                $delOldItemStmt->execute([$orderId, $oldPackageId]);
-                            } else {
-                                $decOldItemStmt = $db->prepare('UPDATE order_items SET qty = qty - 1 WHERE order_id = ? AND package_id = ?');
-                                $decOldItemStmt->execute([$orderId, $oldPackageId]);
-                            }
+                            $clearItemsStmt = $db->prepare('DELETE FROM order_items WHERE order_id = ?');
+                            $clearItemsStmt->execute([$orderId]);
 
-                            $newItemStmt = $db->prepare('SELECT qty FROM order_items WHERE order_id = ? AND package_id = ? LIMIT 1');
-                            $newItemStmt->execute([$orderId, $newPackageId]);
-                            $newQty = (int)($newItemStmt->fetchColumn() ?: 0);
-                            if ($newQty > 0) {
-                                $incNewItemStmt = $db->prepare('UPDATE order_items SET qty = qty + 1 WHERE order_id = ? AND package_id = ?');
-                                $incNewItemStmt->execute([$orderId, $newPackageId]);
-                            } else {
-                                $insNewItemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
-                                $insNewItemStmt->execute([$orderId, $newPackageId, 1, max(0, (int)($newPackageRow['price'] ?? 0))]);
+                            if ($rebuiltItems) {
+                                $insertItemStmt = $db->prepare('INSERT INTO order_items (order_id, package_id, qty, price) VALUES (?, ?, ?, ?)');
+                                foreach ($rebuiltItems as $itemRow) {
+                                    $rebuiltPackageId = (int)($itemRow['package_id'] ?? 0);
+                                    $rebuiltQty = max(0, (int)($itemRow['qty'] ?? 0));
+                                    if ($rebuiltPackageId <= 0 || $rebuiltQty <= 0) {
+                                        continue;
+                                    }
+                                    $rebuiltPrice = max(0, (int)($itemRow['price'] ?? 0));
+                                    $insertItemStmt->execute([$orderId, $rebuiltPackageId, $rebuiltQty, $rebuiltPrice]);
+                                }
                             }
 
                             $totalStmt = $db->prepare('SELECT COALESCE(SUM(qty * price), 0) FROM order_items WHERE order_id = ?');
@@ -563,7 +563,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($newStatus === 'accepted') {
                     $missingCourtCount = 0;
                     try {
-                        $missingCourtStmt = $db->prepare("SELECT COUNT(*) FROM order_attendees WHERE order_id = ? AND (court_no IS NULL OR court_no < 1 OR court_no > 6)");
+                        $missingCourtStmt = $db->prepare(
+                            "SELECT COUNT(*)
+                             FROM order_attendees oa
+                             LEFT JOIN packages p ON p.id = oa.package_id
+                             WHERE oa.order_id = ?
+                               AND (oa.court_no IS NULL OR oa.court_no < 1 OR oa.court_no > 6)
+                               AND (p.name IS NULL OR LOWER(TRIM(p.name)) <> 'package c')"
+                        );
                         $missingCourtStmt->execute([$orderId]);
                         $missingCourtCount = (int)$missingCourtStmt->fetchColumn();
                     } catch (Throwable $e) {
@@ -880,8 +887,11 @@ if ($orderIds) {
             if (!isset($orderMissingCourtCountMap[$oid])) $orderMissingCourtCountMap[$oid] = 0;
             $courtNo = (int)($row['court_no'] ?? 0);
             $packageId = (int)($row['package_id'] ?? 0);
+            $packageName = trim((string)($row['package_name'] ?? ''));
             if ($courtNo < 1 || $courtNo > 6) {
-                $orderMissingCourtCountMap[$oid]++;
+                if (strcasecmp($packageName, 'Package C') !== 0) {
+                    $orderMissingCourtCountMap[$oid]++;
+                }
             }
             $includeAttendeeInDetail = true;
             if ($selectedCourt > 0 && $courtNo !== $selectedCourt) {
@@ -3898,6 +3908,10 @@ render_header([
       function statusLabel(s) { return s === 'paid' ? 'Paid' : s === 'accepted' ? 'Accepted' : s === 'rejected' ? 'Rejected' : (s || '-'); }
       function courtLabel(courtNo) { return Number(courtNo) > 0 ? ('Court ' + Number(courtNo)) : ''; }
       function toCourtNo(raw) { var n = Number(raw || 0); return n >= 1 && n <= 6 ? n : 0; }
+      function isPackageCName(rawName) {
+        var normalized = String(rawName == null ? '' : rawName).trim().toLowerCase();
+        return normalized === 'package c';
+      }
       var detailNoticeTimer = null;
       function showDetailNotice(message, type) {
         if (!screenNotice) {
@@ -4047,6 +4061,7 @@ render_header([
             }
           });
           var missingCount = attendees.filter(function(at) {
+            if (isPackageCName(at && at.package_name ? at.package_name : '')) return false;
             var cn = toCourtNo(at && at.court_no ? at.court_no : 0);
             return cn <= 0;
           }).length;
@@ -4065,6 +4080,7 @@ render_header([
       }
       function syncPayloadPackageChange(orderId, attendeeId, packageId, packageName, orderTotal) {
         var previousPackageId = 0;
+        var latestMissingCount = 0;
         document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
           var raw = btn.getAttribute('data-order-detail') || '{}';
           var payload = {};
@@ -4089,7 +4105,21 @@ render_header([
               return sum + Number(it && it.subtotal ? it.subtotal : 0);
             }, 0);
           }
+          var missingCount = attendees.filter(function(at) {
+            if (isPackageCName(at && at.package_name ? at.package_name : '')) return false;
+            var cn = toCourtNo(at && at.court_no ? at.court_no : 0);
+            return cn <= 0;
+          }).length;
+          payload.missing_court_count = missingCount;
           btn.setAttribute('data-order-detail', JSON.stringify(payload));
+          latestMissingCount = missingCount;
+          var warnTitle = missingCount > 0 ? ('Masih ada ' + missingCount + ' attendee belum pilih court. Klik Detail untuk lengkapi.') : '';
+          btn.setAttribute('data-tooltip', warnTitle);
+          btn.classList.toggle('detail-warning', missingCount > 0);
+        });
+        document.querySelectorAll('[data-confirm-action="accept"]').forEach(function(btn) {
+          if (Number(btn.getAttribute('data-order-id') || 0) !== Number(orderId || 0)) return;
+          btn.setAttribute('data-court-missing', String(Math.max(0, latestMissingCount)));
         });
         bumpPackageCards(previousPackageId, packageId);
       }
@@ -4163,6 +4193,7 @@ render_header([
           var packageId = Number(at && at.package_id ? at.package_id : 0);
           var name = at && at.attendee_name ? String(at.attendee_name) : '-';
           var pkg = at && at.package_name ? String(at.package_name) : '';
+          var isPackageC = isPackageCName(pkg);
           var courtNo = toCourtNo(at && at.court_no ? at.court_no : 0);
           var court = courtLabel(courtNo);
           var checkedInAt = at && at.checked_in_at ? String(at.checked_in_at) : '';
@@ -4175,7 +4206,7 @@ render_header([
             + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>'
             + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '')
             + '</div>';
-          if (attendeeId > 0 && !checkedInAt) {
+          if (attendeeId > 0 && !checkedInAt && !isPackageC) {
             var selectedCourt = courtNo > 0 ? courtNo : 1;
             var courtWrap = document.createElement('div');
             courtWrap.className = 'detail-attendee-court-actions';
@@ -4253,6 +4284,11 @@ render_header([
                     if (mainWrap) mainWrap.appendChild(pkgBadge);
                   }
                   pkgBadge.textContent = '[' + selectedPackageName + ']';
+                  var selectedIsPackageC = isPackageCName(selectedPackageName);
+                  var courtWrap = li.querySelector('.detail-attendee-court-actions');
+                  if (selectedIsPackageC && courtWrap) {
+                    courtWrap.remove();
+                  }
                   Array.prototype.forEach.call(select.options, function(opt) {
                     var oid = Number(opt.value || 0);
                     var optRef = packageOptions.find(function(option) { return Number(option && option.id ? option.id : 0) === oid; });
