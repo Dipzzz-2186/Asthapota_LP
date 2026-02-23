@@ -2751,7 +2751,7 @@ render_header([
         <?php endforeach; ?>
         <div class="stat-card">
           <div class="stat-label"><i class="bi bi-cash-stack"></i> Revenue Accepted</div>
-          <div class="stat-value small"><?= h(rupiah($totalRevenue)) ?></div>
+          <div class="stat-value small" data-revenue-accepted-value="<?= (int)$totalRevenue ?>"><?= h(rupiah($totalRevenue)) ?></div>
         </div>
       </div>
       <div class="court-summary">
@@ -4107,6 +4107,26 @@ render_header([
           bumpCardValue('[data-package-card-value="' + nextId + '"]', 1);
         }
       }
+      function getAcceptedRevenueValue(el) {
+        if (!el) return 0;
+        var fromData = Number(el.getAttribute('data-revenue-accepted-value') || 0);
+        if (!isNaN(fromData) && fromData > 0) return fromData;
+        var fromText = Number(String(el.textContent || '').replace(/[^\d-]/g, '') || 0);
+        return isNaN(fromText) ? 0 : fromText;
+      }
+      function setAcceptedRevenueValue(el, value) {
+        if (!el) return;
+        var safe = Math.max(0, Number(value || 0));
+        el.setAttribute('data-revenue-accepted-value', String(safe));
+        el.textContent = asCurrency(safe);
+      }
+      function bumpAcceptedRevenue(delta) {
+        if (!delta) return;
+        var el = document.querySelector('[data-revenue-accepted-value]');
+        if (!el) return;
+        var current = getAcceptedRevenueValue(el);
+        setAcceptedRevenueValue(el, current + Number(delta || 0));
+      }
       function syncPayloadToButtons(orderId, attendeeId, courtNo) {
         var latestMissingCount = 0;
         var previousCourtNo = 0;
@@ -4146,11 +4166,15 @@ render_header([
         var previousPackageId = 0;
         var latestMissingCount = 0;
         var nextIsPackageC = isPackageCName(packageName);
+        var revenueDelta = 0;
+        var revenueAdjusted = false;
         document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
           var raw = btn.getAttribute('data-order-detail') || '{}';
           var payload = {};
           try { payload = JSON.parse(raw); } catch (err) { payload = {}; }
           if (Number(payload.order_id || 0) !== Number(orderId || 0)) return;
+          var previousOrderTotal = Number(payload.total || 0);
+          if (isNaN(previousOrderTotal) || previousOrderTotal < 0) previousOrderTotal = 0;
           var attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
           attendees.forEach(function(at) {
             if (Number(at && at.attendee_id ? at.attendee_id : 0) === Number(attendeeId || 0)) {
@@ -4173,6 +4197,12 @@ render_header([
               return sum + Number(it && it.subtotal ? it.subtotal : 0);
             }, 0);
           }
+          var nextOrderTotal = Number(payload.total || 0);
+          if (isNaN(nextOrderTotal) || nextOrderTotal < 0) nextOrderTotal = 0;
+          if (!revenueAdjusted && String(payload.status || '').toLowerCase() === 'accepted') {
+            revenueDelta = nextOrderTotal - previousOrderTotal;
+            revenueAdjusted = true;
+          }
           var missingCount = attendees.filter(function(at) {
             if (isPackageCName(at && at.package_name ? at.package_name : '')) return false;
             var cn = toCourtNo(at && at.court_no ? at.court_no : 0);
@@ -4190,6 +4220,7 @@ render_header([
           btn.setAttribute('data-court-missing', String(Math.max(0, latestMissingCount)));
         });
         bumpPackageCards(previousPackageId, packageId);
+        bumpAcceptedRevenue(revenueDelta);
       }
 
       function renderDetailItems(items) {
