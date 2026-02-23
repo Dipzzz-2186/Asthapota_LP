@@ -1742,6 +1742,7 @@ $extraHead = <<<'HTML'
     vertical-align: middle;
     color: var(--text);
     font-weight: 500;
+    position: relative;
   }
 
   table.admin-table tbody tr { transition: background 0.15s ease; }
@@ -1805,7 +1806,19 @@ $extraHead = <<<'HTML'
   .proof-link:hover { background: rgba(0,102,255,0.07); border-color: var(--primary); transform: translateY(-1px); }
 
   /* ─── Action Group ───────────────────────────────────────── */
-  .action-group { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  table.admin-table td:nth-child(8) {
+    z-index: 40;
+    overflow: visible;
+  }
+
+  .action-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 2200;
+  }
 
   .action-group .btn.small {
     padding: 5px 10px;
@@ -1839,7 +1852,7 @@ $extraHead = <<<'HTML'
     visibility: hidden;
     pointer-events: none;
     transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
-    z-index: 45;
+    z-index: 2205;
   }
   .btn.detail-warning[data-tooltip]:not([data-tooltip=""])::after {
     content: attr(data-tooltip);
