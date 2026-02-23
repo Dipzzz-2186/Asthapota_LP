@@ -639,7 +639,11 @@ $params = [];
 if ($selectedOrderId > 0) { $whereParts[] = "o.id = ?"; $params[] = $selectedOrderId; }
 if ($selectedPackage > 0) { $whereParts[] = "EXISTS (SELECT 1 FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id AND p.id = ?)"; $params[] = $selectedPackage; }
 if ($selectedCourt > 0) { $whereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa WHERE oa.order_id = o.id AND oa.court_no = ?)"; $params[] = $selectedCourt; }
-if ($selectedName !== '') { $whereParts[] = "u.full_name LIKE ?"; $params[] = '%' . $selectedName . '%'; }
+if ($selectedName !== '') {
+    $whereParts[] = "(u.full_name LIKE ? OR EXISTS (SELECT 1 FROM order_attendees oa_name WHERE oa_name.order_id = o.id AND oa_name.attendee_name LIKE ?))";
+    $params[] = '%' . $selectedName . '%';
+    $params[] = '%' . $selectedName . '%';
+}
 if ($selectedEmail !== '') { $whereParts[] = "u.email LIKE ?"; $params[] = '%' . $selectedEmail . '%'; }
 if ($selectedDate !== '') { $whereParts[] = "DATE(o.created_at) = ?"; $params[] = $selectedDate; }
 if ($selectedStatus === 'paid' || $selectedStatus === 'accepted' || $selectedStatus === 'rejected') { $whereParts[] = "o.status = ?"; $params[] = $selectedStatus; }
@@ -652,7 +656,11 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
     if ($selectedOrderId > 0) { $exportWhereParts[] = "o.id = ?"; $exportParams[] = $selectedOrderId; }
     if ($selectedPackage > 0) { $exportWhereParts[] = "EXISTS (SELECT 1 FROM order_items oi JOIN packages p ON p.id = oi.package_id WHERE oi.order_id = o.id AND p.id = ?)"; $exportParams[] = $selectedPackage; }
     if ($selectedCourt > 0) { $exportWhereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa WHERE oa.order_id = o.id AND oa.court_no = ?)"; $exportParams[] = $selectedCourt; }
-    if ($selectedName !== '') { $exportWhereParts[] = "u.full_name LIKE ?"; $exportParams[] = '%' . $selectedName . '%'; }
+    if ($selectedName !== '') {
+        $exportWhereParts[] = "(u.full_name LIKE ? OR EXISTS (SELECT 1 FROM order_attendees oa_name WHERE oa_name.order_id = o.id AND oa_name.attendee_name LIKE ?))";
+        $exportParams[] = '%' . $selectedName . '%';
+        $exportParams[] = '%' . $selectedName . '%';
+    }
     if ($selectedEmail !== '') { $exportWhereParts[] = "u.email LIKE ?"; $exportParams[] = '%' . $selectedEmail . '%'; }
     if ($selectedDate !== '') { $exportWhereParts[] = "DATE(o.created_at) = ?"; $exportParams[] = $selectedDate; }
     $exportWhereSql = ' WHERE ' . implode(' AND ', $exportWhereParts);
@@ -750,7 +758,11 @@ foreach ($packages as $pkg) {
 $packageSalesWhereParts = ['1=1'];
 $packageSalesParams = [];
 if ($selectedOrderId > 0) { $packageSalesWhereParts[] = "o.id = ?"; $packageSalesParams[] = $selectedOrderId; }
-if ($selectedName !== '') { $packageSalesWhereParts[] = "u.full_name LIKE ?"; $packageSalesParams[] = '%' . $selectedName . '%'; }
+if ($selectedName !== '') {
+    $packageSalesWhereParts[] = "(u.full_name LIKE ? OR EXISTS (SELECT 1 FROM order_attendees oa_name WHERE oa_name.order_id = o.id AND oa_name.attendee_name LIKE ?))";
+    $packageSalesParams[] = '%' . $selectedName . '%';
+    $packageSalesParams[] = '%' . $selectedName . '%';
+}
 if ($selectedEmail !== '') { $packageSalesWhereParts[] = "u.email LIKE ?"; $packageSalesParams[] = '%' . $selectedEmail . '%'; }
 if ($selectedDate !== '') { $packageSalesWhereParts[] = "DATE(o.created_at) = ?"; $packageSalesParams[] = $selectedDate; }
 if ($selectedStatus === 'paid' || $selectedStatus === 'accepted' || $selectedStatus === 'rejected') { $packageSalesWhereParts[] = "o.status = ?"; $packageSalesParams[] = $selectedStatus; }
@@ -1072,12 +1084,17 @@ $extraHead = <<<'HTML'
     box-shadow: 0 1px 8px rgba(0,0,0,0.03);
     display: grid;
     gap: 3px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
   .court-card-link {
     display: grid;
     color: inherit;
     text-decoration: none;
     cursor: pointer;
+  }
+  .court-card-link:hover {
+    border-color: rgba(0, 102, 255, 0.45);
+    box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.12);
   }
   .court-card-link:focus-visible {
     outline: 2px solid rgba(0, 102, 255, 0.45);
@@ -1123,6 +1140,10 @@ $extraHead = <<<'HTML'
     color: inherit;
     text-decoration: none;
     cursor: pointer;
+  }
+  .stat-card-link:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
   }
   .stat-card-link:focus-visible {
     outline: 2px solid rgba(0, 102, 255, 0.45);
