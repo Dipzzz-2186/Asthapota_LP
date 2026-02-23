@@ -214,7 +214,11 @@ function render_payment_proof_buttons(array $proofPaths): string {
 }
 
 function send_invoice_email(array $order, array $items, string $toEmail, array $attendeeDetails = []): bool {
-    $subject = 'Asthapora - Invoice Order #' . (int)$order['id'];
+    $customerName = trim((string)($order['full_name'] ?? ''));
+    if ($customerName === '') {
+        $customerName = 'Pelanggan';
+    }
+    $subject = 'Asthapora - Invoice ' . $customerName;
 
     $rows = '';
     foreach ($items as $it) {
@@ -631,7 +635,11 @@ function render_admin_attendee_rows(array $attendees): string {
 }
 
 function send_admin_order_paid_email(array $order, array $items, string $toEmail, array $attendeeDetails = []): bool {
-    $subject = 'Asthapora - Order Paid #' . (int)($order['id'] ?? 0);
+    $customerName = trim((string)($order['full_name'] ?? ''));
+    if ($customerName === '') {
+        $customerName = 'Pelanggan';
+    }
+    $subject = 'Asthapora - Order Paid ' . $customerName;
     $safeName = htmlspecialchars((string)($order['full_name'] ?? '-'), ENT_QUOTES, 'UTF-8');
     $safeEmail = htmlspecialchars((string)($order['email'] ?? '-'), ENT_QUOTES, 'UTF-8');
     $safePhone = htmlspecialchars((string)($order['phone'] ?? '-'), ENT_QUOTES, 'UTF-8');
@@ -805,7 +813,11 @@ function send_order_status_email(array $order, string $toEmail): bool {
         ? '<p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#6d3640;">Pesanan ini dinyatakan <strong>ditolak</strong>. Jika kamu butuh bantuan atau ingin melakukan pemesanan ulang, silakan hubungi tim panitia.</p>'
         : '';
 
-    $subject = 'Asthapora - Order #' . (int)$order['id'] . ' ' . $statusLabel;
+    $customerName = trim((string)($order['full_name'] ?? ''));
+    if ($customerName === '') {
+        $customerName = 'Pelanggan';
+    }
+    $subject = 'Asthapora - ' . $customerName . ' ' . $statusLabel;
     $body = '
       <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
         <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
@@ -846,11 +858,15 @@ function send_attendee_package_changed_email(array $order, string $toEmail, arra
     $safeOldPackage = htmlspecialchars((string)($change['old_package'] ?? '-'), ENT_QUOTES, 'UTF-8');
     $safeNewPackage = htmlspecialchars((string)($change['new_package'] ?? '-'), ENT_QUOTES, 'UTF-8');
     $safeOrderId = (int)($order['id'] ?? 0);
+    $subjectName = trim((string)($order['full_name'] ?? ''));
+    if ($subjectName === '') {
+        $subjectName = 'Pelanggan';
+    }
     $safeQrImage = htmlspecialchars($qrImageUrl, ENT_QUOTES, 'UTF-8');
     $safeToken = htmlspecialchars($token, ENT_QUOTES, 'UTF-8');
     $safeScanUrl = htmlspecialchars($scanUrl, ENT_QUOTES, 'UTF-8');
 
-    $subject = 'Asthapora - QR Baru Order #' . $safeOrderId;
+    $subject = 'Asthapora - QR Baru ' . $subjectName;
     $body = '
       <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f7ff;padding:24px;">
         <div style="max-width:540px;margin:0 auto;background:#ffffff;border-radius:16px;box-shadow:0 8px 20px rgba(12,27,54,0.12);overflow:hidden;">
