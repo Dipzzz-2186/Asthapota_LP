@@ -2703,9 +2703,9 @@ render_header([
             $packageCardHref = '/admin/dashboard?' . http_build_query($packageCardParams);
             $isPackageActive = $selectedPackage === (int)($packageStat['id'] ?? 0) && $selectedCourt <= 0;
           ?>
-          <a class="stat-card stat-card-link<?= $isPackageActive ? ' is-active' : '' ?>" href="<?= h($packageCardHref) ?>">
+          <a class="stat-card stat-card-link<?= $isPackageActive ? ' is-active' : '' ?>" href="<?= h($packageCardHref) ?>" data-package-card-id="<?= (int)($packageStat['id'] ?? 0) ?>">
             <div class="stat-label"><i class="bi bi-box-seam"></i> <?= h($packageStat['name']) ?></div>
-            <div class="stat-value"><?= (int)$packageStat['qty'] ?></div>
+            <div class="stat-value" data-package-card-value="<?= (int)($packageStat['id'] ?? 0) ?>"><?= (int)$packageStat['qty'] ?></div>
           </a>
         <?php endforeach; ?>
         <div class="stat-card">
@@ -2725,9 +2725,9 @@ render_header([
               $courtCardHref = '/admin/dashboard?' . http_build_query($courtCardParams);
               $isCourtActive = $selectedCourt === $courtNo && $selectedPackage <= 0;
             ?>
-            <a class="court-card court-card-link<?= $isCourtActive ? ' is-active' : '' ?>" href="<?= h($courtCardHref) ?>">
+            <a class="court-card court-card-link<?= $isCourtActive ? ' is-active' : '' ?>" href="<?= h($courtCardHref) ?>" data-court-card-no="<?= (int)$courtNo ?>">
               <div class="court-label">Court <?= (int)$courtNo ?></div>
-              <div class="court-value"><?= (int)($courtAttendeeCountMap[$courtNo] ?? 0) ?></div>
+              <div class="court-value" data-court-card-value="<?= (int)$courtNo ?>"><?= (int)($courtAttendeeCountMap[$courtNo] ?? 0) ?></div>
               <div class="court-sub">attendee</div>
             </a>
           <?php endfor; ?>
@@ -3960,40 +3960,78 @@ render_header([
           });
         });
       }
-      function syncPayloadToButtons(orderId, attendeeId, courtNo) {
-        var latestMissingCount = 0;        
-        function rebuildItemsFromAttendees(attendees) {
-          var summary = {};
-          (Array.isArray(attendees) ? attendees : []).forEach(function(at) {
-            var pid = Number(at && at.package_id ? at.package_id : 0);
-            if (pid <= 0) return;
-            var pkgRef = packageOptions.find(function(option) {
-              return Number(option && option.id ? option.id : 0) === pid;
-            });
-            var key = String(pid);
-            if (!summary[key]) {
-              summary[key] = {
-                package_name: (at && at.package_name ? String(at.package_name) : '') || (pkgRef ? String(pkgRef.name || '-') : ('Package #' + pid)),
-                qty: 0,
-                price: pkgRef ? Number(pkgRef.price || 0) : 0
-              };
-            }
-            summary[key].qty += 1;
+      function rebuildItemsFromAttendees(attendees) {
+        var summary = {};
+        (Array.isArray(attendees) ? attendees : []).forEach(function(at) {
+          var pid = Number(at && at.package_id ? at.package_id : 0);
+          if (pid <= 0) return;
+          var pkgRef = packageOptions.find(function(option) {
+            return Number(option && option.id ? option.id : 0) === pid;
           });
-          return Object.keys(summary).map(function(key) {
-            var row = summary[key];
-            var qty = Number(row && row.qty ? row.qty : 0);
-            var price = Number(row && row.price ? row.price : 0);
-            return {
-              package_name: String(row && row.package_name ? row.package_name : '-'),
-              qty: qty,
-              price: price,
-              subtotal: qty * price
+          var key = String(pid);
+          if (!summary[key]) {
+            summary[key] = {
+              package_name: (at && at.package_name ? String(at.package_name) : '') || (pkgRef ? String(pkgRef.name || '-') : ('Package #' + pid)),
+              qty: 0,
+              price: pkgRef ? Number(pkgRef.price || 0) : 0
             };
-          }).sort(function(a, b) {
-            return String(a && a.package_name ? a.package_name : '').localeCompare(String(b && b.package_name ? b.package_name : ''));
-          });
+          }
+          summary[key].qty += 1;
+        });
+        return Object.keys(summary).map(function(key) {
+          var row = summary[key];
+          var qty = Number(row && row.qty ? row.qty : 0);
+          var price = Number(row && row.price ? row.price : 0);
+          return {
+            package_name: String(row && row.package_name ? row.package_name : '-'),
+            qty: qty,
+            price: price,
+            subtotal: qty * price
+          };
+        }).sort(function(a, b) {
+          return String(a && a.package_name ? a.package_name : '').localeCompare(String(b && b.package_name ? b.package_name : ''));
+        });
+      }
+      function parseCardCountText(text) {
+        var raw = String(text == null ? '' : text).replace(/[^\d-]/g, '');
+        var n = Number(raw || 0);
+        return isNaN(n) ? 0 : n;
+      }
+      function setCardCount(el, value) {
+        if (!el) return;
+        var safe = Math.max(0, Number(value || 0));
+        el.textContent = String(safe);
+      }
+      function bumpCardValue(selector, delta) {
+        if (!selector || !delta) return;
+        var el = document.querySelector(selector);
+        if (!el) return;
+        var current = parseCardCountText(el.textContent);
+        setCardCount(el, current + Number(delta || 0));
+      }
+      function bumpCourtCards(oldCourtNo, newCourtNo) {
+        var oldNo = toCourtNo(oldCourtNo);
+        var nextNo = toCourtNo(newCourtNo);
+        if (oldNo > 0 && oldNo !== nextNo) {
+          bumpCardValue('[data-court-card-value="' + oldNo + '"]', -1);
         }
+        if (nextNo > 0 && nextNo !== oldNo) {
+          bumpCardValue('[data-court-card-value="' + nextNo + '"]', 1);
+        }
+      }
+      function bumpPackageCards(oldPackageId, newPackageId) {
+        var oldId = Number(oldPackageId || 0);
+        var nextId = Number(newPackageId || 0);
+        if (oldId > 0 && oldId !== nextId) {
+          bumpCardValue('[data-package-card-value="' + oldId + '"]', -1);
+        }
+        if (nextId > 0 && nextId !== oldId) {
+          bumpCardValue('[data-package-card-value="' + nextId + '"]', 1);
+        }
+      }
+      function syncPayloadToButtons(orderId, attendeeId, courtNo) {
+        var latestMissingCount = 0;
+        var previousCourtNo = 0;
         document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
           var raw = btn.getAttribute('data-order-detail') || '{}';
           var payload = {};
@@ -4002,6 +4040,9 @@ render_header([
           var attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
           attendees.forEach(function(at) {
             if (Number(at && at.attendee_id ? at.attendee_id : 0) === Number(attendeeId || 0)) {
+              if (previousCourtNo <= 0) {
+                previousCourtNo = toCourtNo(at && at.court_no ? at.court_no : 0);
+              }
               at.court_no = toCourtNo(courtNo);
             }
           });
@@ -4020,8 +4061,10 @@ render_header([
           if (Number(btn.getAttribute('data-order-id') || 0) !== Number(orderId || 0)) return;
           btn.setAttribute('data-court-missing', String(Math.max(0, latestMissingCount)));
         });
+        bumpCourtCards(previousCourtNo, courtNo);
       }
       function syncPayloadPackageChange(orderId, attendeeId, packageId, packageName, orderTotal) {
+        var previousPackageId = 0;
         document.querySelectorAll('[data-order-detail]').forEach(function(btn) {
           var raw = btn.getAttribute('data-order-detail') || '{}';
           var payload = {};
@@ -4030,6 +4073,9 @@ render_header([
           var attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
           attendees.forEach(function(at) {
             if (Number(at && at.attendee_id ? at.attendee_id : 0) === Number(attendeeId || 0)) {
+              if (previousPackageId <= 0) {
+                previousPackageId = Number(at && at.package_id ? at.package_id : 0);
+              }
               at.package_id = Number(packageId || 0);
               at.package_name = String(packageName || at.package_name || '');
             }
@@ -4045,6 +4091,7 @@ render_header([
           }
           btn.setAttribute('data-order-detail', JSON.stringify(payload));
         });
+        bumpPackageCards(previousPackageId, packageId);
       }
 
       function renderDetailItems(items) {
@@ -4277,6 +4324,7 @@ render_header([
             }
             badge.textContent = courtText;
             syncPayloadToButtons(orderId, attendeeId, courtNo);
+            showDetailNotice(resp.message || 'Court attendee berhasil diperbarui.', 'success');
             btn.textContent = 'Tersimpan';
             setTimeout(function() { btn.textContent = originalText; }, 1000);
           })
