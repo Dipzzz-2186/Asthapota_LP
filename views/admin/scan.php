@@ -1385,13 +1385,13 @@ render_header([
   var adOverlay = document.getElementById('adOverlay');
   var adVideoPlayer = document.getElementById('adVideoPlayer');
   var adIframePlayer = document.getElementById('adIframePlayer');
-  var idleDelay = 10000;
+  var idleDelay = 30000;
   var idleTimer = null;
   var overlayVisible = false;
   var pendingHide = false;
   var currentAdIndex = 0;
   var adTimer = null;
-  var remoteAdDuration = 25000;
+  var maxAdPlayMs = 60000;
   var currentScreenId = 'idle-screen';
   var cameraActive = false;
 
@@ -1440,7 +1440,7 @@ render_header([
 
   function scheduleRemoteAdvance() {
     clearAdTimer();
-    adTimer = window.setTimeout(moveToNextAd, remoteAdDuration);
+    adTimer = window.setTimeout(moveToNextAd, maxAdPlayMs);
   }
 
   function moveToNextAd() {
@@ -1472,6 +1472,7 @@ render_header([
       adVideoPlayer.volume = 1;
       adVideoPlayer.load();
       adVideoPlayer.play().catch(function () {});
+      adTimer = window.setTimeout(moveToNextAd, maxAdPlayMs);
     }
   }
 
