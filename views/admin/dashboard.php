@@ -725,46 +725,83 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
     $exportStmt->execute($exportParams);
     $exportRows = $exportStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $escapeCell = static function ($value): string {
+    $sanitizeCell = static function ($value): string {
         $text = trim((string)$value);
         $text = str_replace(["\r", "\n", "\t"], [' ', ' ', ' '], $text);
-        if ($text !== '' && preg_match('/^[=\-+@]/', $text)) $text = "'" . $text;
-        return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+        if ($text !== '' && preg_match('/^[=\-+@]/', $text)) {
+            $text = "'" . $text;
+        }
+        return $text;
+    };
+    $escapeXml = static function (string $value): string {
+        return htmlspecialchars($value, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    };
+    $xmlCell = static function (string $value, string $type = 'String', string $styleId = '') use ($escapeXml): string {
+        $styleAttr = $styleId !== '' ? ' ss:StyleID="' . $styleId . '"' : '';
+        return '<Cell' . $styleAttr . '><Data ss:Type="' . $type . '">' . $escapeXml($value) . '</Data></Cell>';
     };
 
     $fileName = 'Order_report-' . date('Ymd-His') . '.xls';
     header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
     header('Content-Disposition: attachment; filename="' . $fileName . '"');
     header('Cache-Control: max-age=0');
+    header('Pragma: public');
 
     echo "\xEF\xBB\xBF";
-    echo "<html><head><meta charset=\"UTF-8\"></head><body>";
-    echo "<table border=\"1\" cellspacing=\"0\" cellpadding=\"6\">";
-    echo "<tr>";
-    echo "<th>Order ID</th>";
-    echo "<th>Nama</th>";
-    echo "<th>No. HP</th>";
-    echo "<th>Email</th>";
-    echo "<th>Instagram</th>";
-    echo "<th>Paket</th>";
-    echo "<th>Total</th>";
-    echo "<th>Tanggal Dibuat</th>";
-    echo "<th>Status</th>";
-    echo "</tr>";
+    echo '<?xml version="1.0" encoding="UTF-8"?>';
+    echo '<?mso-application progid="Excel.Sheet"?>';
+    echo '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"';
+    echo ' xmlns:o="urn:schemas-microsoft-com:office:office"';
+    echo ' xmlns:x="urn:schemas-microsoft-com:office:excel"';
+    echo ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"';
+    echo ' xmlns:html="http://www.w3.org/TR/REC-html40">';
+    echo '<Styles>';
+    echo '<Style ss:ID="Header"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#DCE6F1" ss:Pattern="Solid"/></Style>';
+    echo '<Style ss:ID="Text"><NumberFormat ss:Format="@"/></Style>';
+    echo '<Style ss:ID="Number"><NumberFormat ss:Format="0"/></Style>';
+    echo '</Styles>';
+    echo '<Worksheet ss:Name="Orders">';
+    echo '<Table>';
+    echo '<Column ss:AutoFitWidth="1" ss:Width="70"/>';
+    echo '<Column ss:AutoFitWidth="1" ss:Width="170"/>';
+    echo '<Column ss:AutoFitWidth="1" ss:Width="110"/>';
+    echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
+    echo '<Column ss:AutoFitWidth="1" ss:Width="120"/>';
+    echo '<Column ss:AutoFitWidth="1" ss:Width="280"/>';
+    echo '<Column ss:AutoFitWidth="1" ss:Width="95"/>';
+    echo '<Column ss:AutoFitWidth="1" ss:Width="140"/>';
+    echo '<Column ss:AutoFitWidth="1" ss:Width="80"/>';
+
+    echo '<Row>';
+    echo $xmlCell('Order ID', 'String', 'Header');
+    echo $xmlCell('Nama', 'String', 'Header');
+    echo $xmlCell('No. HP', 'String', 'Header');
+    echo $xmlCell('Email', 'String', 'Header');
+    echo $xmlCell('Instagram', 'String', 'Header');
+    echo $xmlCell('Paket', 'String', 'Header');
+    echo $xmlCell('Total', 'String', 'Header');
+    echo $xmlCell('Tanggal Dibuat', 'String', 'Header');
+    echo $xmlCell('Status', 'String', 'Header');
+    echo '</Row>';
+
     foreach ($exportRows as $row) {
-        echo "<tr>";
-        echo "<td>" . $escapeCell($row['id'] ?? '') . "</td>";
-        echo "<td>" . $escapeCell($row['full_name'] ?? '') . "</td>";
-        echo "<td>" . $escapeCell($row['phone'] ?? '') . "</td>";
-        echo "<td>" . $escapeCell($row['email'] ?? '') . "</td>";
-        echo "<td>" . $escapeCell($row['instagram'] ?? '') . "</td>";
-        echo "<td>" . $escapeCell($row['items'] ?? '') . "</td>";
-        echo "<td>" . (int)($row['total'] ?? 0) . "</td>";
-        echo "<td>" . $escapeCell($row['created_at'] ?? '') . "</td>";
-        echo "<td>accepted</td>";
-        echo "</tr>";
+        echo '<Row>';
+        echo $xmlCell($sanitizeCell((string)($row['id'] ?? '')), 'String', 'Text');
+        echo $xmlCell($sanitizeCell((string)($row['full_name'] ?? '')), 'String', 'Text');
+        echo $xmlCell($sanitizeCell((string)($row['phone'] ?? '')), 'String', 'Text');
+        echo $xmlCell($sanitizeCell((string)($row['email'] ?? '')), 'String', 'Text');
+        echo $xmlCell($sanitizeCell((string)($row['instagram'] ?? '')), 'String', 'Text');
+        echo $xmlCell($sanitizeCell((string)($row['items'] ?? '')), 'String', 'Text');
+        echo $xmlCell((string)((int)($row['total'] ?? 0)), 'Number', 'Number');
+        echo $xmlCell($sanitizeCell((string)($row['created_at'] ?? '')), 'String', 'Text');
+        echo $xmlCell('accepted', 'String', 'Text');
+        echo '</Row>';
     }
-    echo "</table></body></html>";
+
+    echo '</Table>';
+    echo '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane></WorksheetOptions>';
+    echo '</Worksheet>';
+    echo '</Workbook>';
     exit;
 }
 
