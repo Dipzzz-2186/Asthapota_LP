@@ -2633,6 +2633,10 @@ $extraHead = <<<'HTML'
     }
 
     .stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-card--revenue-top {
+      grid-column: 1 / -1;
+      min-height: 118px;
+    }
     .stat-card {
       border-radius: 14px;
       padding: 14px;
@@ -2735,7 +2739,6 @@ $extraHead = <<<'HTML'
 
   /* Extra small */
   @media (max-width: 400px) {
-    .stat-grid { grid-template-columns: 1fr; }
     .admin-container-wide { padding-inline: 10px; }
   }
 </style>
@@ -2789,10 +2792,16 @@ render_header([
           <div class="stat-label"><i class="bi bi-basket"></i> Total Orders Accepted</div>
           <div class="stat-value"><?= (int)$totalOrders ?></div>
         </a>
-        <div class="stat-card">
+        <?php
+          $attendeeCardParams = $cardFilterBaseParams;
+          $attendeeCardParams['status'] = 'accepted';
+          $attendeeCardHref = '/admin/dashboard?' . http_build_query($attendeeCardParams);
+          $isAttendeeCardActive = $selectedStatus === 'accepted';
+        ?>
+        <a class="stat-card stat-card-link<?= $isAttendeeCardActive ? ' is-active' : '' ?>" href="<?= h($attendeeCardHref) ?>">
           <div class="stat-label"><i class="bi bi-people"></i> Total Attendee Accepted</div>
           <div class="stat-value"><?= (int)$totalAttendees ?></div>
-        </div>
+        </a>
         <?php foreach ($packageSalesStats as $packageStat): ?>
           <?php
             $packageCardParams = $cardFilterBaseParams;
