@@ -24,8 +24,11 @@ if (!empty($_GET['cancel_otp']) && $_GET['cancel_otp'] === '1') {
 
 $errors = [];
 $otp_errors = [];
+$re_register_errors = [];
 $step = $_POST['step'] ?? '';
 $pending = $_SESSION['reg_pending'] ?? null;
+$showReRegisterButton = false;
+$reRegisterEmailValue = trim((string)($_POST['re_register_email'] ?? ''));
 $phoneDigitsMin = 10;
 $phoneDigitsMax = 14;
 
@@ -82,6 +85,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($existingUsers && !$emailCanReuse) {
                 $errors[] = 'Email already registered. Please use another email.';
+                $showReRegisterButton = true;
+                $reRegisterEmailValue = $email;
             } else {
                 $otp = (string)random_int(100000, 999999);
                 $_SESSION['reg_pending'] = [
@@ -104,6 +109,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($step === 're_register_send_otp') {
+        $reEmail = trim($_POST['re_register_email'] ?? '');
+        $reRegisterEmailValue = $reEmail;
+
+        if ($reEmail === '') {
+            $re_register_errors[] = 'Email is required.';
+        } elseif (!filter_var($reEmail, FILTER_VALIDATE_EMAIL)) {
+            $re_register_errors[] = 'Email format is invalid.';
+        } else {
+            $db = get_db();
+            $userStmt = $db->prepare('SELECT id, full_name, phone, email, gender, instagram FROM users WHERE email = ? ORDER BY id DESC LIMIT 1');
+            $userStmt->execute([$reEmail]);
+            $existingUser = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$existingUser) {
+                $re_register_errors[] = 'Email not found. Please register as a new user.';
+            } else {
+                $orderStmt = $db->prepare(
+                    'SELECT COUNT(o.id)
+                     FROM users u
+                     LEFT JOIN orders o ON o.user_id = u.id
+                     WHERE u.email = ?'
+                );
+                $orderStmt->execute([$reEmail]);
+                $totalOrders = (int)$orderStmt->fetchColumn();
+
+                if ($totalOrders > 0) {
+                    $re_register_errors[] = 'This account already has package order history and cannot register again.';
+                } else {
+                    $otp = (string)random_int(100000, 999999);
+                    $_SESSION['reg_pending'] = [
+                        'mode' => 're_register',
+                        'full_name' => (string)$existingUser['full_name'],
+                        'phone' => (string)$existingUser['phone'],
+                        'email' => (string)$existingUser['email'],
+                        'gender' => (string)$existingUser['gender'],
+                        'instagram' => (string)$existingUser['instagram'],
+                        'reuse_user_id' => (int)$existingUser['id'],
+                        'otp' => $otp,
+                        'otp_expires' => time() + 600,
+                    ];
+                    $pending = $_SESSION['reg_pending'];
+                    if (!send_otp_email((string)$existingUser['email'], $otp)) {
+                        $re_register_errors[] = 'Failed to send OTP email. Please check SMTP config.';
+                        unset($_SESSION['reg_pending']);
+                        $pending = null;
+                    }
+                }
+            }
+        }
+    }
+
     if ($step === 'verify_otp') {
         $otp = trim($_POST['otp'] ?? '');
         $pending = $_SESSION['reg_pending'] ?? null;
@@ -119,33 +176,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $db = get_db();
             $reuseUserId = (int)($pending['reuse_user_id'] ?? 0);
+            $isReRegister = ($pending['mode'] ?? '') === 're_register';
 
             if ($reuseUserId > 0) {
-                $stmt = $db->prepare('UPDATE users SET full_name = ?, phone = ?, gender = ?, instagram = ? WHERE id = ? AND email = ?');
-                $stmt->execute([
-                    $pending['full_name'],
-                    $pending['phone'],
-                    $pending['gender'],
-                    $pending['instagram'],
-                    $reuseUserId,
-                    $pending['email'],
-                ]);
-                $_SESSION['user_id'] = $reuseUserId;
-            } else {
-                $stmt = $db->prepare('INSERT INTO users (full_name, phone, email, gender, instagram, created_at) VALUES (?, ?, ?, ?, ?, ?)');
-                $stmt->execute([
-                    $pending['full_name'],
-                    $pending['phone'],
-                    $pending['email'],
-                    $pending['gender'],
-                    $pending['instagram'],
-                    date('c')
-                ]);
-                $_SESSION['user_id'] = (int)$db->lastInsertId();
+                if ($isReRegister) {
+                    $orderStmt = $db->prepare('SELECT COUNT(*) FROM orders WHERE user_id = ?');
+                    $orderStmt->execute([$reuseUserId]);
+                    $totalOrders = (int)$orderStmt->fetchColumn();
+                    if ($totalOrders > 0) {
+                        $otp_errors[] = 'This account already has package order history and cannot register again.';
+                        unset($_SESSION['reg_pending']);
+                        $pending = null;
+                    }
+                }
             }
 
-            unset($_SESSION['reg_pending']);
-            redirect('/packages');
+            if (!$otp_errors) {
+                if ($reuseUserId > 0 && !$isReRegister) {
+                    $stmt = $db->prepare('UPDATE users SET full_name = ?, phone = ?, gender = ?, instagram = ? WHERE id = ? AND email = ?');
+                    $stmt->execute([
+                        $pending['full_name'],
+                        $pending['phone'],
+                        $pending['gender'],
+                        $pending['instagram'],
+                        $reuseUserId,
+                        $pending['email'],
+                    ]);
+                    $_SESSION['user_id'] = $reuseUserId;
+                } elseif ($reuseUserId > 0 && $isReRegister) {
+                    $_SESSION['user_id'] = $reuseUserId;
+                } else {
+                    $stmt = $db->prepare('INSERT INTO users (full_name, phone, email, gender, instagram, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+                    $stmt->execute([
+                        $pending['full_name'],
+                        $pending['phone'],
+                        $pending['email'],
+                        $pending['gender'],
+                        $pending['instagram'],
+                        date('c')
+                    ]);
+                    $_SESSION['user_id'] = (int)$db->lastInsertId();
+                }
+
+                setcookie('asthapora_registered', '1', [
+                    'expires' => time() + (86400 * 365),
+                    'path' => '/',
+                    'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+                    'httponly' => false,
+                    'samesite' => 'Lax',
+                ]);
+
+                unset($_SESSION['reg_pending']);
+                redirect('/packages');
+            }
         }
     }
 
@@ -270,6 +353,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       align-items: center;
       gap: 10px;
       text-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .title-row h1 {
+      margin: 0;
     }
 
     .alert {
@@ -440,7 +536,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .landing { width: 94vw; }
       #registerPanel { padding: 18px; }
       .actions .btn,
-      .modal-card .btn { width: 100%; }
+      .modal-card .btn,
+      .title-row .btn { width: 100%; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -458,7 +555,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
   <main class="landing">
     <section id="registerPanel">
-      <h1><i class="bi bi-person-vcard"></i> Register Yourself</h1>
+      <div class="title-row">
+        <h1><i class="bi bi-person-vcard"></i> Register Yourself</h1>
+        <?php if ($showReRegisterButton): ?>
+          <button class="btn ghost" type="button" id="openReRegisterModal"><i class="bi bi-person-check"></i> Sudah pernah Register?</button>
+        <?php endif; ?>
+      </div>
 
       <?php if (!empty($_GET['notice']) && $_GET['notice'] === 'register_required'): ?>
         <div class="alert">Please register first to continue to package selection.</div>
@@ -563,6 +665,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
   </div>
 
+  <div class="modal <?= $re_register_errors ? 'show' : '' ?>" id="reRegisterModal">
+    <div class="modal-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div class="modal-title"><i class="bi bi-envelope-check"></i> Re-Register OTP</div>
+        <button class="icon-btn" type="button" id="closeReRegisterModal" aria-label="Close"><i class="bi bi-x-lg"></i> Close</button>
+      </div>
+      <div class="help-text">Masukkan email yang sudah pernah register. Sistem akan kirim OTP baru jika akun belum punya order package.</div>
+
+      <?php if ($re_register_errors): ?>
+        <div class="alert">
+          <?php foreach ($re_register_errors as $e): ?>
+            <div><?= h($e) ?></div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+
+      <form class="form" method="post" action="">
+        <input type="hidden" name="step" value="re_register_send_otp">
+        <input type="hidden" name="from" value="<?= h($from) ?>">
+        <label>
+          <span class="label-text"><i class="bi bi-envelope"></i> Email Register</span>
+          <input type="email" name="re_register_email" value="<?= h($reRegisterEmailValue) ?>" required>
+        </label>
+        <button class="btn primary" type="submit"><i class="bi bi-send-check"></i> Kirim OTP Baru</button>
+      </form>
+    </div>
+  </div>
+
   <script>
     (function () {
       var body = document.body;
@@ -607,6 +737,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       });
 
       var timer = document.getElementById('otpTimer');
+      var openReRegisterModalBtn = document.getElementById('openReRegisterModal');
+      var reRegisterModal = document.getElementById('reRegisterModal');
+      var closeReRegisterModalBtn = document.getElementById('closeReRegisterModal');
       if (timer) {
         var exp = parseInt(timer.dataset.exp || '0', 10) * 1000;
         if (exp) {
@@ -651,6 +784,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         phoneInput.addEventListener('input', normalizePhone);
         phoneInput.addEventListener('blur', normalizePhone);
         if (form) form.addEventListener('submit', normalizePhone);
+      }
+
+      if (openReRegisterModalBtn && reRegisterModal) {
+        openReRegisterModalBtn.addEventListener('click', function () {
+          reRegisterModal.classList.add('show');
+        });
+      }
+      if (closeReRegisterModalBtn && reRegisterModal) {
+        closeReRegisterModalBtn.addEventListener('click', function () {
+          reRegisterModal.classList.remove('show');
+        });
       }
     })();
   </script>
