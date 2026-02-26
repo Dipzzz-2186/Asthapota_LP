@@ -17,16 +17,6 @@ ensure_order_attendee_package_schema($db);
 ensure_order_attendee_payment_schema($db);
 ensure_order_attendee_court_schema($db);
 ensure_admin_notification_schema($db);
-try {
-    $clearPackageCCourtStmt = $db->prepare(
-        "UPDATE order_attendees oa
-         LEFT JOIN packages p ON p.id = oa.package_id
-         SET oa.court_no = NULL
-         WHERE oa.court_no IS NOT NULL
-           AND LOWER(TRIM(COALESCE(p.name, ''))) = 'package c'"
-    );
-    $clearPackageCCourtStmt->execute();
-} catch (Throwable $e) {}
 $flash = ['success' => '', 'error' => ''];
 $selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
 $selectedOrderId = ctype_digit($selectedOrderIdRaw) ? (int)$selectedOrderIdRaw : 0;
@@ -356,12 +346,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $orderId = (int)($_POST['order_id'] ?? 0);
         $attendeeId = (int)($_POST['attendee_id'] ?? 0);
         $courtNo = (int)($_POST['court_no'] ?? 0);
-        $responseCourtNo = ($courtNo >= 1 && $courtNo <= 6) ? $courtNo : null;
+        $responseCourtNo = ($courtNo >= 1 && $courtNo <= 6) ? $courtNo : 0;
 
         if ($orderId <= 0 || $attendeeId <= 0) {
             $flash['error'] = 'Data attendee tidak valid.';
-        } elseif ($courtNo < 1 || $courtNo > 6) {
-            $flash['error'] = 'Court harus dipilih dari 1 sampai 6.';
+        } elseif ($courtNo < 0 || $courtNo > 6) {
+            $flash['error'] = 'Court harus No Court atau Court 1 sampai 6.';
         } else {
             try {
                 $attendeeStmt = $db->prepare(
@@ -376,14 +366,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $flash['error'] = 'Attendee tidak ditemukan pada order ini.';
                 } else {
                     $packageName = trim((string)($attendeeRow['package_name'] ?? ''));
-                    if (strcasecmp($packageName, 'Package C') === 0) {
-                        $clearStmt = $db->prepare('UPDATE order_attendees SET court_no = NULL WHERE id = ? AND order_id = ? LIMIT 1');
-                        $clearStmt->execute([$attendeeId, $orderId]);
-                        $responseCourtNo = null;
-                        $flash['success'] = 'Package C tidak menggunakan court. Nilai court dikosongkan.';
+                    $isPackageC = strcasecmp($packageName, 'Package C') === 0;
+                    if (!$isPackageC && $courtNo === 0) {
+                        $flash['error'] = 'Package ini wajib memilih Court 1 sampai 6.';
                     } else {
+                        $storeCourtNo = ($courtNo >= 1 && $courtNo <= 6) ? $courtNo : null;
                         $updateCourtStmt = $db->prepare('UPDATE order_attendees SET court_no = ? WHERE id = ? AND order_id = ? LIMIT 1');
-                        $updateCourtStmt->execute([$courtNo, $attendeeId, $orderId]);
+                        $updateCourtStmt->execute([$storeCourtNo, $attendeeId, $orderId]);
                         if ($updateCourtStmt->rowCount() > 0) {
                             $flash['success'] = 'Court attendee berhasil diperbarui.';
                         } else {
@@ -2763,6 +2752,7 @@ render_header([
         </div>
         <div class="dashboard-head-actions">
           <a class="btn ghost" href="/admin/scan"><i class="bi bi-qr-code-scan"></i> Scan QR</a>
+          <a class="btn ghost" href="/admin/scan"><i class="bi bi-clipboard-check"></i> QR Launcher</a>
           <button class="btn ghost" type="button" id="openAdminEmailModal">
             <i class="bi bi-envelope-check"></i> Email Admin
           </button>
@@ -4006,12 +3996,19 @@ render_header([
       }
       function appendCourtActions(li, orderId, attendeeId, selectedCourt) {
         if (!li || li.querySelector('.detail-attendee-court-actions')) return;
-        var safeCourt = toCourtNo(selectedCourt) || 1;
+        var safeCourt = toCourtNo(selectedCourt);
         var courtWrap = document.createElement('div');
         courtWrap.className = 'detail-attendee-court-actions';
         var courtSelect = document.createElement('select');
         courtSelect.className = 'detail-court-select';
         courtSelect.setAttribute('data-role', 'court-select');
+        var noCourtOption = document.createElement('option');
+        noCourtOption.value = '0';
+        noCourtOption.textContent = 'No Court';
+        if (safeCourt <= 0) {
+          noCourtOption.selected = true;
+        }
+        courtSelect.appendChild(noCourtOption);
         for (var cn = 1; cn <= 6; cn++) {
           var courtOption = document.createElement('option');
           courtOption.value = String(cn);
@@ -4355,7 +4352,7 @@ render_header([
           var pkg = at && at.package_name ? String(at.package_name) : '';
           var isPackageC = isPackageCName(pkg);
           var courtNo = toCourtNo(at && at.court_no ? at.court_no : 0);
-          var court = courtLabel(courtNo);
+          var court = courtNo > 0 ? courtLabel(courtNo) : (isPackageC ? 'No Court' : '');
           var checkedInAt = at && at.checked_in_at ? String(at.checked_in_at) : '';
           var arrived = checkedInAt ? 'Hadir' : 'Belum hadir';
           var arrivedColor = checkedInAt ? '#1f7a45' : '#b44';
@@ -4366,8 +4363,8 @@ render_header([
             + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>'
             + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '')
             + '</div>';
-          if (attendeeId > 0 && !checkedInAt && !isPackageC) {
-            appendCourtActions(li, orderId, attendeeId, courtNo > 0 ? courtNo : 1);
+          if (attendeeId > 0 && !checkedInAt) {
+            appendCourtActions(li, orderId, attendeeId, courtNo);
           }
           if (attendeeId > 0 && String(payload.status || '').toLowerCase() === 'accepted' && !checkedInAt) {
             var wrap = document.createElement('div');
@@ -4422,15 +4419,14 @@ render_header([
                   pkgBadge.textContent = '[' + selectedPackageName + ']';
                   var selectedIsPackageC = isPackageCName(selectedPackageName);
                   var courtWrap = li.querySelector('.detail-attendee-court-actions');
-                  var courtBadgeEl = li.querySelector('.attendee-court-badge');
-                  if (selectedIsPackageC && courtWrap) {
-                    courtWrap.remove();
+                  var courtSelectEl = courtWrap ? courtWrap.querySelector('[data-role="court-select"]') : null;
+                  if (!courtWrap) {
+                    appendCourtActions(li, orderId, attendeeId, selectedIsPackageC ? 0 : 1);
+                    courtWrap = li.querySelector('.detail-attendee-court-actions');
+                    courtSelectEl = courtWrap ? courtWrap.querySelector('[data-role="court-select"]') : null;
                   }
-                  if (selectedIsPackageC && courtBadgeEl) {
-                    courtBadgeEl.remove();
-                  }
-                  if (!selectedIsPackageC && !courtWrap) {
-                    appendCourtActions(li, orderId, attendeeId, 1);
+                  if (selectedIsPackageC && courtSelectEl) {
+                    courtSelectEl.value = '0';
                   }
                   Array.prototype.forEach.call(select.options, function(opt) {
                     var oid = Number(opt.value || 0);
@@ -4477,7 +4473,10 @@ render_header([
         var orderId = Number(btn.getAttribute('data-order-id') || 0);
         var attendeeId = Number(btn.getAttribute('data-attendee-id') || 0);
         var courtNo = toCourtNo(select ? select.value : 0);
-        if (orderId <= 0 || attendeeId <= 0 || courtNo <= 0) {
+        var packageBadge = li.querySelector('.attendee-package-badge');
+        var packageName = packageBadge ? String(packageBadge.textContent || '').replace(/^\[|\]$/g, '').trim() : '';
+        var isPackageC = isPackageCName(packageName);
+        if (orderId <= 0 || attendeeId <= 0 || (!isPackageC && courtNo <= 0)) {
           alert('Data court attendee tidak valid.');
           return;
         }
@@ -4490,7 +4489,10 @@ render_header([
               throw new Error(resp && resp.message ? String(resp.message) : 'Gagal menyimpan court.');
             }
             var badge = li.querySelector('.attendee-court-badge');
-            var courtText = '[' + courtLabel(courtNo) + ']';
+            var badgeLabel = courtNo > 0 ? courtLabel(courtNo) : 'No Court';
+            if (!isPackageC && courtNo <= 0) {
+              badgeLabel = '';
+            }
             if (!badge) {
               badge = document.createElement('span');
               badge.className = 'attendee-court-badge';
@@ -4501,7 +4503,11 @@ render_header([
               if (mainWrap) mainWrap.appendChild(document.createTextNode(' '));
               if (mainWrap) mainWrap.appendChild(badge);
             }
-            badge.textContent = courtText;
+            if (badgeLabel) {
+              badge.textContent = '[' + badgeLabel + ']';
+            } else {
+              badge.remove();
+            }
             syncPayloadToButtons(orderId, attendeeId, courtNo);
             showDetailNotice(resp.message || 'Court attendee berhasil diperbarui.', 'success');
             btn.textContent = 'Tersimpan';
