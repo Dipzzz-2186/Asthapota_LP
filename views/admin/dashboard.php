@@ -3565,6 +3565,21 @@ render_header([
   </div>
 
   <script>
+    // ── Card toggle: click active card to clear filters ───────
+    (function () {
+      var resetUrl = '/admin/dashboard';
+      document.addEventListener('click', function (e) {
+        var card = e.target && e.target.closest ? e.target.closest('.stat-card-link, .court-card-link') : null;
+        if (!card) return;
+        if (!card.classList.contains('is-active')) return;
+        e.preventDefault();
+        window.location.href = resetUrl;
+      });
+    })();
+
+  </script>
+
+  <script>
     // ── Mobile filter toggle ───────────────────────────────────
     (function () {
       var btn = document.getElementById('filterToggleBtn');
