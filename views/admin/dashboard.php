@@ -3994,21 +3994,24 @@ render_header([
         var normalized = String(rawName == null ? '' : rawName).trim().toLowerCase();
         return normalized === 'package c';
       }
-      function appendCourtActions(li, orderId, attendeeId, selectedCourt) {
+      function appendCourtActions(li, orderId, attendeeId, selectedCourt, allowNoCourt) {
         if (!li || li.querySelector('.detail-attendee-court-actions')) return;
         var safeCourt = toCourtNo(selectedCourt);
+        var canNoCourt = !!allowNoCourt;
         var courtWrap = document.createElement('div');
         courtWrap.className = 'detail-attendee-court-actions';
         var courtSelect = document.createElement('select');
         courtSelect.className = 'detail-court-select';
         courtSelect.setAttribute('data-role', 'court-select');
-        var noCourtOption = document.createElement('option');
-        noCourtOption.value = '0';
-        noCourtOption.textContent = 'No Court';
-        if (safeCourt <= 0) {
-          noCourtOption.selected = true;
+        if (canNoCourt) {
+          var noCourtOption = document.createElement('option');
+          noCourtOption.value = '0';
+          noCourtOption.textContent = 'No Court';
+          if (safeCourt <= 0) {
+            noCourtOption.selected = true;
+          }
+          courtSelect.appendChild(noCourtOption);
         }
-        courtSelect.appendChild(noCourtOption);
         for (var cn = 1; cn <= 6; cn++) {
           var courtOption = document.createElement('option');
           courtOption.value = String(cn);
@@ -4364,7 +4367,7 @@ render_header([
             + (checkedInAt ? ' <span style="color:#8a98b2;font-size:11px;">(' + escapeHtml(formatDate(checkedInAt)) + ')</span>' : '')
             + '</div>';
           if (attendeeId > 0 && !checkedInAt) {
-            appendCourtActions(li, orderId, attendeeId, courtNo);
+            appendCourtActions(li, orderId, attendeeId, courtNo, isPackageC);
           }
           if (attendeeId > 0 && String(payload.status || '').toLowerCase() === 'accepted' && !checkedInAt) {
             var wrap = document.createElement('div');
@@ -4421,12 +4424,29 @@ render_header([
                   var courtWrap = li.querySelector('.detail-attendee-court-actions');
                   var courtSelectEl = courtWrap ? courtWrap.querySelector('[data-role="court-select"]') : null;
                   if (!courtWrap) {
-                    appendCourtActions(li, orderId, attendeeId, selectedIsPackageC ? 0 : 1);
+                    appendCourtActions(li, orderId, attendeeId, selectedIsPackageC ? 0 : 1, selectedIsPackageC);
                     courtWrap = li.querySelector('.detail-attendee-court-actions');
                     courtSelectEl = courtWrap ? courtWrap.querySelector('[data-role="court-select"]') : null;
                   }
-                  if (selectedIsPackageC && courtSelectEl) {
-                    courtSelectEl.value = '0';
+                  if (courtSelectEl) {
+                    if (selectedIsPackageC) {
+                      if (!Array.prototype.some.call(courtSelectEl.options, function (opt) { return String(opt.value) === '0'; })) {
+                        var zeroOption = document.createElement('option');
+                        zeroOption.value = '0';
+                        zeroOption.textContent = 'No Court';
+                        courtSelectEl.insertBefore(zeroOption, courtSelectEl.firstChild);
+                      }
+                      courtSelectEl.value = '0';
+                    } else {
+                      Array.prototype.slice.call(courtSelectEl.options).forEach(function (opt) {
+                        if (String(opt.value) === '0') {
+                          opt.remove();
+                        }
+                      });
+                      if (toCourtNo(courtSelectEl.value) <= 0) {
+                        courtSelectEl.value = '1';
+                      }
+                    }
                   }
                   Array.prototype.forEach.call(select.options, function(opt) {
                     var oid = Number(opt.value || 0);
