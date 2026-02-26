@@ -2752,7 +2752,6 @@ render_header([
         </div>
         <div class="dashboard-head-actions">
           <a class="btn ghost" href="/admin/scan"><i class="bi bi-qr-code-scan"></i> Scan QR</a>
-          <a class="btn ghost" href="/admin/scan"><i class="bi bi-clipboard-check"></i> QR Launcher</a>
           <button class="btn ghost" type="button" id="openAdminEmailModal">
             <i class="bi bi-envelope-check"></i> Email Admin
           </button>
