@@ -770,7 +770,13 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
 
 $acceptedSummaryStmt = $db->prepare("SELECT
     COUNT(*) AS accepted_orders,
-    COALESCE(SUM(o.total), 0) AS total_revenue
+    COALESCE(SUM(o.total), 0) AS total_revenue,
+    (
+        SELECT COUNT(*)
+        FROM order_attendees oa
+        JOIN orders o2 ON o2.id = oa.order_id
+        WHERE o2.status = 'accepted'
+    ) AS total_attendees
     FROM orders o
     JOIN users u ON u.id = o.user_id
     WHERE o.status = 'accepted'");
@@ -779,6 +785,7 @@ $acceptedSummary = $acceptedSummaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
 $totalOrders = (int)($acceptedSummary['accepted_orders'] ?? 0);
 $totalRevenue = (int)($acceptedSummary['total_revenue'] ?? 0);
+$totalAttendees = (int)($acceptedSummary['total_attendees'] ?? 0);
 
 $packageSalesMap = [];
 foreach ($packages as $pkg) {
@@ -1097,6 +1104,10 @@ $extraHead = <<<'HTML'
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 12px;
     margin-bottom: 18px;
+  }
+  @media (min-width: 1201px) {
+    .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .stat-card--revenue-top { grid-column: span 2; }
   }
   .court-summary {
     margin-bottom: 16px;
@@ -2729,6 +2740,10 @@ render_header([
 
       <!-- ── Stat Cards ──────────────────────────────────────── -->
       <div class="stat-grid">
+        <div class="stat-card stat-card--revenue-top">
+          <div class="stat-label"><i class="bi bi-cash-stack"></i> Revenue Accepted</div>
+          <div class="stat-value small" data-revenue-accepted-value="<?= (int)$totalRevenue ?>"><?= h(rupiah($totalRevenue)) ?></div>
+        </div>
         <?php
           $allCardParams = $cardFilterBaseParams;
           $allCardHref = '/admin/dashboard' . ($allCardParams ? ('?' . http_build_query($allCardParams)) : '');
@@ -2737,6 +2752,10 @@ render_header([
           <div class="stat-label"><i class="bi bi-basket"></i> Total Orders Accepted</div>
           <div class="stat-value"><?= (int)$totalOrders ?></div>
         </a>
+        <div class="stat-card">
+          <div class="stat-label"><i class="bi bi-people"></i> Total Attendee Accepted</div>
+          <div class="stat-value"><?= (int)$totalAttendees ?></div>
+        </div>
         <?php foreach ($packageSalesStats as $packageStat): ?>
           <?php
             $packageCardParams = $cardFilterBaseParams;
@@ -2749,10 +2768,6 @@ render_header([
             <div class="stat-value" data-package-card-value="<?= (int)($packageStat['id'] ?? 0) ?>"><?= (int)$packageStat['qty'] ?></div>
           </a>
         <?php endforeach; ?>
-        <div class="stat-card">
-          <div class="stat-label"><i class="bi bi-cash-stack"></i> Revenue Accepted</div>
-          <div class="stat-value small" data-revenue-accepted-value="<?= (int)$totalRevenue ?>"><?= h(rupiah($totalRevenue)) ?></div>
-        </div>
       </div>
       <div class="court-summary">
         <div class="court-summary-head">
