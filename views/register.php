@@ -511,6 +511,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       gap: 8px;
     }
 
+    .loading-card {
+      text-align: center;
+      justify-items: center;
+      gap: 10px;
+    }
+
+    .loading-spinner {
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      border: 4px solid rgba(255, 255, 255, 0.25);
+      border-top-color: #fff;
+      animation: spin 0.9s linear infinite;
+    }
+
+    .loading-subtext {
+      font-size: 13px;
+      opacity: 0.86;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .help-text {
       font-size: 13px;
       opacity: 0.9;
@@ -665,6 +689,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
   </div>
 
+  <div class="modal" id="otpLoadingModal" aria-hidden="true">
+    <div class="modal-card loading-card">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <div class="modal-title"><i class="bi bi-envelope-paper-heart"></i> Sending OTP</div>
+      <div class="loading-subtext">Please wait, we are sending verification code to your email.</div>
+    </div>
+  </div>
+
   <div class="modal <?= $re_register_errors ? 'show' : '' ?>" id="reRegisterModal">
     <div class="modal-card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
@@ -740,6 +772,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       var openReRegisterModalBtn = document.getElementById('openReRegisterModal');
       var reRegisterModal = document.getElementById('reRegisterModal');
       var closeReRegisterModalBtn = document.getElementById('closeReRegisterModal');
+      var otpLoadingModal = document.getElementById('otpLoadingModal');
       if (timer) {
         var exp = parseInt(timer.dataset.exp || '0', 10) * 1000;
         if (exp) {
@@ -760,6 +793,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       var form = document.getElementById('registerForm');
       var input = document.getElementById('instagramInput');
       var phoneInput = document.getElementById('phoneInput');
+      var continueBtn = form ? form.querySelector('button[type="submit"]') : null;
+      var sendingOtp = false;
+
+      var showOtpLoading = function () {
+        if (!otpLoadingModal) return;
+        otpLoadingModal.classList.add('show');
+        otpLoadingModal.setAttribute('aria-hidden', 'false');
+      };
+
       if (form && input) {
         var normalize = function () {
           var val = (input.value || '').trim();
@@ -784,6 +826,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         phoneInput.addEventListener('input', normalizePhone);
         phoneInput.addEventListener('blur', normalizePhone);
         if (form) form.addEventListener('submit', normalizePhone);
+      }
+      if (form) {
+        form.addEventListener('submit', function (e) {
+          if (sendingOtp) {
+            e.preventDefault();
+            return;
+          }
+          sendingOtp = true;
+          if (continueBtn) {
+            continueBtn.disabled = true;
+            continueBtn.style.opacity = '0.7';
+            continueBtn.style.cursor = 'not-allowed';
+          }
+          showOtpLoading();
+        });
       }
 
       if (openReRegisterModalBtn && reRegisterModal) {
