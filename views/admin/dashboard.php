@@ -51,6 +51,105 @@ $adsTableSql = "CREATE TABLE IF NOT EXISTS ads (
     created_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
+function create_image_from_upload(string $path, string $mime) {
+    if (!is_file($path)) return null;
+    switch ($mime) {
+        case 'image/jpeg': return @imagecreatefromjpeg($path) ?: null;
+        case 'image/png': return @imagecreatefrompng($path) ?: null;
+        case 'image/webp':
+            if (!function_exists('imagecreatefromwebp')) return null;
+            return @imagecreatefromwebp($path) ?: null;
+        default: return null;
+    }
+}
+
+function rgba_from_image_pixel($img, int $x, int $y): array {
+    $rgba = imagecolorsforindex($img, imagecolorat($img, $x, $y));
+    return [
+        'red' => (int)($rgba['red'] ?? 0),
+        'green' => (int)($rgba['green'] ?? 0),
+        'blue' => (int)($rgba['blue'] ?? 0),
+        'alpha' => (int)($rgba['alpha'] ?? 0),
+    ];
+}
+
+function save_white_logo_png(string $tmpPath, string $mime, string $targetPath): bool {
+    if (!extension_loaded('gd')) return false;
+    $src = create_image_from_upload($tmpPath, $mime);
+    if (!$src) return false;
+
+    $w = imagesx($src);
+    $h = imagesy($src);
+    if ($w <= 0 || $h <= 0 || $w > 4096 || $h > 4096) {
+        imagedestroy($src);
+        return false;
+    }
+
+    $img = imagecreatetruecolor($w, $h);
+    imagealphablending($img, false);
+    imagesavealpha($img, true);
+    $transparent = imagecolorallocatealpha($img, 0, 0, 0, 127);
+    imagefill($img, 0, 0, $transparent);
+    imagecopy($img, $src, 0, 0, 0, 0, $w, $h);
+    imagedestroy($src);
+
+    if ($mime === 'image/jpeg') {
+        $cornerPoints = [
+            [0, 0], [max(0, $w - 1), 0], [0, max(0, $h - 1)], [max(0, $w - 1), max(0, $h - 1)],
+            [min(4, max(0, $w - 1)), min(4, max(0, $h - 1))],
+            [max(0, $w - 1 - min(4, max(0, $w - 1))), min(4, max(0, $h - 1))],
+            [min(4, max(0, $w - 1)), max(0, $h - 1 - min(4, max(0, $h - 1)))],
+            [max(0, $w - 1 - min(4, max(0, $w - 1))), max(0, $h - 1 - min(4, max(0, $h - 1)))],
+        ];
+        $sumR = 0; $sumG = 0; $sumB = 0; $samples = 0;
+        foreach ($cornerPoints as $pt) {
+            $c = rgba_from_image_pixel($img, (int)$pt[0], (int)$pt[1]);
+            $sumR += $c['red']; $sumG += $c['green']; $sumB += $c['blue']; $samples++;
+        }
+        $bgR = $samples > 0 ? (int)round($sumR / $samples) : 255;
+        $bgG = $samples > 0 ? (int)round($sumG / $samples) : 255;
+        $bgB = $samples > 0 ? (int)round($sumB / $samples) : 255;
+        $threshold = 62;
+
+        for ($y = 0; $y < $h; $y++) {
+            for ($x = 0; $x < $w; $x++) {
+                $p = rgba_from_image_pixel($img, $x, $y);
+                $dr = $p['red'] - $bgR;
+                $dg = $p['green'] - $bgG;
+                $db = $p['blue'] - $bgB;
+                $distance = (int)round(sqrt(($dr * $dr) + ($dg * $dg) + ($db * $db)));
+                $alpha = $p['alpha'];
+                if ($distance < $threshold) {
+                    $alpha = max($alpha, (int)round((1 - ($distance / $threshold)) * 127));
+                }
+                if ($alpha >= 126) {
+                    imagesetpixel($img, $x, $y, imagecolorallocatealpha($img, 255, 255, 255, 127));
+                } else {
+                    imagesetpixel($img, $x, $y, imagecolorallocatealpha($img, 255, 255, 255, $alpha));
+                }
+            }
+        }
+    } else {
+        for ($y = 0; $y < $h; $y++) {
+            for ($x = 0; $x < $w; $x++) {
+                $p = rgba_from_image_pixel($img, $x, $y);
+                $alpha = $p['alpha'];
+                if ($alpha >= 126) {
+                    imagesetpixel($img, $x, $y, imagecolorallocatealpha($img, 255, 255, 255, 127));
+                } else {
+                    imagesetpixel($img, $x, $y, imagecolorallocatealpha($img, 255, 255, 255, $alpha));
+                }
+            }
+        }
+    }
+
+    imagealphablending($img, false);
+    imagesavealpha($img, true);
+    $ok = @imagepng($img, $targetPath, 6);
+    imagedestroy($img);
+    return $ok;
+}
+
 ensure_session();
 if (!empty($_SESSION['dashboard_flash']) && is_array($_SESSION['dashboard_flash'])) {
     $flash = array_merge($flash, $_SESSION['dashboard_flash']);
@@ -174,11 +273,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
                     $flash['error'] = 'Failed to prepare sponsor upload directory.';
                 } else {
-                    $newFileName = 'sponsor-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.' . $allowedMimes[$mime];
+                    $newFileName = 'sponsor-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.png';
                     $targetPath = $uploadDir . '/' . $newFileName;
                     $storedLogoPath = '/uploads/sponsors/' . $newFileName;
-                    if (!move_uploaded_file($tmpPath, $targetPath)) {
-                        $flash['error'] = 'Failed to upload sponsor logo.';
+                    if (!save_white_logo_png($tmpPath, $mime, $targetPath)) {
+                        $flash['error'] = 'Gagal memproses logo. Upload PNG/JPG/WEBP dengan background polos.';
                     } else {
                         try {
                             $db->exec($sponsorsTableSql);
