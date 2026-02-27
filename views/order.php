@@ -80,7 +80,7 @@ foreach ($items as $it) {
     }
     if (!isset($packageTicketCounts[$pkgId])) {
         $packageTicketCounts[$pkgId] = 0;
-        $packageNamesById[$pkgId] = (string)($it['name'] ?? ('Package #' . $pkgId));
+        $packageNamesById[$pkgId] = (string)($it['name'] ?? ('Package ' . $pkgId));
         $packageIdOrder[] = $pkgId;
     }
     $packageTicketCounts[$pkgId] += $pkgQty;
@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($requiresPackageSelection) {
         $ownerPackageId = $rawOwnerPackage;
         if ($ownerPackageId <= 0 || !isset($packageTicketCounts[$ownerPackageId])) {
-            $errors[] = 'Please select a valid package for attendee #1.';
+            $errors[] = 'Please select a valid package for attendee 1.';
         }
     } else {
         $ownerPackageId = $defaultPackageId;
@@ -161,18 +161,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $genderInput = (string)($rawGenders[$i] ?? '');
             $attendeeGenders[$i] = $normalizeAttendeeGender($genderInput);
             if ($nameInput === '') {
-                $errors[] = 'Please fill in attendee name #' . ($i + 2) . '.';
+                $errors[] = 'Please fill in attendee name ' . ($i + 2) . '.';
             } elseif (strlen($nameInput) > 120) {
-                $errors[] = 'Attendee name #' . ($i + 2) . ' is too long (max 120 characters).';
+                $errors[] = 'Attendee name ' . ($i + 2) . ' is too long (max 120 characters).';
             }
             if ($attendeeGenders[$i] === '') {
-                $errors[] = 'Please select gender for attendee #' . ($i + 2) . '.';
+                $errors[] = 'Please select gender for attendee ' . ($i + 2) . '.';
             }
             if ($requiresPackageSelection) {
                 $packageIdInput = (int)($rawPackages[$i] ?? 0);
                 $attendeePackageIds[$i] = $packageIdInput;
                 if ($packageIdInput <= 0 || !isset($packageTicketCounts[$packageIdInput])) {
-                    $errors[] = 'Please select a valid package for attendee #' . ($i + 2) . '.';
+                    $errors[] = 'Please select a valid package for attendee ' . ($i + 2) . '.';
                 }
             } else {
                 $attendeePackageIds[$i] = $defaultPackageId;
@@ -193,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         foreach ($usedPackageCounts as $pkgId => $usedCount) {
             if ($usedCount > (int)($packageTicketCounts[$pkgId] ?? 0)) {
-                $pkgLabel = (string)($packageNamesById[$pkgId] ?? ('Package #' . $pkgId));
+                $pkgLabel = (string)($packageNamesById[$pkgId] ?? ('Package ' . $pkgId));
                 $errors[] = 'Assigned attendees for package "' . $pkgLabel . '" exceed purchased quantity.';
             }
         }
@@ -221,23 +221,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $labelNo = $i + 1;
             $errorCode = $proofInput['error'][$i] ?? UPLOAD_ERR_NO_FILE;
             if ($errorCode !== UPLOAD_ERR_OK) {
-                $errors[] = 'Please upload a valid payment proof #' . $labelNo . '.';
+                $errors[] = 'Please upload a valid payment proof ' . $labelNo . '.';
                 continue;
             }
             $tmpName = (string)($proofInput['tmp_name'][$i] ?? '');
             $size = (int)($proofInput['size'][$i] ?? 0);
             $originalName = trim((string)($proofInput['name'][$i] ?? ''));
             if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-                $errors[] = 'Please upload a valid payment proof #' . $labelNo . '.';
+                $errors[] = 'Please upload a valid payment proof ' . $labelNo . '.';
                 continue;
             }
             if ($size > 2 * 1024 * 1024) {
-                $errors[] = 'Payment proof #' . $labelNo . ' is too large. Max 2MB.';
+                $errors[] = 'Payment proof ' . $labelNo . ' is too large. Max 2MB.';
                 continue;
             }
             $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
             if (!in_array($ext, $allowedProofExts, true)) {
-                $errors[] = 'Only JPG or PNG allowed for payment proof #' . $labelNo . '.';
+                $errors[] = 'Only JPG or PNG allowed for payment proof ' . $labelNo . '.';
                 continue;
             }
             $proofUploadCandidates[$i] = [
@@ -268,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $proofName = 'proof_u' . (int)$_SESSION['user_id'] . '_' . $proofTimestamp . '_' . ($index + 1) . '_' . mt_rand(1000, 9999) . '.' . $candidate['ext'];
             $target = $uploadDir . '/' . $proofName;
             if (!move_uploaded_file($candidate['tmp_name'], $target)) {
-                $errors[] = 'Failed to upload payment proof #' . ($index + 1) . '.';
+                $errors[] = 'Failed to upload payment proof ' . ($index + 1) . '.';
                 break;
             }
             $movedProofTargets[] = $target;
@@ -344,7 +344,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $attendeeDetailsForAdmin[] = [
                     'name' => (string)($row['name'] ?? ''),
                     'position_no' => (int)($row['position_no'] ?? 0),
-                    'package' => (string)($packageNamesById[$pkgId] ?? ($pkgId > 0 ? ('Package #' . $pkgId) : '-')),
+                    'package' => (string)($packageNamesById[$pkgId] ?? ($pkgId > 0 ? ('Package ' . $pkgId) : '-')),
                 ];
             }
 
@@ -913,15 +913,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php if ($additionalAttendeeCount > 0): ?>
           <div class="payment-card" style="margin-top:16px;">
             <div><i class="bi bi-people"></i> <strong>Attendees</strong></div>
-            <div class="attendee-hint">Total tickets: <?= (int)$totalTickets ?>. Please fill names for attendee #2 until #<?= (int)$totalTickets ?>.</div>
+            <div class="attendee-hint">Total tickets: <?= (int)$totalTickets ?>. Please fill names for attendee 2 until <?= (int)$totalTickets ?>.</div>
             <?php if ($requiresPackageSelection): ?>
-              <div class="attendee-hint">You bought different package types. Please assign package for each attendee, including attendee #1 (account owner).</div>
+              <div class="attendee-hint">You bought different package types. Please assign package for each attendee, including attendee 1 (account owner).</div>
             <?php endif; ?>
             <div class="attendee-grid">
               <?php if ($requiresPackageSelection): ?>
                 <div class="attendee-row has-package">
                   <label>
-                    Attendee #1 Name
+                    Attendee 1 Name
                     <input type="text" value="<?= h((string)$user['full_name']) ?>" readonly>
                   </label>
                   <label>
@@ -933,7 +933,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <select id="owner_package_id" name="owner_package_id" form="orderSubmitForm" required>
                       <option value="">Select package</option>
                       <?php foreach ($packageIdOrder as $pkgId): ?>
-                        <?php $pkgLabel = (string)($packageNamesById[$pkgId] ?? ('Package #' . (int)$pkgId)); ?>
+                        <?php $pkgLabel = (string)($packageNamesById[$pkgId] ?? ('Package ' . (int)$pkgId)); ?>
                         <?php $pkgQty = (int)($packageTicketCounts[$pkgId] ?? 0); ?>
                         <option value="<?= (int)$pkgId ?>"<?= ((int)$ownerPackageId === (int)$pkgId) ? ' selected' : '' ?>>
                           <?= h($pkgLabel) ?> (<?= $pkgQty ?>x)
@@ -946,7 +946,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               <?php for ($i = 0; $i < $additionalAttendeeCount; $i++): ?>
                 <div class="attendee-row<?= $requiresPackageSelection ? ' has-package' : '' ?>">
                   <label for="attendee_name_<?= (int)$i ?>">
-                    Attendee #<?= (int)($i + 2) ?> Name
+                    Attendee <?= (int)($i + 2) ?> Name
                     <input
                       type="text"
                       id="attendee_name_<?= (int)$i ?>"
@@ -971,7 +971,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                       <select id="attendee_package_<?= (int)$i ?>" name="attendee_package_ids[]" form="orderSubmitForm" required>
                         <option value="">Select package</option>
                         <?php foreach ($packageIdOrder as $pkgId): ?>
-                          <?php $pkgLabel = (string)($packageNamesById[$pkgId] ?? ('Package #' . (int)$pkgId)); ?>
+                          <?php $pkgLabel = (string)($packageNamesById[$pkgId] ?? ('Package ' . (int)$pkgId)); ?>
                           <?php $pkgQty = (int)($packageTicketCounts[$pkgId] ?? 0); ?>
                           <option value="<?= (int)$pkgId ?>"<?= ((int)($attendeePackageIds[$i] ?? 0) === (int)$pkgId) ? ' selected' : '' ?>>
                             <?= h($pkgLabel) ?> (<?= $pkgQty ?>x)
@@ -1018,7 +1018,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="proof-rows" id="proofRows">
               <div class="proof-field proof-field-row" data-proof-row>
                 <div class="proof-row-head">
-                  <span class="proof-field-label" data-proof-label="Proof #1">Proof #1</span>
+                  <span class="proof-field-label" data-proof-label="Proof 1">Proof 1</span>
                   <button type="button" class="proof-row-remove" data-proof-remove>Hapus</button>
                 </div>
                 <input
@@ -1196,7 +1196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         var rows = proofRowsContainer.querySelectorAll('[data-proof-row]');
         rows.forEach(function (row, index) {
           var labelNode = row.querySelector('[data-proof-label]');
-          var labelText = 'Proof #' + (index + 1);
+          var labelText = 'Proof ' + (index + 1);
           if (labelNode) {
             labelNode.textContent = labelText;
           }

@@ -514,9 +514,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     'qr_token' => $newQrToken,
                                 ];
                                 $packageChangeEmailMeta = [
-                                    'attendee_name' => $attendeeName !== '' ? $attendeeName : ('Attendee #' . $attendeeId),
-                                    'old_package' => $oldPackageName !== '' ? $oldPackageName : ('Package #' . $oldPackageId),
-                                    'new_package' => $updatedPackageName !== '' ? $updatedPackageName : ('Package #' . $newPackageId),
+                                    'attendee_name' => $attendeeName !== '' ? $attendeeName : ('Attendee ' . $attendeeId),
+                                    'old_package' => $oldPackageName !== '' ? $oldPackageName : ('Package ' . $oldPackageId),
+                                    'new_package' => $updatedPackageName !== '' ? $updatedPackageName : ('Package ' . $newPackageId),
                                 ];
                             }
 
@@ -983,7 +983,7 @@ if ($orderIds) {
                 }
                 if (!isset($orderAttendeePackageSummaryMap[$oid][$packageId])) {
                     $orderAttendeePackageSummaryMap[$oid][$packageId] = [
-                        'package_name' => trim((string)($row['package_name'] ?? ('Package #' . $packageId))),
+                        'package_name' => trim((string)($row['package_name'] ?? ('Package ' . $packageId))),
                         'qty' => 0,
                         'price' => max(0, (int)($row['package_price'] ?? 0)),
                     ];
@@ -1986,6 +1986,11 @@ $extraHead = <<<'HTML'
     box-shadow: 0 2px 12px rgba(0,0,0,0.04);
     scrollbar-width: thin;
     -ms-overflow-style: auto;
+    cursor: grab;
+  }
+  .table-wrap.is-dragging {
+    cursor: grabbing;
+    user-select: none;
   }
   .table-wrap::-webkit-scrollbar {
     display: block !important;
@@ -2855,7 +2860,7 @@ render_header([
           <div class="filter-label"><i class="bi bi-funnel-fill"></i> Filter Orders</div>
           <div class="filter-field">
             <label class="field-label" for="filterOrderId">Order ID</label>
-            <input id="filterOrderId" type="text" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>" placeholder="#ID">
+            <input id="filterOrderId" type="text" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>" placeholder="ID">
           </div>
           <div class="filter-field">
             <label class="field-label" for="filterName">Nama</label>
@@ -2953,7 +2958,7 @@ render_header([
         <table class="admin-table">
           <thead>
             <tr>
-              <th><i class="bi bi-hash"></i> ID</th>
+              <th><i class="bi bi-fingerprint"></i> ID</th>
               <th><i class="bi bi-person"></i> User</th>
               <th><i class="bi bi-telephone"></i> Contact</th>
               <th><i class="bi bi-box"></i> Packages</th>
@@ -2988,7 +2993,7 @@ render_header([
               ];
             ?>
               <tr>
-                <td><strong style="font-size:13.5px;letter-spacing:-0.3px;">#<?= (int)$o['id'] ?></strong></td>
+                <td><strong style="font-size:13.5px;letter-spacing:-0.3px;"><?= (int)$o['id'] ?></strong></td>
                 <td><strong style="font-size:13px;"><?= h($o['full_name']) ?></strong></td>
                 <td class="admin-contact">
                   <div class="admin-contact-line"><i class="bi bi-telephone"></i><span class="contact-value"><?= h($o['phone']) ?></span></div>
@@ -3009,7 +3014,7 @@ render_header([
                 </td>
                 <td>
                   <?php if ($proofPaths): ?>
-                    <button class="proof-link proof-gallery-trigger" type="button" data-proof-gallery="<?= h(json_encode($proofPaths, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View </button>
+                    <button class="proof-link proof-gallery-trigger" type="button" data-proof-gallery="<?= h(json_encode($proofPaths, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>" data-order="<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View </button>
                   <?php else: ?><span style="color:var(--muted);font-size:12px;">—</span><?php endif; ?>
                 </td>
                 <td>
@@ -3059,7 +3064,7 @@ render_header([
             <!-- Card Head -->
             <div class="order-card-head">
               <div>
-                <div class="order-card-id">#<?= (int)$o['id'] ?></div>
+                <div class="order-card-id"><?= (int)$o['id'] ?></div>
                 <?php if ($o['status'] === 'paid'): ?><span class="badge paid" style="margin-top:4px;"><i class="bi bi-check-circle"></i> Paid</span>
                 <?php elseif ($o['status'] === 'accepted'): ?><span class="badge accepted" style="margin-top:4px;"><i class="bi bi-check-circle-fill"></i> Accepted</span>
                 <?php elseif ($o['status'] === 'rejected'): ?><span class="badge rejected" style="margin-top:4px;"><i class="bi bi-x-circle"></i> Rejected</span>
@@ -3100,7 +3105,7 @@ render_header([
               <div class="order-card-row">
                 <div class="order-card-label">Bukti</div>
                 <div>
-                  <button class="proof-link proof-gallery-trigger" type="button" data-proof-gallery="<?= h(json_encode($proofPaths, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>" data-order="#<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View Proof (<?= count($proofPaths) ?>)</button>
+                  <button class="proof-link proof-gallery-trigger" type="button" data-proof-gallery="<?= h(json_encode($proofPaths, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>" data-order="<?= (int)$o['id'] ?>"><i class="bi bi-file-earmark-image"></i> View Proof (<?= count($proofPaths) ?>)</button>
                 </div>
               </div>
               <?php endif; ?>
@@ -4124,7 +4129,7 @@ render_header([
           var key = String(pid);
           if (!summary[key]) {
             summary[key] = {
-              package_name: (at && at.package_name ? String(at.package_name) : '') || (pkgRef ? String(pkgRef.name || '-') : ('Package #' + pid)),
+              package_name: (at && at.package_name ? String(at.package_name) : '') || (pkgRef ? String(pkgRef.name || '-') : ('Package ' + pid)),
               qty: 0,
               price: pkgRef ? Number(pkgRef.price || 0) : 0
             };
@@ -4347,7 +4352,7 @@ render_header([
           return sum + (isNaN(subtotal) ? 0 : subtotal);
         }, 0);
         var displayTotal = computedTotal > 0 ? computedTotal : Number(payload.total || 0);
-        title.innerHTML = '<i class="bi bi-receipt"></i> Order Detail #' + (orderId || '-');
+        title.innerHTML = '<i class="bi bi-receipt"></i> Order Detail ' + (orderId || '-');
         var ticketCount = Number(payload.ticket_count || 0);
         var attendeesArr = Array.isArray(payload.attendees) ? payload.attendees : [];
         var arrivedCount = countCheckedIn(attendeesArr);
@@ -4374,7 +4379,7 @@ render_header([
           var arrived = checkedInAt ? 'Hadir' : 'Belum hadir';
           var arrivedColor = checkedInAt ? '#1f7a45' : '#b44';
           var courtBadge = court ? ' <span class="attendee-court-badge" style="color:#4f46e5;font-weight:700;font-size:11.5px;">[' + escapeHtml(court) + ']</span>' : '';
-          li.innerHTML = '<div class="detail-attendee-main">' + escapeHtml((pos > 0 ? '#' + pos + ' — ' : '') + name)
+          li.innerHTML = '<div class="detail-attendee-main">' + escapeHtml((pos > 0 ? pos + ' — ' : '') + name)
             + (pkg ? ' <span class="attendee-package-badge" style="color:#0f5ea8;font-weight:700;font-size:11.5px;">[' + escapeHtml(pkg) + ']</span>' : '')
             + courtBadge
             + ' <span style="color:' + arrivedColor + ';font-weight:700;font-size:11.5px;">[' + arrived + ']</span>'
@@ -4705,8 +4710,8 @@ render_header([
       function applyT() { img.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+scale.toFixed(2)+')'; }
       function applyZ(n) { scale=Math.min(maxS,Math.max(minS,n)); if(scale===1){tx=0;ty=0;} applyT(); img.classList.toggle('zoomed',scale>1); zoomOutBtn.disabled=scale<=minS; zoomInBtn.disabled=scale>=maxS; }
       function open(src, orderId, action) {
-        img.src=src; img.alt='Payment proof #'+orderId;
-        title.innerHTML=(action==='accept'?'<i class="bi bi-check-circle-fill" style="color:#1a7a3c"></i> Konfirmasi Accept':'<i class="bi bi-x-circle-fill" style="color:#c0392b"></i> Konfirmasi Reject')+' #'+orderId;
+        img.src=src; img.alt='Payment proof '+orderId;
+        title.innerHTML=(action==='accept'?'<i class="bi bi-check-circle-fill" style="color:#1a7a3c"></i> Konfirmasi Accept':'<i class="bi bi-x-circle-fill" style="color:#c0392b"></i> Konfirmasi Reject')+' '+orderId;
         if(question)question.textContent=action==='accept'?'Apakah anda yakin ingin menerima order ini?':'Apakah anda yakin ingin menolak order ini?';
         orderInput.value=orderId; actionInput.value=action;
         scale=1;tx=0;ty=0; img.style.transform='translate(0,0) scale(1)'; img.classList.remove('zoomed');
@@ -4760,6 +4765,58 @@ render_header([
       if (warnOkBtn) warnOkBtn.addEventListener('click', closeWarn);
       if (warnModal) warnModal.addEventListener('click', function(e){ if (e.target === warnModal) closeWarn(); });
       modal.addEventListener('click',function(e){if(e.target===modal)close();}); document.addEventListener('keydown',function(e){if(e.key==='Escape'&&modal.classList.contains('show'))close(); if(e.key==='Escape'&&warnModal&&warnModal.classList.contains('show'))closeWarn();});
+    })();
+  </script>
+
+  <script>
+    // ── Drag Scroll Table (Desktop) ───────────────────────────
+    (function() {
+      var wraps = document.querySelectorAll('.table-wrap');
+      if (!wraps.length) return;
+
+      wraps.forEach(function(wrap) {
+        var isDown = false;
+        var startX = 0;
+        var startScrollLeft = 0;
+        var moved = false;
+
+        wrap.addEventListener('mousedown', function(e) {
+          if (e.button !== 0) return;
+          isDown = true;
+          moved = false;
+          startX = e.clientX;
+          startScrollLeft = wrap.scrollLeft;
+          wrap.classList.add('is-dragging');
+        });
+
+        window.addEventListener('mousemove', function(e) {
+          if (!isDown) return;
+          var deltaX = e.clientX - startX;
+          if (Math.abs(deltaX) > 2) moved = true;
+          wrap.scrollLeft = startScrollLeft - deltaX;
+        });
+
+        window.addEventListener('mouseup', function() {
+          if (!isDown) return;
+          isDown = false;
+          wrap.classList.remove('is-dragging');
+        });
+
+        wrap.addEventListener('mouseleave', function() {
+          if (!isDown) return;
+          isDown = false;
+          wrap.classList.remove('is-dragging');
+        });
+
+        wrap.querySelectorAll('a, button').forEach(function(el) {
+          el.addEventListener('click', function(e) {
+            if (moved) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          });
+        });
+      });
     })();
   </script>
 
