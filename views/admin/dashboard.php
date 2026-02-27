@@ -2385,6 +2385,55 @@ $extraHead = <<<'HTML'
   .sponsor-form-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--stroke); margin-top: 4px; }
   body.sponsor-modal-open { overflow: hidden; }
 
+  .dashboard-loading-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 12, 24, 0.72);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1800;
+    padding: 18px;
+  }
+  .dashboard-loading-modal.show { display: flex; }
+  .dashboard-loading-card {
+    width: min(420px, 100%);
+    background: rgba(7, 22, 45, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 14px;
+    padding: 20px;
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    text-align: center;
+  }
+  .dashboard-loading-spinner {
+    width: 52px;
+    height: 52px;
+    border-radius: 999px;
+    border: 4px solid rgba(255, 255, 255, 0.25);
+    border-top-color: #fff;
+    animation: dashboardLoadingSpin 0.9s linear infinite;
+  }
+  .dashboard-loading-title {
+    font-size: 26px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #f8fbff;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  }
+  .dashboard-loading-subtext {
+    font-size: 13px;
+    opacity: 0.9;
+    color: #dbe8ff;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+  }
+  @keyframes dashboardLoadingSpin {
+    to { transform: rotate(360deg); }
+  }
+
   /* ─── Order Detail Modal ─────────────────────────────────── */
   #orderDetailModal .proof-card { max-width: min(96vw, 1000px); border-radius: 20px; }
   #orderDetailModal .proof-head { padding: 14px 18px; background: var(--surface-2, #f8faff); }
@@ -3246,6 +3295,13 @@ render_header([
   </form>
 
   <div class="screen-notice" id="screenNotice" role="status" aria-live="polite"></div>
+  <div class="dashboard-loading-modal" id="dashboardLoadingModal" aria-hidden="true">
+    <div class="dashboard-loading-card">
+      <div class="dashboard-loading-spinner" aria-hidden="true"></div>
+      <div class="dashboard-loading-title"><i class="bi bi-hourglass-split"></i> Processing Request</div>
+      <div class="dashboard-loading-subtext">Harap tunggu sebentar, proses sedang berjalan.</div>
+    </div>
+  </div>
 
   <form method="post" action="/admin/dashboard" id="attendeePackageForm" style="display:none;">
     <input type="hidden" name="dashboard_action" value="change_attendee_package">
@@ -4417,6 +4473,9 @@ render_header([
               select.disabled = true;
               var originalLabel = applyBtn.textContent;
               applyBtn.textContent = 'Menyimpan...';
+              if (typeof window.showDashboardLoading === 'function') {
+                window.showDashboardLoading();
+              }
               submitPackageChange(orderId, attendeeId, chosenId)
                 .then(function(resp) {
                   if (!resp || !resp.ok) {
@@ -4484,6 +4543,9 @@ render_header([
                   applyBtn.textContent = originalLabel;
                 })
                 .finally(function() {
+                  if (typeof window.hideDashboardLoading === 'function') {
+                    window.hideDashboardLoading();
+                  }
                   applyBtn.disabled = false;
                   select.disabled = false;
                 });
@@ -4690,6 +4752,46 @@ render_header([
   </script>
 
   <script>
+    (function() {
+      var loadingModal = document.getElementById('dashboardLoadingModal');
+      var loadingLocks = 0;
+
+      window.showDashboardLoading = function() {
+        if (!loadingModal) return;
+        loadingLocks += 1;
+        loadingModal.classList.add('show');
+        loadingModal.setAttribute('aria-hidden', 'false');
+      };
+      window.hideDashboardLoading = function() {
+        if (!loadingModal) return;
+        loadingLocks = Math.max(0, loadingLocks - 1);
+        if (loadingLocks > 0) return;
+        loadingModal.classList.remove('show');
+        loadingModal.setAttribute('aria-hidden', 'true');
+      };
+
+      document.querySelectorAll('form[method="post"]').forEach(function(form) {
+        var isSubmitting = false;
+        form.addEventListener('submit', function(e) {
+          if (e.defaultPrevented) return;
+          if (isSubmitting) {
+            e.preventDefault();
+            return;
+          }
+          isSubmitting = true;
+          var submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+          submitButtons.forEach(function(btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+            btn.style.cursor = 'not-allowed';
+          });
+          window.showDashboardLoading();
+        });
+      });
+    })();
+  </script>
+
+  <script>
     // ── Confirm Modal ──────────────────────────────────────────
     (function() {
       var modal = document.getElementById('confirmModal');
@@ -4759,7 +4861,16 @@ render_header([
 
       var isSubmitting = false;
       form.addEventListener('submit', function(e) { if(isSubmitting){e.preventDefault();return;} isSubmitting=true; submitBtn.disabled=true; submitBtn.innerHTML='<i class="bi bi-hourglass-split"></i> Processing...'; cancelBtn.disabled=true; closeBtn.disabled=true; });
-      submitBtn.addEventListener('click', function() { form.submit(); });
+      submitBtn.addEventListener('click', function() {
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit();
+          return;
+        }
+        if (typeof window.showDashboardLoading === 'function') {
+          window.showDashboardLoading();
+        }
+        form.submit();
+      });
       closeBtn.addEventListener('click', close); cancelBtn.addEventListener('click', close);
       if (warnCloseBtn) warnCloseBtn.addEventListener('click', closeWarn);
       if (warnOkBtn) warnOkBtn.addEventListener('click', closeWarn);
