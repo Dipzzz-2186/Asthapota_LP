@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $aid = (int)($ar['id'] ?? 0);
             if ($aid <= 0) continue;
             $aname = trim((string)($ar['attendee_name'] ?? ''));
-            if ($aname === '') $aname = 'Attendee ' . (int)($ar['position_no'] ?? 0);
+           if ($aname === '') $aname = 'Attendee #' . (int)($ar['position_no'] ?? 0);
             $packageLabel = trim((string)($ar['package_name'] ?? ''));
             if ($packageLabel === '') {
                 $packageLabel = (string)($packagePool[$packIdx] ?? '');
@@ -980,57 +980,6 @@ render_header([
       </div>
     </div>
   </div>
-
-  <button type="button" id="scanner-widget-launcher" class="scanner-launcher" aria-label="Buka QR launcher">
-    <i class="bi bi-qr-code"></i> QR Launcher
-  </button>
-
-  <aside id="scanner-widget" class="collapsed hidden" aria-label="Scanner and token launcher">
-    <div class="widget-head" id="widgetToggleBtn">
-      <div class="widget-head-left">
-        <div class="widget-head-icon"><i class="bi bi-upc-scan"></i></div>
-        <div class="widget-head-title">QR Launcher</div>
-      </div>
-      <button type="button" class="scanner-close-btn" id="scannerCloseBtn" aria-label="Tutup launcher">
-        <i class="bi bi-x-lg"></i>
-      </button>
-    </div>
-    <div class="widget-body">
-      <div class="mini-qr-box">
-        <div id="qr-reader" aria-label="QR camera reader"></div>
-        <div class="qr-idle" id="qrIdle">
-          <div class="qr-idle-icon"><i class="bi bi-qr-code-scan"></i></div>
-          <div class="qr-idle-label">Scanner standby</div>
-        </div>
-        <div class="scan-line" id="scanLine"></div>
-        <span class="corner tl"></span>
-        <span class="corner tr"></span>
-        <span class="corner bl"></span>
-        <span class="corner br"></span>
-      </div>
-      <div class="widget-controls">
-        <button type="button" class="wbtn primary" id="btnStart"><i class="bi bi-camera-video"></i> Start</button>
-        <button type="button" class="wbtn ghost" id="btnStop"><i class="bi bi-stop-circle"></i> Stop</button>
-      </div>
-      <div class="widget-divider">paste token</div>
-      <form id="manualForm" action="/admin/scan" method="post" autocomplete="off">
-        <div class="widget-input-row">
-          <input
-            id="manualToken"
-            name="token"
-            class="widget-input"
-            type="text"
-            inputmode="text"
-            spellcheck="false"
-            value="<?= h($prefillToken) ?>"
-            placeholder="Paste token / URL QR">
-          <button type="submit" class="widget-submit" aria-label="Submit token">
-            <i class="bi bi-arrow-right"></i>
-          </button>
-        </div>
-      </form>
-    </div>
-  </aside>
 
   <!-- Logo strip -->
   <section class="logo-strip" aria-label="Sponsor logos">
