@@ -866,6 +866,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       color: #ffe7e7;
     }
 
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 12, 24, 0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 80;
+      padding: 18px;
+    }
+
+    .loading-overlay.show {
+      display: flex;
+    }
+
+    .loading-card {
+      width: min(420px, 100%);
+      background: rgba(7, 22, 45, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 14px;
+      padding: 20px;
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+      text-align: center;
+    }
+
+    .loading-spinner {
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      border: 4px solid rgba(255, 255, 255, 0.25);
+      border-top-color: #fff;
+      animation: spin 0.9s linear infinite;
+    }
+
+    .loading-title {
+      font-family: var(--font-accent);
+      font-size: 26px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .loading-subtext {
+      font-size: 13px;
+      opacity: 0.9;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     @media (max-width: 960px) {
       .order-full {
         grid-template-columns: 1fr;
@@ -1063,6 +1117,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </section>
     </div>
   </main>
+
+  <div class="loading-overlay" id="orderLoadingModal" aria-hidden="true">
+    <div class="loading-card">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <div class="loading-title"><i class="bi bi-hourglass-split"></i> Processing Order</div>
+      <div class="loading-subtext">Harap tunggu sebentar dan cek inbox untuk info invoice/order.</div>
+    </div>
+  </div>
+
   <script>
     (function () {
       var body = document.body;
@@ -1126,6 +1189,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
 
       var proofRowsContainer = document.getElementById('proofRows');
+      var orderSubmitForm = document.getElementById('orderSubmitForm');
+      var orderLoadingModal = document.getElementById('orderLoadingModal');
+      var orderSubmitBtn = orderSubmitForm ? orderSubmitForm.querySelector('button[type="submit"]') : null;
+      var isOrderSubmitting = false;
       var proofTemplate = document.getElementById('proofRowTemplate');
       var proofAddBtn = document.getElementById('proofAddBtn');
       var proofPreviewWrap = document.getElementById('proofPreviewWrap');
@@ -1240,6 +1307,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       if (proofAddBtn) {
         proofAddBtn.addEventListener('click', createProofRow);
+      }
+
+      if (orderSubmitForm) {
+        orderSubmitForm.addEventListener('submit', function (e) {
+          if (isOrderSubmitting) {
+            e.preventDefault();
+            return;
+          }
+          isOrderSubmitting = true;
+          if (orderSubmitBtn) {
+            orderSubmitBtn.disabled = true;
+            orderSubmitBtn.style.opacity = '0.7';
+            orderSubmitBtn.style.cursor = 'not-allowed';
+          }
+          if (orderLoadingModal) {
+            orderLoadingModal.classList.add('show');
+            orderLoadingModal.setAttribute('aria-hidden', 'false');
+          }
+        });
       }
 
       if (packageSelectionEnabled) {

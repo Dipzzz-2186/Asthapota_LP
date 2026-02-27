@@ -492,6 +492,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       display: flex;
     }
 
+    #otpLoadingModal {
+      z-index: 80;
+    }
+
     .modal-card {
       width: min(460px, 100%);
       background: rgba(7, 22, 45, 0.94);
@@ -681,7 +685,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button class="btn primary" type="submit"><i class="bi bi-check2-circle"></i> Verify</button>
       </form>
 
-      <form method="post" action="">
+      <form method="post" action="" id="otpResendForm">
         <input type="hidden" name="step" value="resend_otp">
         <input type="hidden" name="from" value="<?= h($from) ?>">
         <button class="btn ghost" type="submit"><i class="bi bi-arrow-repeat"></i> Resend OTP</button>
@@ -693,7 +697,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="modal-card loading-card">
       <div class="loading-spinner" aria-hidden="true"></div>
       <div class="modal-title"><i class="bi bi-envelope-paper-heart"></i> Sending OTP</div>
-      <div class="loading-subtext">Please wait, we are sending verification code to your email.</div>
+      <div class="loading-subtext">Mohon Tunggu, kami sedang mengirimkan kode verifikasi ke email Anda.</div>
     </div>
   </div>
 
@@ -713,7 +717,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
       <?php endif; ?>
 
-      <form class="form" method="post" action="">
+      <form class="form" method="post" action="" id="reRegisterForm">
         <input type="hidden" name="step" value="re_register_send_otp">
         <input type="hidden" name="from" value="<?= h($from) ?>">
         <label>
@@ -791,10 +795,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
 
       var form = document.getElementById('registerForm');
+      var reRegisterForm = document.getElementById('reRegisterForm');
+      var otpResendForm = document.getElementById('otpResendForm');
       var input = document.getElementById('instagramInput');
       var phoneInput = document.getElementById('phoneInput');
       var continueBtn = form ? form.querySelector('button[type="submit"]') : null;
+      var reRegisterSubmitBtn = reRegisterForm ? reRegisterForm.querySelector('button[type="submit"]') : null;
+      var otpResendBtn = otpResendForm ? otpResendForm.querySelector('button[type="submit"]') : null;
       var sendingOtp = false;
+      var sendingReRegisterOtp = false;
+      var resendingOtp = false;
 
       var showOtpLoading = function () {
         if (!otpLoadingModal) return;
@@ -838,6 +848,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             continueBtn.disabled = true;
             continueBtn.style.opacity = '0.7';
             continueBtn.style.cursor = 'not-allowed';
+          }
+          showOtpLoading();
+        });
+      }
+      if (reRegisterForm) {
+        reRegisterForm.addEventListener('submit', function (e) {
+          if (sendingReRegisterOtp) {
+            e.preventDefault();
+            return;
+          }
+          sendingReRegisterOtp = true;
+          if (reRegisterModal) {
+            reRegisterModal.classList.remove('show');
+          }
+          if (reRegisterSubmitBtn) {
+            reRegisterSubmitBtn.disabled = true;
+            reRegisterSubmitBtn.style.opacity = '0.7';
+            reRegisterSubmitBtn.style.cursor = 'not-allowed';
+          }
+          showOtpLoading();
+        });
+      }
+      if (otpResendForm) {
+        otpResendForm.addEventListener('submit', function (e) {
+          if (resendingOtp) {
+            e.preventDefault();
+            return;
+          }
+          resendingOtp = true;
+          if (otpResendBtn) {
+            otpResendBtn.disabled = true;
+            otpResendBtn.style.opacity = '0.7';
+            otpResendBtn.style.cursor = 'not-allowed';
           }
           showOtpLoading();
         });
