@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $aid = (int)($ar['id'] ?? 0);
             if ($aid <= 0) continue;
             $aname = trim((string)($ar['attendee_name'] ?? ''));
-           if ($aname === '') $aname = 'Attendee #' . (int)($ar['position_no'] ?? 0);
+           if ($aname === '') $aname = 'Attendee ' . (int)($ar['position_no'] ?? 0);
             $packageLabel = trim((string)($ar['package_name'] ?? ''));
             if ($packageLabel === '') {
                 $packageLabel = (string)($packagePool[$packIdx] ?? '');
