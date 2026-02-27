@@ -28,9 +28,12 @@ $selectedName = trim((string)($_REQUEST['name'] ?? ''));
 $selectedEmail = trim((string)($_REQUEST['email'] ?? ''));
 $selectedDate = trim((string)($_REQUEST['created_date'] ?? ''));
 $selectedStatusRaw = trim((string)($_REQUEST['status'] ?? ''));
+$selectedArrivalRaw = trim((string)($_REQUEST['arrival'] ?? ''));
 $selectedPage = isset($_REQUEST['page']) ? max(1, (int)$_REQUEST['page']) : 1;
 $allowedStatusFilters = ['pending', 'paid', 'accepted', 'rejected'];
+$allowedArrivalFilters = ['arrived', 'not_arrived'];
 $selectedStatus = in_array($selectedStatusRaw, $allowedStatusFilters, true) ? $selectedStatusRaw : '';
+$selectedArrival = in_array($selectedArrivalRaw, $allowedArrivalFilters, true) ? $selectedArrivalRaw : '';
 if ($selectedDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)) {
     $selectedDate = '';
 }
@@ -630,6 +633,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($selectedEmail !== '') $redirectParams['email'] = $selectedEmail;
     if ($selectedDate !== '') $redirectParams['created_date'] = $selectedDate;
     if ($selectedStatus !== '') $redirectParams['status'] = $selectedStatus;
+    if ($selectedArrival !== '') $redirectParams['arrival'] = $selectedArrival;
     if ($selectedPage > 1) $redirectParams['page'] = $selectedPage;
     $redirectPath = '/admin/dashboard';
     if ($redirectParams) $redirectPath .= '?' . http_build_query($redirectParams);
@@ -675,6 +679,11 @@ if ($selectedEmail !== '') { $whereParts[] = "u.email LIKE ?"; $params[] = '%' .
 if ($selectedDate !== '') { $whereParts[] = "DATE(o.created_at) = ?"; $params[] = $selectedDate; }
 if ($selectedStatus === 'paid' || $selectedStatus === 'accepted' || $selectedStatus === 'rejected') { $whereParts[] = "o.status = ?"; $params[] = $selectedStatus; }
 elseif ($selectedStatus === 'pending') { $whereParts[] = "o.status = 'pending'"; }
+if ($selectedArrival === 'arrived') {
+    $whereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa_arr WHERE oa_arr.order_id = o.id AND oa_arr.checked_in_at IS NOT NULL)";
+} elseif ($selectedArrival === 'not_arrived') {
+    $whereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa_arr WHERE oa_arr.order_id = o.id AND oa_arr.checked_in_at IS NULL)";
+}
 $whereSql = ' WHERE ' . implode(' AND ', $whereParts);
 
 if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
@@ -690,6 +699,11 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
     }
     if ($selectedEmail !== '') { $exportWhereParts[] = "u.email LIKE ?"; $exportParams[] = '%' . $selectedEmail . '%'; }
     if ($selectedDate !== '') { $exportWhereParts[] = "DATE(o.created_at) = ?"; $exportParams[] = $selectedDate; }
+    if ($selectedArrival === 'arrived') {
+        $exportWhereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa_arr WHERE oa_arr.order_id = o.id AND oa_arr.checked_in_at IS NOT NULL)";
+    } elseif ($selectedArrival === 'not_arrived') {
+        $exportWhereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa_arr WHERE oa_arr.order_id = o.id AND oa_arr.checked_in_at IS NULL)";
+    }
     $exportWhereSql = ' WHERE ' . implode(' AND ', $exportWhereParts);
 
     $exportSql = "SELECT
@@ -838,6 +852,11 @@ if ($selectedEmail !== '') { $packageSalesWhereParts[] = "u.email LIKE ?"; $pack
 if ($selectedDate !== '') { $packageSalesWhereParts[] = "DATE(o.created_at) = ?"; $packageSalesParams[] = $selectedDate; }
 if ($selectedStatus === 'paid' || $selectedStatus === 'accepted' || $selectedStatus === 'rejected') { $packageSalesWhereParts[] = "o.status = ?"; $packageSalesParams[] = $selectedStatus; }
 elseif ($selectedStatus === 'pending') { $packageSalesWhereParts[] = "o.status = 'pending'"; }
+if ($selectedArrival === 'arrived') {
+    $packageSalesWhereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa_arr WHERE oa_arr.order_id = o.id AND oa_arr.checked_in_at IS NOT NULL)";
+} elseif ($selectedArrival === 'not_arrived') {
+    $packageSalesWhereParts[] = "EXISTS (SELECT 1 FROM order_attendees oa_arr WHERE oa_arr.order_id = o.id AND oa_arr.checked_in_at IS NULL)";
+}
 $packageSalesWhereSql = ' WHERE ' . implode(' AND ', $packageSalesWhereParts);
 
 $packageSalesSql = "SELECT
@@ -1029,7 +1048,7 @@ if ($orderIds) {
     }
 }
 
-$hasActiveFilters = $selectedPackage > 0 || $selectedCourt > 0 || $selectedOrderId > 0 || $selectedName !== '' || $selectedEmail !== '' || $selectedDate !== '' || $selectedStatus !== '';
+$hasActiveFilters = $selectedPackage > 0 || $selectedCourt > 0 || $selectedOrderId > 0 || $selectedName !== '' || $selectedEmail !== '' || $selectedDate !== '' || $selectedStatus !== '' || $selectedArrival !== '';
 $startRow = $filteredOrderCount > 0 ? ($offset + 1) : 0;
 $endRow = min($offset + count($orders), $filteredOrderCount);
 $cardFilterBaseParams = [];
@@ -1038,6 +1057,7 @@ if ($selectedName !== '') $cardFilterBaseParams['name'] = $selectedName;
 if ($selectedEmail !== '') $cardFilterBaseParams['email'] = $selectedEmail;
 if ($selectedDate !== '') $cardFilterBaseParams['created_date'] = $selectedDate;
 if ($selectedStatus !== '') $cardFilterBaseParams['status'] = $selectedStatus;
+if ($selectedArrival !== '') $cardFilterBaseParams['arrival'] = $selectedArrival;
 $paginationBaseParams = [];
 if ($selectedOrderId > 0) $paginationBaseParams['filter_order_id'] = $selectedOrderId;
 if ($selectedPackage > 0) $paginationBaseParams['package'] = $selectedPackage;
@@ -1046,6 +1066,7 @@ if ($selectedName !== '') $paginationBaseParams['name'] = $selectedName;
 if ($selectedEmail !== '') $paginationBaseParams['email'] = $selectedEmail;
 if ($selectedDate !== '') $paginationBaseParams['created_date'] = $selectedDate;
 if ($selectedStatus !== '') $paginationBaseParams['status'] = $selectedStatus;
+if ($selectedArrival !== '') $paginationBaseParams['arrival'] = $selectedArrival;
 $exportQueryParams = ['export' => 'excel'];
 if ($selectedOrderId > 0) $exportQueryParams['filter_order_id'] = $selectedOrderId;
 if ($selectedPackage > 0) $exportQueryParams['package'] = $selectedPackage;
@@ -1053,6 +1074,7 @@ if ($selectedCourt > 0) $exportQueryParams['court'] = $selectedCourt;
 if ($selectedName !== '') $exportQueryParams['name'] = $selectedName;
 if ($selectedEmail !== '') $exportQueryParams['email'] = $selectedEmail;
 if ($selectedDate !== '') $exportQueryParams['created_date'] = $selectedDate;
+if ($selectedArrival !== '') $exportQueryParams['arrival'] = $selectedArrival;
 $exportExcelUrl = '/admin/dashboard?' . http_build_query($exportQueryParams);
 
 $extraHead = <<<'HTML'
@@ -1061,7 +1083,7 @@ $extraHead = <<<'HTML'
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-  /* ─── Base ──────────────────────────────────────────────── */
+  /* --- Base ------------------------------------------------ */
   .admin-shell, .admin-shell *:not(.bi) {
     font-family: 'Plus Jakarta Sans', var(--font, sans-serif);
   }
@@ -1071,7 +1093,7 @@ $extraHead = <<<'HTML'
     padding-inline: clamp(12px, 3vw, 40px);
   }
 
-  /* ─── Page Header ────────────────────────────────────────── */
+  /* --- Page Header ------------------------------------------ */
   .admin-header.spaced {
     display: flex;
     align-items: center;
@@ -1124,7 +1146,7 @@ $extraHead = <<<'HTML'
     text-overflow: ellipsis;
   }
 
-  /* ─── Stat Grid ──────────────────────────────────────────── */
+  /* --- Stat Grid -------------------------------------------- */
   .stat-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -1273,7 +1295,7 @@ $extraHead = <<<'HTML'
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* ─── Filter Card ────────────────────────────────────────── */
+  /* --- Filter Card ------------------------------------------ */
   .dashboard-split-layout {
     display: grid;
     grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -1438,7 +1460,7 @@ $extraHead = <<<'HTML'
     margin-top: 2px;
   }
 
-  /* ─── Admin Email Modal ──────────────────────────────────── */
+  /* --- Admin Email Modal ------------------------------------ */
   #adminEmailModal .sponsor-modal-card {
     width: min(680px, 100%);
   }
@@ -1562,7 +1584,7 @@ $extraHead = <<<'HTML'
     min-width: 130px;
   }
 
-  /* ─── Sponsor Modal (Manage List) ───────────────────────── */
+  /* --- Sponsor Modal (Manage List) ------------------------- */
   #sponsorModal .sponsor-modal-card {
     width: min(760px, 100%);
   }
@@ -1687,7 +1709,7 @@ $extraHead = <<<'HTML'
     text-align: center;
   }
 
-  /* ─── Ads Modal (Manage List) ───────────────────────────── */
+  /* --- Ads Modal (Manage List) ----------------------------- */
   #adModal .sponsor-modal-card {
     width: min(760px, 100%);
   }
@@ -1923,7 +1945,7 @@ $extraHead = <<<'HTML'
     text-align: center;
   }
 
-  /* ─── Flash Messages ─────────────────────────────────────── */
+  /* --- Flash Messages --------------------------------------- */
   .alert, .alert-success {
     display: flex;
     align-items: center;
@@ -1940,7 +1962,7 @@ $extraHead = <<<'HTML'
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* ─── Pagination ─────────────────────────────────────────── */
+  /* --- Pagination ------------------------------------------- */
   .pagination-wrap {
     display: flex;
     justify-content: space-between;
@@ -1977,7 +1999,7 @@ $extraHead = <<<'HTML'
   }
   .pagination .btn.is-disabled { pointer-events: none; opacity: 0.35; }
 
-  /* ─── Desktop Table ──────────────────────────────────────── */
+  /* --- Desktop Table ---------------------------------------- */
   .table-wrap {
     border-radius: 16px;
     border: 1px solid var(--stroke);
@@ -2055,7 +2077,7 @@ $extraHead = <<<'HTML'
   .empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; font-weight: 600; }
   .empty-state .bi { font-size: 32px; opacity: 0.35; }
 
-  /* ─── Badges ─────────────────────────────────────────────── */
+  /* --- Badges ----------------------------------------------- */
   .badge {
     display: inline-flex;
     align-items: center;
@@ -2073,7 +2095,7 @@ $extraHead = <<<'HTML'
   .badge.rejected { background: rgba(211,47,47,0.08); color: #c0392b; border-color: rgba(211,47,47,0.18); }
   .badge.pending  { background: rgba(180,120,0,0.09); color: #8a6000; border-color: rgba(180,120,0,0.2); }
 
-  /* ─── Proof Button ───────────────────────────────────────── */
+  /* --- Proof Button ----------------------------------------- */
   .proof-link {
     display: inline-flex;
     align-items: center;
@@ -2092,7 +2114,7 @@ $extraHead = <<<'HTML'
   }
   .proof-link:hover { background: rgba(0,102,255,0.07); border-color: var(--primary); transform: translateY(-1px); }
 
-  /* ─── Action Group ───────────────────────────────────────── */
+  /* --- Action Group ----------------------------------------- */
   table.admin-table td:nth-child(8) {
     z-index: 40;
     overflow: visible;
@@ -2181,9 +2203,9 @@ $extraHead = <<<'HTML'
     transform: translate(-50%, 0);
   }
 
-  /* ══════════════════════════════════════════════════════════
+  /* ----------------------------------------------------------
      MOBILE CARD LAYOUT — replaces table on small screens
-  ══════════════════════════════════════════════════════════ */
+  ---------------------------------------------------------- */
   .order-cards { display: none; }
   .order-card {
     border: 1px solid var(--stroke);
@@ -2312,7 +2334,7 @@ $extraHead = <<<'HTML'
 
   .order-card-actions .btn:disabled { opacity: 0.38; cursor: not-allowed; }
 
-  /* ─── Sponsor Modal ──────────────────────────────────────── */
+  /* --- Sponsor Modal ---------------------------------------- */
   .sponsor-modal {
     position: fixed;
     inset: 0;
@@ -2434,7 +2456,7 @@ $extraHead = <<<'HTML'
     to { transform: rotate(360deg); }
   }
 
-  /* ─── Order Detail Modal ─────────────────────────────────── */
+  /* --- Order Detail Modal ----------------------------------- */
   #orderDetailModal .proof-card { max-width: min(96vw, 1000px); border-radius: 20px; }
   #orderDetailModal .proof-head { padding: 14px 18px; background: var(--surface-2, #f8faff); }
   #orderDetailModal .proof-title { font-size: 18px; font-weight: 800; letter-spacing: -0.4px; }
@@ -2570,13 +2592,13 @@ $extraHead = <<<'HTML'
     min-width: 110px;
   }
 
-  /* ─── Animations ─────────────────────────────────────────── */
+  /* --- Animations ------------------------------------------- */
   @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes modalCardIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-  /* ══════════════════════════════════════════════════════════
+  /* ----------------------------------------------------------
      RESPONSIVE BREAKPOINTS
-  ══════════════════════════════════════════════════════════ */
+  ---------------------------------------------------------- */
 
   /* Large desktop: 4-col stats */
   @media (max-width: 1200px) {
@@ -2587,7 +2609,7 @@ $extraHead = <<<'HTML'
     }
   }
 
-  /* Tablet: collapse table → cards */
+  /* Tablet: collapse table ? cards */
   @media (max-width: 900px) {
     .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
     .court-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -2798,7 +2820,7 @@ render_header([
   <main class="admin-shell">
     <div class="container admin-container-wide">
 
-      <!-- ── Page Header ─────────────────────────────────────── -->
+      <!-- -- Page Header --------------------------------------- -->
       <div class="admin-header spaced">
         <div>
           <h1 class="admin-title">Dashboard</h1>
@@ -2821,7 +2843,7 @@ render_header([
         </div>
       </div>
 
-      <!-- ── Stat Cards ──────────────────────────────────────── -->
+      <!-- -- Stat Cards ---------------------------------------- -->
       <div class="stat-grid">
         <div class="stat-card stat-card--revenue-top">
           <div class="stat-label"><i class="bi bi-cash-stack"></i> Revenue Accepted</div>
@@ -2880,7 +2902,7 @@ render_header([
       </div>
 
       <div class="dashboard-split-layout">
-      <!-- ── Filter Card ─────────────────────────────────────── -->
+      <!-- -- Filter Card --------------------------------------- -->
       <aside class="dashboard-filter-column">
       <div class="card filter-card">
         <!-- Mobile toggle (hidden on desktop via CSS) -->
@@ -2896,7 +2918,7 @@ render_header([
             Filter Orders
             <?php if ($hasActiveFilters): ?>
               <span class="filter-active-count"><?php
-                $fc = (int)($selectedOrderId > 0) + (int)($selectedName !== '') + (int)($selectedEmail !== '') + (int)($selectedDate !== '') + (int)($selectedStatus !== '') + (int)($selectedPackage > 0) + (int)($selectedCourt > 0);
+                $fc = (int)($selectedOrderId > 0) + (int)($selectedName !== '') + (int)($selectedEmail !== '') + (int)($selectedDate !== '') + (int)($selectedStatus !== '') + (int)($selectedArrival !== '') + (int)($selectedPackage > 0) + (int)($selectedCourt > 0);
                 echo $fc;
               ?></span>
             <?php endif; ?>
@@ -2931,6 +2953,14 @@ render_header([
               <option value="paid" <?= $selectedStatus === 'paid' ? 'selected' : '' ?>>Paid</option>
               <option value="accepted" <?= $selectedStatus === 'accepted' ? 'selected' : '' ?>>Accepted</option>
               <option value="rejected" <?= $selectedStatus === 'rejected' ? 'selected' : '' ?>>Rejected</option>
+            </select>
+          </div>
+          <div class="filter-field filter-field-status">
+            <label class="field-label" for="filterArrival">Kehadiran</label>
+            <select id="filterArrival" name="arrival">
+              <option value="">Semua Kehadiran</option>
+              <option value="arrived" <?= $selectedArrival === 'arrived' ? 'selected' : '' ?>>Sudah Datang</option>
+              <option value="not_arrived" <?= $selectedArrival === 'not_arrived' ? 'selected' : '' ?>>Belum Datang</option>
             </select>
           </div>
           <div class="filter-field filter-field-package">
@@ -2974,7 +3004,7 @@ render_header([
         <div class="alert-success"><i class="bi bi-check-circle-fill"></i> <?= h($flash['success']) ?></div>
       <?php endif; ?>
 
-      <!-- ── Pagination Top ──────────────────────────────────── -->
+      <!-- -- Pagination Top ------------------------------------ -->
       <?php if ($totalPages > 1 || $filteredOrderCount > 0): ?>
       <div class="pagination-wrap">
         <div class="pagination-info">
@@ -3000,9 +3030,9 @@ render_header([
       </div>
       <?php endif; ?>
 
-      <!-- ═══════════════════════════════════════════════════════
+      <!-- -------------------------------------------------------
            DESKTOP: Standard Table (hidden on mobile via CSS)
-      ═══════════════════════════════════════════════════════ -->
+      ------------------------------------------------------- -->
       <div class="table-wrap">
         <table class="admin-table">
           <thead>
@@ -3080,9 +3110,9 @@ render_header([
         </table>
       </div>
 
-      <!-- ═══════════════════════════════════════════════════════
+      <!-- -------------------------------------------------------
            MOBILE: Card Layout (shown on mobile via CSS)
-      ═══════════════════════════════════════════════════════ -->
+      ------------------------------------------------------- -->
       <div class="order-cards">
         <?php if (!$orders): ?>
           <div style="text-align:center;padding:40px 20px;border:1px solid var(--stroke);border-radius:14px;background:var(--surface);">
@@ -3170,7 +3200,7 @@ render_header([
         <?php endforeach; ?>
       </div>
 
-      <!-- ── Pagination Bottom ───────────────────────────────── -->
+      <!-- -- Pagination Bottom --------------------------------- -->
       <?php if ($totalPages > 1 || $filteredOrderCount > 0): ?>
       <div class="pagination-wrap" style="margin-top:14px;">
         <div class="pagination-info">
@@ -3195,7 +3225,7 @@ render_header([
     </div>
   </main>
 
-  <!-- ─── Modals ───────────────────────────────────────────── -->
+  <!-- --- Modals --------------------------------------------- -->
   <div class="proof-modal" id="proofGalleryModal" aria-hidden="true">
     <div class="proof-card proof-gallery-card" role="dialog" aria-modal="true" aria-labelledby="proofGalleryTitle">
       <div class="proof-head">
@@ -3292,6 +3322,7 @@ render_header([
     <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
     <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
     <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+    <input type="hidden" name="arrival" value="<?= h($selectedArrival) ?>">
   </form>
 
   <div class="screen-notice" id="screenNotice" role="status" aria-live="polite"></div>
@@ -3315,6 +3346,7 @@ render_header([
     <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
     <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
     <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+    <input type="hidden" name="arrival" value="<?= h($selectedArrival) ?>">
   </form>
 
   <div class="sponsor-modal" id="adminEmailModal" aria-hidden="true">
@@ -3334,6 +3366,7 @@ render_header([
           <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
           <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
           <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+    <input type="hidden" name="arrival" value="<?= h($selectedArrival) ?>">
           <div class="sponsor-field">
             <label for="adminNotifyEmail">Tambah Email Admin</label>
             <input id="adminNotifyEmail" type="email" name="admin_notify_email" placeholder="contoh: admin2@domain.com" required>
@@ -3360,6 +3393,7 @@ render_header([
                   <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
                   <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
                   <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+    <input type="hidden" name="arrival" value="<?= h($selectedArrival) ?>">
                   <button class="admin-email-remove-btn" type="submit" aria-label="Hapus email admin">
                     <i class="bi bi-trash3"></i> Hapus
                   </button>
@@ -3396,6 +3430,7 @@ render_header([
           <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
           <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
           <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+    <input type="hidden" name="arrival" value="<?= h($selectedArrival) ?>">
           <div class="sponsor-field">
             <label for="sponsorName">Nama Sponsor</label>
             <input id="sponsorName" type="text" name="sponsor_name" placeholder="Contoh: FCOM" required>
@@ -3446,6 +3481,7 @@ render_header([
                   <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
                   <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
                   <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+    <input type="hidden" name="arrival" value="<?= h($selectedArrival) ?>">
                   <button class="sponsor-remove-btn" type="submit" aria-label="Hapus sponsor">
                     <i class="bi bi-trash3"></i> Hapus
                   </button>
@@ -3519,6 +3555,7 @@ render_header([
                   <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
                   <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
                   <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+    <input type="hidden" name="arrival" value="<?= h($selectedArrival) ?>">
                   <button class="ad-remove-btn" type="submit" aria-label="Hapus iklan">
                     <i class="bi bi-trash3"></i> Hapus
                   </button>
@@ -3542,6 +3579,7 @@ render_header([
           <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
           <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
           <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+    <input type="hidden" name="arrival" value="<?= h($selectedArrival) ?>">
           <div class="sponsor-field">
             <label for="adTitle">Judul Iklan</label>
             <input id="adTitle" type="text" name="ad_title" placeholder="Contoh: Promo Event 2026" required>
@@ -3603,6 +3641,7 @@ render_header([
         <input type="hidden" name="email" value="<?= h($selectedEmail) ?>">
         <input type="hidden" name="created_date" value="<?= h($selectedDate) ?>">
         <input type="hidden" name="status" value="<?= h($selectedStatus) ?>">
+    <input type="hidden" name="arrival" value="<?= h($selectedArrival) ?>">
 
         <div class="sponsor-field">
           <label for="currentPassword">Password Saat Ini</label>
@@ -3625,7 +3664,7 @@ render_header([
   </div>
 
   <script>
-    // ── Card toggle: click active card to clear filters ───────
+    // -- Card toggle: click active card to clear filters -------
     (function () {
       var resetUrl = '/admin/dashboard';
       document.addEventListener('click', function (e) {
@@ -3640,7 +3679,7 @@ render_header([
   </script>
 
   <script>
-    // ── Mobile filter toggle ───────────────────────────────────
+    // -- Mobile filter toggle -----------------------------------
     (function () {
       var btn = document.getElementById('filterToggleBtn');
       var collapsible = document.getElementById('filterCollapsible');
@@ -3682,7 +3721,7 @@ render_header([
       });
     })();
 
-    // ── Auto-submit filter ─────────────────────────────────────
+    // -- Auto-submit filter -------------------------------------
     (function () {
       var form = document.getElementById('dashboardFilterForm');
       if (!form) return;
@@ -3759,7 +3798,7 @@ render_header([
   </script>
 
   <script>
-    // ── Admin Email Modal ────────────────────────────────────
+    // -- Admin Email Modal ------------------------------------
     (function () {
       var modal = document.getElementById('adminEmailModal');
       var openBtn = document.getElementById('openAdminEmailModal');
@@ -3787,7 +3826,7 @@ render_header([
   </script>
 
   <script>
-    // ── Change Password Modal ─────────────────────────────────
+    // -- Change Password Modal ---------------------------------
     (function () {
       var modal = document.getElementById('passwordModal');
       var openBtn = document.getElementById('openPasswordModal');
@@ -3815,7 +3854,7 @@ render_header([
   </script>
 
   <script>
-    // ── Sponsor Modal ──────────────────────────────────────────
+    // -- Sponsor Modal ------------------------------------------
     (function () {
       var modal = document.getElementById('sponsorModal');
       var openBtn = document.getElementById('openSponsorModal');
@@ -3833,7 +3872,7 @@ render_header([
   </script>
 
   <script>
-    // ── Ads Modal ─────────────────────────────────────────────
+    // -- Ads Modal ---------------------------------------------
     (function () {
       var modal = document.getElementById('adModal');
       var openBtn = document.getElementById('openAdModal');
@@ -4033,7 +4072,7 @@ render_header([
   </script>
 
   <script>
-    // ── Order Detail Modal ─────────────────────────────────────
+    // -- Order Detail Modal -------------------------------------
     (function() {
       var modal = document.getElementById('orderDetailModal');
       if (!modal) return;
@@ -4629,7 +4668,7 @@ render_header([
   </script>
 
   <script>
-    // ── Proof Modal ────────────────────────────────────────────
+    // -- Proof Modal --------------------------------------------
     (function() {
       var modal = document.getElementById('proofModal');
       var img = document.getElementById('proofImage');
@@ -4792,7 +4831,7 @@ render_header([
   </script>
 
   <script>
-    // ── Confirm Modal ──────────────────────────────────────────
+    // -- Confirm Modal ------------------------------------------
     (function() {
       var modal = document.getElementById('confirmModal');
       var warnModal = document.getElementById('acceptWarnModal');
@@ -4880,7 +4919,7 @@ render_header([
   </script>
 
   <script>
-    // ── Drag Scroll Table (Desktop) ───────────────────────────
+    // -- Drag Scroll Table (Desktop) ---------------------------
     (function() {
       var wraps = document.querySelectorAll('.table-wrap');
       if (!wraps.length) return;
@@ -4932,7 +4971,7 @@ render_header([
   </script>
 
   <script>
-    // ── Flash Auto-dismiss ─────────────────────────────────────
+    // -- Flash Auto-dismiss -------------------------------------
     (function() {
       var alerts = document.querySelectorAll('.alert, .alert-success');
       if (!alerts.length) return;
@@ -4947,3 +4986,5 @@ render_header([
   </script>
   
 <?php render_footer(['isAdmin' => true]); ?>
+
+
