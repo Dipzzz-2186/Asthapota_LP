@@ -6,7 +6,13 @@ require_once __DIR__ . '/../layout/app.php';
 require_admin();
 
 $db = get_db();
+ensure_session();
 $flash = ['success' => '', 'error' => ''];
+if (isset($_SESSION['competition_flash']) && is_array($_SESSION['competition_flash'])) {
+    $flash['success'] = (string)($_SESSION['competition_flash']['success'] ?? '');
+    $flash['error'] = (string)($_SESSION['competition_flash']['error'] ?? '');
+    unset($_SESSION['competition_flash']);
+}
 const PADEL_ALLOWED_TOTAL_POINTS = [16, 21, 24, 32];
 
 function normalize_competition_type(string $type): string {
@@ -224,6 +230,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+
+    $_SESSION['competition_flash'] = [
+        'success' => (string)($flash['success'] ?? ''),
+        'error' => (string)($flash['error'] ?? ''),
+    ];
+    redirect('/admin/competition');
 }
 
 $games = [];
@@ -905,3 +917,4 @@ render_header([
   </div>
 </main>
 <?php render_footer(['isAdmin' => true]); ?>
+
