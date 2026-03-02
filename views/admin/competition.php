@@ -347,7 +347,7 @@ foreach ($gamesByType as $type => $rows) {
         if ($playerAName === '' || $playerBName === '' || $scoreA === null || $scoreB === null) {
             continue;
         }
-        $scoreError = validate_padel_score($scoreA, $scoreB);
+        $scoreError = validate_padel_score($scoreA, $scoreB, $scoreA + $scoreB);
         if ($scoreError !== '') {
             continue;
         }
