@@ -231,11 +231,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    $redirectMatchPage = (int)($_POST['match_page'] ?? 1);
+    if ($redirectMatchPage < 1) {
+        $redirectMatchPage = 1;
+    }
+
     $_SESSION['competition_flash'] = [
         'success' => (string)($flash['success'] ?? ''),
         'error' => (string)($flash['error'] ?? ''),
     ];
-    redirect('/admin/competition');
+    $redirectTarget = '/admin/competition';
+    if ($redirectMatchPage > 1) {
+        $redirectTarget .= '?match_page=' . $redirectMatchPage;
+    }
+    redirect($redirectTarget);
 }
 
 $games = [];
@@ -263,6 +272,17 @@ try {
 } catch (Throwable $e) {
     $games = [];
 }
+
+$matchesPerPage = 10;
+$requestedMatchPage = (int)($_GET['match_page'] ?? 1);
+if ($requestedMatchPage < 1) {
+    $requestedMatchPage = 1;
+}
+$totalMatchCount = count($games);
+$totalMatchPages = max(1, (int)ceil($totalMatchCount / $matchesPerPage));
+$currentMatchPage = min($requestedMatchPage, $totalMatchPages);
+$matchOffset = ($currentMatchPage - 1) * $matchesPerPage;
+$gamesForTable = array_slice($games, $matchOffset, $matchesPerPage);
 
 $registeredUserCount = 0;
 try {
@@ -384,6 +404,7 @@ $extraHead = <<<HTML
     display: grid;
     grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
     gap: 16px;
+    align-items: start;
   }
   .competition-card {
     background: rgba(255,255,255,.9);
@@ -589,6 +610,53 @@ $extraHead = <<<HTML
     display: grid;
     gap: 6px;
   }
+  .competition-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .pagination-meta {
+    font-size: 12px;
+    color: #4c6388;
+  }
+  .pagination-links {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .page-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    border-radius: 8px;
+    border: 1px solid #bfd0ea;
+    background: #fff;
+    color: #163966;
+    padding: 7px 9px;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .page-link.current {
+    background: #1a66e9;
+    border-color: #1a66e9;
+    color: #fff;
+  }
+  .page-ellipsis {
+    color: #6a7f9f;
+    font-weight: 700;
+    padding: 0 2px;
+    min-width: 18px;
+    text-align: center;
+  }
+  .page-link.disabled {
+    opacity: .45;
+    pointer-events: none;
+  }
   .score-rule-note {
     font-size: 12px;
     color: #385885;
@@ -672,6 +740,7 @@ render_header([
         <h2><i class="bi bi-plus-circle"></i> Tambah Game</h2>
         <form method="post" class="competition-form">
           <input type="hidden" name="competition_action" value="create_match">
+          <input type="hidden" name="match_page" value="<?= (int)$currentMatchPage ?>">
           <div>
             <label for="competitionType">Tipe Game</label>
             <select id="competitionType" name="competition_type" required>
@@ -856,12 +925,12 @@ render_header([
               </tr>
             </thead>
             <tbody>
-              <?php if (!$games): ?>
+              <?php if (!$gamesForTable): ?>
                 <tr>
                   <td colspan="10">Belum ada game competition.</td>
                 </tr>
               <?php else: ?>
-                <?php foreach ($games as $idx => $game): ?>
+                <?php foreach ($gamesForTable as $idx => $game): ?>
                   <?php
                     $competitionLabel = trim((string)($game['competition_type'] ?? ''));
                     if ($competitionLabel === '') {
@@ -874,7 +943,7 @@ render_header([
                     $currentScoreTotal = ($scoreAVal !== null && $scoreBVal !== null) ? ((int)$scoreAVal + (int)$scoreBVal) : 0;
                   ?>
                   <tr>
-                    <td><?= (int)($idx + 1) ?></td>
+                    <td><?= (int)($matchOffset + $idx + 1) ?></td>
                     <td><?= h($competitionLabel !== '' ? $competitionLabel : '-') ?></td>
                     <td><?= h((string)($game['game_title'] ?? '-')) ?></td>
                     <td><?= h($playerAName !== '' ? $playerAName : '-') ?></td>
@@ -888,6 +957,7 @@ render_header([
                         <form method="post" class="score-form">
                           <input type="hidden" name="competition_action" value="update_score">
                           <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
+                          <input type="hidden" name="match_page" value="<?= (int)$currentMatchPage ?>">
                           <select name="score_total">
                             <option value="">-- total --</option>
                             <?php foreach (PADEL_ALLOWED_TOTAL_POINTS as $totalPoint): ?>
@@ -902,6 +972,7 @@ render_header([
                         <form method="post" onsubmit="return confirm('Hapus game ini?');">
                           <input type="hidden" name="competition_action" value="delete_game">
                           <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
+                          <input type="hidden" name="match_page" value="<?= (int)$currentMatchPage ?>">
                           <button class="btn ghost small" type="submit">Hapus</button>
                         </form>
                       </div>
@@ -911,6 +982,53 @@ render_header([
               <?php endif; ?>
             </tbody>
           </table>
+          <?php
+            $rangeStart = $totalMatchCount > 0 ? ($matchOffset + 1) : 0;
+            $rangeEnd = $matchOffset + count($gamesForTable);
+            $prevMatchPage = max(1, $currentMatchPage - 1);
+            $nextMatchPage = min($totalMatchPages, $currentMatchPage + 1);
+            $pageCandidates = [1, $totalMatchPages, $currentMatchPage - 1, $currentMatchPage, $currentMatchPage + 1];
+            $visiblePages = [];
+            foreach ($pageCandidates as $candidate) {
+                $candidate = (int)$candidate;
+                if ($candidate < 1 || $candidate > $totalMatchPages) {
+                    continue;
+                }
+                if (!in_array($candidate, $visiblePages, true)) {
+                    $visiblePages[] = $candidate;
+                }
+            }
+            sort($visiblePages, SORT_NUMERIC);
+          ?>
+          <div class="competition-pagination">
+            <div class="pagination-meta">
+              Menampilkan <?= (int)$rangeStart ?>-<?= (int)$rangeEnd ?> dari <?= (int)$totalMatchCount ?> match.
+            </div>
+            <div class="pagination-links">
+              <?php if ($currentMatchPage > 1): ?>
+                <a class="page-link" href="/admin/competition?match_page=<?= (int)$prevMatchPage ?>" aria-label="Halaman sebelumnya">&lsaquo;</a>
+              <?php else: ?>
+                <span class="page-link disabled" aria-hidden="true">&lsaquo;</span>
+              <?php endif; ?>
+              <?php $lastRenderedPage = 0; ?>
+              <?php foreach ($visiblePages as $pageNumber): ?>
+                <?php if ($lastRenderedPage > 0 && $pageNumber - $lastRenderedPage > 1): ?>
+                  <span class="page-ellipsis">...</span>
+                <?php endif; ?>
+                <?php if ($pageNumber === $currentMatchPage): ?>
+                  <span class="page-link current"><?= (int)$pageNumber ?></span>
+                <?php else: ?>
+                  <a class="page-link" href="/admin/competition?match_page=<?= (int)$pageNumber ?>"><?= (int)$pageNumber ?></a>
+                <?php endif; ?>
+                <?php $lastRenderedPage = $pageNumber; ?>
+              <?php endforeach; ?>
+              <?php if ($currentMatchPage < $totalMatchPages): ?>
+                <a class="page-link" href="/admin/competition?match_page=<?= (int)$nextMatchPage ?>" aria-label="Halaman berikutnya">&rsaquo;</a>
+              <?php else: ?>
+                <span class="page-link disabled" aria-hidden="true">&rsaquo;</span>
+              <?php endif; ?>
+            </div>
+          </div>
         </div>
       </div>
     </section>
