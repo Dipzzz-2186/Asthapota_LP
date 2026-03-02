@@ -2926,6 +2926,7 @@ render_header([
           <p class="admin-sub">Ringkasan pesanan dan status pembayaran</p>
         </div>
         <div class="dashboard-head-actions">
+          <a class="btn ghost" href="/admin/competition"><i class="bi bi-diagram-3"></i> Competition</a>
           <a class="btn ghost" href="/admin/scan"><i class="bi bi-qr-code-scan"></i> Scan QR</a>
           <button class="btn ghost" type="button" id="openAdminEmailModal">
             <i class="bi bi-envelope-check"></i> Email Admin

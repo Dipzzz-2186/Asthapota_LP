@@ -196,6 +196,34 @@
       transform: translateX(4px);
     }
 
+    .quick-link-row {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .quick-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      color: #fff;
+      background: rgba(14, 48, 101, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.54);
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      transition: transform .18s ease, background .18s ease, border-color .18s ease;
+    }
+
+    .quick-link-btn:hover {
+      transform: translateY(-2px);
+      background: rgba(14, 48, 101, 0.88);
+      border-color: rgba(255, 255, 255, 0.8);
+    }
+
     .event-hint {
       font-family: var(--font-body);
       font-size: clamp(14px, 1.1vw, 19px);
@@ -467,6 +495,9 @@
 
     <div class="footer-section fade-item" style="--delay: 290ms;">
       <a href="/events" class="event-series"><i class="bi bi-calendar-event"></i> Bapora <span class="hippi-word">Hippi</span> Collaborative Event Series <i class="bi bi-arrow-right event-arrow"></i></a>
+      <div class="quick-link-row">
+        <a href="/competition" class="quick-link-btn"><i class="bi bi-diagram-3"></i> Competition Portal</a>
+      </div>
       
      <a href="https://www.instagram.com/bapora.hippi/?_rdr" target="_blank" rel="noreferrer noopener" class="instagram-btn">
         <div class="ig-icon-circle">

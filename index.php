@@ -19,6 +19,8 @@ $routes = [
     '/' => __DIR__ . '/views/home.php',
     '/index.php' => __DIR__ . '/views/home.php',
     '/events' => __DIR__ . '/views/event.php',
+    '/competition' => __DIR__ . '/views/leaderboard.php',
+    '/leaderboard' => __DIR__ . '/views/leaderboard.php',
     '/home' => __DIR__ . '/views/event.php',
     '/register' => __DIR__ . '/views/register.php',
     '/packages' => __DIR__ . '/views/packages.php',
@@ -29,6 +31,7 @@ $routes = [
     '/logout' => __DIR__ . '/views/logout.php',
     admin_login_path() => __DIR__ . '/views/admin/login.php',
     '/admin/dashboard' => __DIR__ . '/views/admin/dashboard.php',
+    '/admin/competition' => __DIR__ . '/views/admin/competition.php',
     '/admin/scan' => __DIR__ . '/views/admin/scan.php',
     '/admin/logout' => __DIR__ . '/views/admin/logout.php',
 ];
