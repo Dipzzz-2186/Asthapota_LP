@@ -3199,7 +3199,9 @@ render_header([
                 <td style="font-size:12px;color:var(--muted);font-weight:500;">
                   <?= h($o['items'] ?? '-') ?>
                   <div style="margin-top:5px;font-size:11.5px;font-weight:700;color:#1f2937;">
-                    Hadir: <?= (int)$arrivedCount ?> | Belum Datang: <?= (int)$notArrivedCount ?>
+                    <span style="color:#166534;">Hadir: <?= (int)$arrivedCount ?></span>
+                    <span style="color:#6b7280;"> | </span>
+                    <span style="color:#b91c1c;">Belum Datang: <?= (int)$notArrivedCount ?></span>
                   </div>
                 </td>
                 <td><strong style="font-size:13px;letter-spacing:-0.3px;"><?= h(rupiah((int)$o['total'])) ?></strong></td>
@@ -3296,7 +3298,11 @@ render_header([
               </div>
               <div class="order-card-row">
                 <div class="order-card-label">Kehadiran</div>
-                <div class="order-card-value" style="font-size:12.5px;color:#1f2937;font-weight:700;">Hadir: <?= (int)$arrivedCount ?> | Belum Datang: <?= (int)$notArrivedCount ?></div>
+                <div class="order-card-value" style="font-size:12.5px;font-weight:700;">
+                  <span style="color:#166534;">Hadir: <?= (int)$arrivedCount ?></span>
+                  <span style="color:#6b7280;"> | </span>
+                  <span style="color:#b91c1c;">Belum Datang: <?= (int)$notArrivedCount ?></span>
+                </div>
               </div>
 
               <!-- Total row -->
