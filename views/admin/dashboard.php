@@ -1036,6 +1036,7 @@ $orderAttendeeMap = [];
 $orderMissingCourtCountMap = [];
 $orderAttendeePackageSummaryMap = [];
 $orderAttendeeCountMap = [];
+$orderArrivedCountMap = [];
 $orderIds = array_values(array_unique(array_map(static function ($row) { return (int)($row['id'] ?? 0); }, $orders)));
 
 if ($orderIds) {
@@ -1067,6 +1068,7 @@ if ($orderIds) {
             if ($oid <= 0) continue;
             if (!isset($orderAttendeeMap[$oid])) $orderAttendeeMap[$oid] = [];
             if (!isset($orderMissingCourtCountMap[$oid])) $orderMissingCourtCountMap[$oid] = 0;
+            if (!isset($orderArrivedCountMap[$oid])) $orderArrivedCountMap[$oid] = 0;
             $courtNo = (int)($row['court_no'] ?? 0);
             $packageId = (int)($row['package_id'] ?? 0);
             $packageName = trim((string)($row['package_name'] ?? ''));
@@ -1082,12 +1084,21 @@ if ($orderIds) {
             if ($selectedPackage > 0 && $packageId !== $selectedPackage) {
                 $includeAttendeeInDetail = false;
             }
+            $checkedInAt = trim((string)($row['checked_in_at'] ?? ''));
+            if ($checkedInAt !== '') {
+                $orderArrivedCountMap[$oid]++;
+            }
+            if ($selectedArrival === 'arrived' && $checkedInAt === '') {
+                $includeAttendeeInDetail = false;
+            } elseif ($selectedArrival === 'not_arrived' && $checkedInAt !== '') {
+                $includeAttendeeInDetail = false;
+            }
             if ($includeAttendeeInDetail) {
                 $orderAttendeeMap[$oid][] = [
                     'attendee_id' => (int)($row['attendee_id'] ?? 0),
                     'position_no' => (int)($row['position_no'] ?? 0),
                     'attendee_name' => trim((string)($row['attendee_name'] ?? '')),
-                    'checked_in_at' => (string)($row['checked_in_at'] ?? ''),
+                    'checked_in_at' => $checkedInAt,
                     'package_id' => $packageId,
                     'package_name' => trim((string)($row['package_name'] ?? '')),
                     'court_no' => $courtNo,
@@ -3158,6 +3169,9 @@ render_header([
               $firstProof = $proofPaths[0] ?? '';
               $canAction = !empty($firstProof) && $o['status'] === 'paid';
               $missingCourtCount = (int)($orderMissingCourtCountMap[$detailOrderId] ?? 0);
+              $arrivedCount = (int)($orderArrivedCountMap[$detailOrderId] ?? 0);
+              $attendeeTotalCount = (int)($orderAttendeeCountMap[$detailOrderId] ?? 0);
+              $notArrivedCount = max(0, $attendeeTotalCount - $arrivedCount);
               $detailPayload = [
                 'order_id' => $detailOrderId,
                 'user_name' => (string)($o['full_name'] ?? ''),
@@ -3182,7 +3196,12 @@ render_header([
                     <span class="contact-value"><?= h($ig) ?></span>
                   </div>
                 </td>
-                <td style="font-size:12px;color:var(--muted);font-weight:500;"><?= h($o['items'] ?? '-') ?></td>
+                <td style="font-size:12px;color:var(--muted);font-weight:500;">
+                  <?= h($o['items'] ?? '-') ?>
+                  <div style="margin-top:5px;font-size:11.5px;font-weight:700;color:#1f2937;">
+                    Hadir: <?= (int)$arrivedCount ?> | Belum Datang: <?= (int)$notArrivedCount ?>
+                  </div>
+                </td>
                 <td><strong style="font-size:13px;letter-spacing:-0.3px;"><?= h(rupiah((int)$o['total'])) ?></strong></td>
                 <td>
                   <?php if ($o['status'] === 'paid'): ?><span class="badge paid"><i class="bi bi-check-circle"></i> Paid</span>
@@ -3225,6 +3244,9 @@ render_header([
           $firstProof = $proofPaths[0] ?? '';
           $canAction = !empty($firstProof) && $o['status'] === 'paid';
           $missingCourtCount = (int)($orderMissingCourtCountMap[$detailOrderId] ?? 0);
+          $arrivedCount = (int)($orderArrivedCountMap[$detailOrderId] ?? 0);
+          $attendeeTotalCount = (int)($orderAttendeeCountMap[$detailOrderId] ?? 0);
+          $notArrivedCount = max(0, $attendeeTotalCount - $arrivedCount);
           $detailPayload = [
             'order_id' => $detailOrderId,
             'user_name' => (string)($o['full_name'] ?? ''),
@@ -3271,6 +3293,10 @@ render_header([
               <div class="order-card-row">
                 <div class="order-card-label">Paket</div>
                 <div class="order-card-value" style="font-size:12.5px;color:var(--muted);"><?= h($o['items'] ?? '—') ?></div>
+              </div>
+              <div class="order-card-row">
+                <div class="order-card-label">Kehadiran</div>
+                <div class="order-card-value" style="font-size:12.5px;color:#1f2937;font-weight:700;">Hadir: <?= (int)$arrivedCount ?> | Belum Datang: <?= (int)$notArrivedCount ?></div>
               </div>
 
               <!-- Total row -->
