@@ -1098,6 +1098,27 @@ usort($tournamentList, static function (array $a, array $b): int {
     return (int)($b['updated_ts'] ?? 0) <=> (int)($a['updated_ts'] ?? 0);
 });
 
+$tournamentsPerPage = 10;
+$requestedTournamentPage = (int)($_GET['tour_page'] ?? 1);
+if ($requestedTournamentPage < 1) {
+    $requestedTournamentPage = 1;
+}
+$totalTournamentCount = count($tournamentList);
+$totalTournamentPages = max(1, (int)ceil($totalTournamentCount / $tournamentsPerPage));
+$currentTournamentPage = min($requestedTournamentPage, $totalTournamentPages);
+$tournamentOffset = ($currentTournamentPage - 1) * $tournamentsPerPage;
+$tournamentsForList = array_slice($tournamentList, $tournamentOffset, $tournamentsPerPage);
+
+$listQueryParams = $_GET;
+unset($listQueryParams['_rt']);
+$buildTournamentPageUrl = static function (int $page) use ($listQueryParams): string {
+    $page = max(1, $page);
+    $params = $listQueryParams;
+    $params['tour_page'] = $page;
+    $query = http_build_query($params);
+    return '/admin/competition' . ($query !== '' ? ('?' . $query) : '');
+};
+
 $extraHead = <<<HTML
 <style>
   .competition-grid{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:16px;align-items:start}
@@ -1194,6 +1215,13 @@ $extraHead = <<<HTML
   .tournament-name{font-size:20px;line-height:1.1;color:#0f294d;font-weight:800;letter-spacing:-.3px}
   .tournament-meta{margin-top:6px;font-size:13px;font-weight:700;color:#1c426e}
   .tournament-updated{margin-top:5px;font-size:11px;color:#5a6b86;font-weight:700;text-transform:uppercase;letter-spacing:.55px}
+  .tour-pagination{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .tour-page-link,.tour-page-dots{min-width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;font-size:13px;font-weight:800}
+  .tour-page-link{border:1px solid #d6dee9;background:#fff;color:#213a62;text-decoration:none}
+  .tour-page-link:hover{background:#f5f8ff}
+  .tour-page-link.current{background:#3b82f6;border-color:#3b82f6;color:#fff}
+  .tour-page-link.disabled{opacity:.45;pointer-events:none}
+  .tour-page-dots{color:#6b7280}
   .tournament-modal{position:fixed;inset:0;background:rgba(10,20,40,.52);z-index:5000;display:none;align-items:center;justify-content:center;padding:0}
   .tournament-modal.is-open{display:flex}
   .tournament-modal-card{width:min(96vw,1520px);height:92vh;display:grid;grid-template-rows:auto minmax(0,1fr);border-radius:16px;background:#fff;border:1px solid rgba(15,32,60,.15);box-shadow:0 18px 38px rgba(10,20,40,.24);overflow:hidden}
@@ -1280,7 +1308,7 @@ render_header([
         </div>
         <div class="tournament-list">
           <?php $hasTournament = false; ?>
-          <?php foreach ($tournamentList as $tournament): ?>
+          <?php foreach ($tournamentsForList as $tournament): ?>
             <?php
               $type = (string)($tournament['type'] ?? '');
               $tourKey = (string)($tournament['key'] ?? '');
@@ -1301,6 +1329,46 @@ render_header([
           <?php endforeach; ?>
           <?php if (!$hasTournament): ?>
             <p class="admin-sub" style="margin:0;">Belum ada turnamen.</p>
+          <?php endif; ?>
+        </div>
+        <?php
+          $tourPrevPage = max(1, $currentTournamentPage - 1);
+          $tourNextPage = min($totalTournamentPages, $currentTournamentPage + 1);
+          $tourPageCandidates = [1, $totalTournamentPages, $currentTournamentPage - 1, $currentTournamentPage, $currentTournamentPage + 1];
+          $tourVisiblePages = [];
+          foreach ($tourPageCandidates as $candidate) {
+              $candidate = (int)$candidate;
+              if ($candidate < 1 || $candidate > $totalTournamentPages) {
+                  continue;
+              }
+              if (!in_array($candidate, $tourVisiblePages, true)) {
+                  $tourVisiblePages[] = $candidate;
+              }
+          }
+          sort($tourVisiblePages, SORT_NUMERIC);
+        ?>
+        <div class="tour-pagination" aria-label="Tournament pagination">
+          <?php if ($currentTournamentPage > 1): ?>
+            <a class="tour-page-link" href="<?= h($buildTournamentPageUrl($tourPrevPage)) ?>" aria-label="Halaman sebelumnya">&lsaquo;</a>
+          <?php else: ?>
+            <span class="tour-page-link disabled" aria-hidden="true">&lsaquo;</span>
+          <?php endif; ?>
+          <?php $tourLastRenderedPage = 0; ?>
+          <?php foreach ($tourVisiblePages as $pageNumber): ?>
+            <?php if ($tourLastRenderedPage > 0 && $pageNumber - $tourLastRenderedPage > 1): ?>
+              <span class="tour-page-dots">...</span>
+            <?php endif; ?>
+            <?php if ($pageNumber === $currentTournamentPage): ?>
+              <span class="tour-page-link current"><?= (int)$pageNumber ?></span>
+            <?php else: ?>
+              <a class="tour-page-link" href="<?= h($buildTournamentPageUrl($pageNumber)) ?>"><?= (int)$pageNumber ?></a>
+            <?php endif; ?>
+            <?php $tourLastRenderedPage = $pageNumber; ?>
+          <?php endforeach; ?>
+          <?php if ($currentTournamentPage < $totalTournamentPages): ?>
+            <a class="tour-page-link" href="<?= h($buildTournamentPageUrl($tourNextPage)) ?>" aria-label="Halaman berikutnya">&rsaquo;</a>
+          <?php else: ?>
+            <span class="tour-page-link disabled" aria-hidden="true">&rsaquo;</span>
           <?php endif; ?>
         </div>
 
@@ -1522,12 +1590,16 @@ render_header([
   var activeGameFilter = 'all';
   var isTournamentModalOpen = false;
   var toastStack = document.getElementById('toastStack');
-  var gameInputModal = document.querySelector('[data-game-input-modal]');
   var acceptedPlayerCount = <?= (int)$registeredAttendeeCount ?>;
   var initialFlashSuccess = <?= json_encode((string)($flash['success'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   var initialFlashError = <?= json_encode((string)($flash['error'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
+  function getGameInputModal() {
+    return document.querySelector('[data-game-input-modal]');
+  }
+
   function setGameInputModalState(isOpen) {
+    var gameInputModal = getGameInputModal();
     if (!gameInputModal) return;
     if (isOpen) {
       gameInputModal.classList.add('is-open');
@@ -1912,8 +1984,8 @@ render_header([
     initBoardInteractions(board);
   }
 
-  var createForm = document.querySelector('[data-create-match-form]');
   function updateCourtEstimator() {
+    var createForm = document.querySelector('[data-create-match-form]');
     if (!createForm) return;
     var infoEl = createForm.querySelector('#courtEstimatorText');
     var typeEl = createForm.querySelector('[name=\"competition_type\"]');
@@ -1948,53 +2020,64 @@ render_header([
     infoEl.textContent = 'Pilih tipe game dulu untuk lihat estimasi ronde dari jumlah court.';
   }
 
-  document.querySelectorAll('[data-open-game-input-modal]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
+  document.addEventListener('click', function (ev) {
+    var openBtn = ev.target && ev.target.closest ? ev.target.closest('[data-open-game-input-modal]') : null;
+    if (openBtn) {
       setGameInputModalState(true);
       updateCourtEstimator();
-    });
-  });
-  if (gameInputModal) {
-    gameInputModal.addEventListener('click', function (ev) {
-      if (ev.target === gameInputModal) setGameInputModalState(false);
-    });
-    gameInputModal.querySelectorAll('[data-close-game-input-modal]').forEach(function (btn) {
-      btn.addEventListener('click', function () { setGameInputModalState(false); });
-    });
-  }
-  if (createForm) {
-    var typeSelectEl = createForm.querySelector('[name=\"competition_type\"]');
-    var courtInputEl = createForm.querySelector('[name=\"court_count\"]');
-    if (typeSelectEl) {
-      typeSelectEl.addEventListener('change', updateCourtEstimator);
+      return;
     }
-    if (courtInputEl) {
-      courtInputEl.addEventListener('change', updateCourtEstimator);
-      courtInputEl.addEventListener('input', updateCourtEstimator);
-    }
-    updateCourtEstimator();
 
-    createForm.addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      var btn = createForm.querySelector('button[type="submit"]');
-      if (btn) btn.disabled = true;
-      postCompetitionForm(createForm)
-        .then(function (data) {
-          if (!data || !data.ok) {
-            throw new Error((data && data.message) ? data.message : 'Gagal generate match.');
-          }
-          showToast(data.message || 'Match berhasil digenerate.', 'success', 5000);
-          setGameInputModalState(false);
-          return refreshCompetitionBoard();
-        })
-        .catch(function (error) {
-          showToast(error && error.message ? error.message : 'Terjadi kesalahan saat generate match.', 'error', 5500);
-        })
-        .finally(function () {
-          if (btn) btn.disabled = false;
-        });
-    });
-  }
+    var closeBtn = ev.target && ev.target.closest ? ev.target.closest('[data-close-game-input-modal]') : null;
+    if (closeBtn) {
+      setGameInputModalState(false);
+      return;
+    }
+
+    var gameInputModal = getGameInputModal();
+    if (gameInputModal && ev.target === gameInputModal) {
+      setGameInputModalState(false);
+    }
+  });
+
+  document.addEventListener('change', function (ev) {
+    var target = ev.target;
+    if (!target || !target.matches) return;
+    if (target.matches('[data-create-match-form] [name="competition_type"]') || target.matches('[data-create-match-form] [name="court_count"]')) {
+      updateCourtEstimator();
+    }
+  });
+  document.addEventListener('input', function (ev) {
+    var target = ev.target;
+    if (!target || !target.matches) return;
+    if (target.matches('[data-create-match-form] [name="court_count"]')) {
+      updateCourtEstimator();
+    }
+  });
+  updateCourtEstimator();
+
+  document.addEventListener('submit', function (ev) {
+    var createForm = ev.target && ev.target.closest ? ev.target.closest('[data-create-match-form]') : null;
+    if (!createForm) return;
+    ev.preventDefault();
+    var btn = createForm.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    postCompetitionForm(createForm)
+      .then(function (data) {
+        if (!data || !data.ok) {
+          throw new Error((data && data.message) ? data.message : 'Gagal generate match.');
+        }
+        showToast(data.message || 'Match berhasil digenerate.', 'success', 5000);
+        setGameInputModalState(false);
+        return refreshCompetitionBoard();
+      })
+      .catch(function (error) {
+        showToast(error && error.message ? error.message : 'Terjadi kesalahan saat generate match.', 'error', 5500);
+      })
+      .finally(function () {
+        if (btn) btn.disabled = false;
+      });
+  });
 
   if (initialFlashSuccess) {
     showToast(initialFlashSuccess, 'success', 5000);
