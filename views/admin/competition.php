@@ -870,6 +870,11 @@ render_header([
       <div class="competition-card competition-card--full" data-live-board>
         <h2><i class="bi bi-grid-3x3-gap"></i> Latest Tournaments</h2>
         <p class="admin-sub" style="margin:0;">Klik satu turnamen untuk buka detail ronde + input skor di modal.</p>
+        <div class="type-filter" data-game-filter style="margin-top:10px;">
+          <button type="button" class="active" data-game-filter-btn="all">Semua</button>
+          <button type="button" data-game-filter-btn="Americano">Americano</button>
+          <button type="button" data-game-filter-btn="Mexicano">Mexicano</button>
+        </div>
         <div class="tournament-list">
           <?php $hasTournament = false; ?>
           <?php foreach (['Americano', 'Mexicano'] as $type): ?>
@@ -915,7 +920,7 @@ render_header([
                   }
               }
             ?>
-            <button type="button" class="tournament-card" data-open-type="<?= h($type) ?>">
+            <button type="button" class="tournament-card" data-open-type="<?= h($type) ?>" data-game-type="<?= h($type) ?>">
               <div class="tournament-name"><?= h($label) ?></div>
               <div class="tournament-meta"><?= (int)count($uniquePlayers) ?> players</div>
               <div class="tournament-updated">Updated <?= $updatedAt !== '' ? h(date('d M Y H:i', strtotime($updatedAt))) : '-' ?></div>
@@ -1158,6 +1163,7 @@ render_header([
 <script>
 (function () {
   var activeTypeTarget = '';
+  var activeGameFilter = 'all';
   var isTournamentModalOpen = false;
   var toastStack = document.getElementById('toastStack');
   var gameInputModal = document.querySelector('[data-game-input-modal]');
@@ -1278,6 +1284,25 @@ render_header([
   }
 
   function initBoardInteractions(boardRoot) {
+    function applyGameFilter(filterValue) {
+      activeGameFilter = filterValue || 'all';
+      boardRoot.querySelectorAll('[data-game-filter-btn]').forEach(function (btn) {
+        var btnValue = btn.getAttribute('data-game-filter-btn') || 'all';
+        btn.classList.toggle('active', btnValue === activeGameFilter);
+      });
+      boardRoot.querySelectorAll('[data-game-type]').forEach(function (card) {
+        var cardType = card.getAttribute('data-game-type') || '';
+        card.style.display = (activeGameFilter === 'all' || activeGameFilter === cardType) ? '' : 'none';
+      });
+    }
+
+    boardRoot.querySelectorAll('[data-game-filter-btn]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyGameFilter(btn.getAttribute('data-game-filter-btn') || 'all');
+      });
+    });
+    applyGameFilter(activeGameFilter);
+
     function initRoundNavigator(panel) {
       if (!panel) return;
       var track = panel.querySelector('[data-round-track]');
