@@ -58,6 +58,71 @@ function validate_padel_score(?int $scoreA, ?int $scoreB, ?int $selectedTotal): 
     return '';
 }
 
+function normalize_court_count($value): int {
+    $n = (int)$value;
+    if ($n < 1) {
+        $n = 1;
+    }
+    if ($n > 12) {
+        $n = 12;
+    }
+    return $n;
+}
+
+function calculate_round_estimation(int $playerCount, int $courtCount, string $type): array {
+    $playerCount = max(0, $playerCount);
+    $courtCount = normalize_court_count($courtCount);
+    $maxMatchesPerLogicalRound = intdiv($playerCount, 4);
+    if ($maxMatchesPerLogicalRound <= 0) {
+        return [
+            'effective_courts' => 0,
+            'waves_per_logical_round' => 0,
+            'logical_rounds' => 0,
+            'estimated_slots' => 0,
+            'recommended_rounds' => 0,
+        ];
+    }
+    $effectiveCourts = min($courtCount, $maxMatchesPerLogicalRound);
+    $wavesPerLogicalRound = (int)ceil($maxMatchesPerLogicalRound / max(1, $effectiveCourts));
+
+    // Americano: complete partner-rotation target is (players - 1) logical rounds (for even players).
+    $logicalRounds = ($type === 'Americano')
+        ? max(1, $playerCount - 1)
+        : 0;
+
+    // Mexicano is adaptive per ranking and has no fixed official total round count.
+    // We expose a practical recommendation: 6 logical rounds.
+    $recommendedRounds = ($type === 'Mexicano') ? 6 : $logicalRounds;
+    $estimatedSlots = $recommendedRounds * $wavesPerLogicalRound;
+
+    return [
+        'effective_courts' => $effectiveCourts,
+        'waves_per_logical_round' => $wavesPerLogicalRound,
+        'logical_rounds' => $logicalRounds,
+        'estimated_slots' => $estimatedSlots,
+        'recommended_rounds' => $recommendedRounds,
+    ];
+}
+
+function build_competition_label_from_title(string $type, string $title): string {
+    $label = preg_replace('/\s*(?:-|)?\s*R\d+\s*M\d+\s*$/i', '', trim($title));
+    $label = trim((string)$label);
+    return $label !== '' ? $label : $type;
+}
+
+function is_auto_competition_title(string $type, string $title): bool {
+    $title = trim($title);
+    if ($title === '') {
+        return false;
+    }
+    return (bool)preg_match('/^' . preg_quote($type, '/') . '\s*R\d+\s*M\d+$/i', $title);
+}
+
+function competition_ts(string $value): int {
+    $ts = strtotime(trim($value));
+    return $ts ? (int)$ts : 0;
+}
+
 function read_configured_match_total(PDO $db, int $gameId): ?int {
     if ($gameId <= 0) {
         return null;
@@ -167,21 +232,17 @@ function build_player_ranking_stats(PDO $db, string $competitionType): array {
             }
             foreach ($membersA as $name) {
                 if (!isset($stats[$name])) {
-                    $stats[$name] = ['win' => 0, 'point_total' => 0];
+                    $stats[$name] = ['point_total' => 0, 'point_diff' => 0];
                 }
                 $stats[$name]['point_total'] += $sa;
-                if ($sa > $sb) {
-                    $stats[$name]['win']++;
-                }
+                $stats[$name]['point_diff'] += ($sa - $sb);
             }
             foreach ($membersB as $name) {
                 if (!isset($stats[$name])) {
-                    $stats[$name] = ['win' => 0, 'point_total' => 0];
+                    $stats[$name] = ['point_total' => 0, 'point_diff' => 0];
                 }
                 $stats[$name]['point_total'] += $sb;
-                if ($sb > $sa) {
-                    $stats[$name]['win']++;
-                }
+                $stats[$name]['point_diff'] += ($sb - $sa);
             }
         }
     } catch (Throwable $e) {
@@ -218,6 +279,150 @@ function build_round_robin(array $players): array {
         $list = array_merge([$fixed], $tail);
     }
     return $rounds;
+}
+
+function canonical_pair_key(string $a, string $b): string {
+    $x = trim($a);
+    $y = trim($b);
+    if (strcasecmp($x, $y) > 0) {
+        $tmp = $x;
+        $x = $y;
+        $y = $tmp;
+    }
+    return strtolower($x . '|' . $y);
+}
+
+function build_americano_full_rounds(array $players, int $courtCount): array {
+    $players = array_values(array_filter(array_map(static function ($name): string {
+        return trim((string)$name);
+    }, $players), static function (string $name): bool {
+        return $name !== '';
+    }));
+    if (count($players) < 4 || count($players) % 4 !== 0) {
+        return [];
+    }
+    $courtCount = normalize_court_count($courtCount);
+    $partnerRounds = build_round_robin($players); // single cycle: n-1 logical rounds
+    if (!$partnerRounds) {
+        return [];
+    }
+    $partnerLimit = 1;
+    $pairingTracker = [];
+    $allMatches = [];
+    $logicalRoundNo = 1;
+    $matchPerRound = intdiv(count($players), 4);
+    if ($matchPerRound <= 0) {
+        return [];
+    }
+    $sesiPerRound = (int)ceil($matchPerRound / max(1, $courtCount));
+
+    foreach ($partnerRounds as $roundIdx => $partnerPairs) {
+        $teams = [];
+        foreach ($partnerPairs as $pair) {
+            $left = trim((string)($pair[0] ?? ''));
+            $right = trim((string)($pair[1] ?? ''));
+            if ($left === '' || $right === '') {
+                continue;
+            }
+            if ($left === 'BYE' || $right === 'BYE') {
+                continue;
+            }
+            $pairKey = canonical_pair_key($left, $right);
+            $pairingTracker[$pairKey] = (int)($pairingTracker[$pairKey] ?? 0) + 1;
+            if ($pairingTracker[$pairKey] > $partnerLimit) {
+                return [];
+            }
+            $teams[] = $left . ' & ' . $right;
+        }
+        if (!$teams || count($teams) % 2 !== 0) {
+            continue;
+        }
+        for ($i = 0; $i < count($teams); $i += 2) {
+            $a = (string)($teams[$i] ?? '');
+            $b = (string)($teams[$i + 1] ?? '');
+            if ($a === '' || $b === '') {
+                continue;
+            }
+            $matchNo = (int)floor($i / 2) + 1;
+            $sessionNo = (int)floor(($matchNo - 1) / $courtCount) + 1;
+            $allMatches[] = [
+                'round_no' => $logicalRoundNo,
+                'session_no' => $sessionNo,
+                'match_no' => $matchNo,
+                'court_no' => (($matchNo - 1) % $courtCount) + 1,
+                'player_a_name' => $a,
+                'player_b_name' => $b,
+            ];
+        }
+        $logicalRoundNo++;
+    }
+
+    // Validate schedule size: logical rounds * matches per round
+    $expectedMatches = count($partnerRounds) * $matchPerRound;
+    if (count($allMatches) !== $expectedMatches) {
+        return [];
+    }
+
+    return [
+        'mode_cycle' => 'single',
+        'logical_rounds' => count($partnerRounds),
+        'match_per_round' => $matchPerRound,
+        'sesi_per_round' => $sesiPerRound,
+        'total_sesi' => count($partnerRounds) * $sesiPerRound,
+        'pairing_tracker' => $pairingTracker,
+        'matches' => $allMatches,
+    ];
+}
+
+function build_standings_from_games(array $gamesRows): array {
+    $table = [];
+    $headToHead = [];
+    foreach ($gamesRows as $row) {
+        $teamA = trim((string)($row['player_a_name'] ?? ''));
+        $teamB = trim((string)($row['player_b_name'] ?? ''));
+        $membersA = split_team_members($teamA);
+        $membersB = split_team_members($teamB);
+        $sa = isset($row['score_a']) && $row['score_a'] !== null ? (int)$row['score_a'] : null;
+        $sb = isset($row['score_b']) && $row['score_b'] !== null ? (int)$row['score_b'] : null;
+        if (!$membersA || !$membersB || $sa === null || $sb === null || !in_array($sa + $sb, PADEL_ALLOWED_TOTAL_POINTS, true)) {
+            continue;
+        }
+        foreach ($membersA as $name) {
+            if (!isset($table[$name])) {
+                $table[$name] = ['name' => $name, 'point_total' => 0, 'point_diff' => 0, 'played' => 0];
+            }
+            $table[$name]['point_total'] += $sa;
+            $table[$name]['point_diff'] += ($sa - $sb);
+            $table[$name]['played']++;
+        }
+        foreach ($membersB as $name) {
+            if (!isset($table[$name])) {
+                $table[$name] = ['name' => $name, 'point_total' => 0, 'point_diff' => 0, 'played' => 0];
+            }
+            $table[$name]['point_total'] += $sb;
+            $table[$name]['point_diff'] += ($sb - $sa);
+            $table[$name]['played']++;
+        }
+        foreach ($membersA as $pa) {
+            foreach ($membersB as $pb) {
+                if (!isset($headToHead[$pa])) $headToHead[$pa] = [];
+                if (!isset($headToHead[$pb])) $headToHead[$pb] = [];
+                $headToHead[$pa][$pb] = (int)($headToHead[$pa][$pb] ?? 0) + ($sa - $sb);
+                $headToHead[$pb][$pa] = (int)($headToHead[$pb][$pa] ?? 0) + ($sb - $sa);
+            }
+        }
+    }
+
+    $rows = array_values($table);
+    usort($rows, static function (array $x, array $y) use ($headToHead): int {
+        if ((int)$x['point_total'] !== (int)$y['point_total']) return (int)$y['point_total'] <=> (int)$x['point_total'];
+        if ((int)$x['point_diff'] !== (int)$y['point_diff']) return (int)$y['point_diff'] <=> (int)$x['point_diff'];
+        $hx = (int)($headToHead[$x['name']][$y['name']] ?? 0);
+        if ($hx !== 0) return $hx > 0 ? -1 : 1;
+        return strcmp((string)$x['name'], (string)$y['name']);
+    });
+
+    return $rows;
 }
 
 function build_teams_from_players(array $players): array {
@@ -308,10 +513,10 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
     }
 
     $fetchSource = $db->prepare(
-        "SELECT id, match_no, player_a_name, player_b_name, score_a, score_b, match_total_points
+        "SELECT id, session_no, match_no, court_no, court_count, player_a_name, player_b_name, score_a, score_b, match_total_points
          FROM competition_games
          WHERE competition_type = ? AND round_no = ?
-         ORDER BY match_no ASC, id ASC"
+         ORDER BY COALESCE(session_no, 1) ASC, match_no ASC, id ASC"
     );
     $fetchSource->execute([$type, $sourceRound]);
     $rows = $fetchSource->fetchAll(PDO::FETCH_ASSOC);
@@ -363,6 +568,16 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
     if ($configuredTotal === null) {
         return [0, 0];
     }
+    $configuredCourtCount = 1;
+    foreach ($rows as $row) {
+        $candidateCourtCount = isset($row['court_count']) && $row['court_count'] !== null
+            ? (int)$row['court_count']
+            : 0;
+        if ($candidateCourtCount > 0) {
+            $configuredCourtCount = normalize_court_count($candidateCourtCount);
+            break;
+        }
+    }
 
     if ($type === 'Americano') {
         $members = [];
@@ -388,15 +603,15 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
         }
         $ranking = build_player_ranking_stats($db, 'Mexicano');
         usort($memberPool, static function (string $x, string $y) use ($ranking): int {
-            $wx = (int)($ranking[$x]['win'] ?? 0);
-            $wy = (int)($ranking[$y]['win'] ?? 0);
-            if ($wx !== $wy) {
-                return $wy <=> $wx;
-            }
             $px = (int)($ranking[$x]['point_total'] ?? 0);
             $py = (int)($ranking[$y]['point_total'] ?? 0);
             if ($px !== $py) {
                 return $py <=> $px;
+            }
+            $dx = (int)($ranking[$x]['point_diff'] ?? 0);
+            $dy = (int)($ranking[$y]['point_diff'] ?? 0);
+            if ($dx !== $dy) {
+                return $dy <=> $dx;
             }
             return strcmp($x, $y);
         });
@@ -438,24 +653,24 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
 
     $nextRound = $sourceRound + 1;
     $fetchExisting = $db->prepare(
-        "SELECT id, match_no, score_a, score_b
+        "SELECT id, session_no, match_no, score_a, score_b
          FROM competition_games
          WHERE competition_type = ? AND round_no = ?
-         ORDER BY match_no ASC, id ASC"
+         ORDER BY COALESCE(session_no, 1) ASC, match_no ASC, id ASC"
     );
     $fetchExisting->execute([$type, $nextRound]);
     $existingRows = $fetchExisting->fetchAll(PDO::FETCH_ASSOC);
 
     $insert = $db->prepare(
         "INSERT INTO competition_games (
-            package_id, competition_type, game_title, round_no, match_no, match_total_points,
+            package_id, competition_type, game_title, round_no, session_no, match_no, court_no, court_count, match_total_points,
             player_a_user_id, player_a_name, player_b_user_id, player_b_name,
             score_a, score_b, game_date, notes, created_by_admin_id, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     $update = $db->prepare(
         "UPDATE competition_games
-         SET game_title = ?, match_total_points = ?, player_a_name = ?, player_b_name = ?
+         SET game_title = ?, session_no = ?, court_no = ?, court_count = ?, match_total_points = ?, player_a_name = ?, player_b_name = ?
          WHERE id = ?"
     );
     $deleteRow = $db->prepare(
@@ -467,6 +682,8 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
     $updated = 0;
     foreach ($pairs as $idx => $pair) {
         $matchNo = $idx + 1;
+        $sessionNo = (int)floor(($matchNo - 1) / $configuredCourtCount) + 1;
+        $courtNo = (($idx % $configuredCourtCount) + 1);
         $title = $type . ' R' . $nextRound . ' M' . $matchNo;
         $a = (string)$pair[0];
         $b = (string)$pair[1];
@@ -475,7 +692,7 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
             $row = $existingRows[$idx];
             $hasScore = ($row['score_a'] !== null || $row['score_b'] !== null);
             if (!$hasScore) {
-                $update->execute([$title, $configuredTotal, $a, $b, (int)$row['id']]);
+                $update->execute([$title, $sessionNo, $courtNo, $configuredCourtCount, $configuredTotal, $a, $b, (int)$row['id']]);
                 $updated++;
             }
             continue;
@@ -486,7 +703,10 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
             $type,
             $title,
             $nextRound,
+            $sessionNo,
             $matchNo,
+            $courtNo,
+            $configuredCourtCount,
             $configuredTotal,
             null,
             $a,
@@ -528,7 +748,10 @@ try {
             competition_type VARCHAR(20) NULL,
             game_title VARCHAR(160) NOT NULL,
             round_no INT NULL,
+            session_no INT NULL,
             match_no INT NULL,
+            court_no INT NULL,
+            court_count INT NULL,
             match_total_points INT NULL,
             player_a_user_id INT NULL,
             player_a_name VARCHAR(150) NULL,
@@ -541,7 +764,7 @@ try {
             created_by_admin_id INT NULL,
             created_at DATETIME NOT NULL,
             INDEX idx_competition_game_date (game_date),
-            INDEX idx_competition_type_round (competition_type, round_no, match_no)
+            INDEX idx_competition_type_round (competition_type, round_no, session_no, match_no)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
     );
 } catch (Throwable $e) {
@@ -563,8 +786,11 @@ try {
         };
         $ensureColumn($db, $schema, 'competition_type', "VARCHAR(20) NULL AFTER package_id");
         $ensureColumn($db, $schema, 'round_no', "INT NULL AFTER game_title");
-        $ensureColumn($db, $schema, 'match_no', "INT NULL AFTER round_no");
-        $ensureColumn($db, $schema, 'match_total_points', "INT NULL AFTER match_no");
+        $ensureColumn($db, $schema, 'session_no', "INT NULL AFTER round_no");
+        $ensureColumn($db, $schema, 'match_no', "INT NULL AFTER session_no");
+        $ensureColumn($db, $schema, 'court_no', "INT NULL AFTER match_no");
+        $ensureColumn($db, $schema, 'court_count', "INT NULL AFTER court_no");
+        $ensureColumn($db, $schema, 'match_total_points', "INT NULL AFTER court_count");
         $ensureColumn($db, $schema, 'player_a_name', "VARCHAR(150) NULL AFTER player_a_user_id");
         $ensureColumn($db, $schema, 'player_b_name', "VARCHAR(150) NULL AFTER player_b_user_id");
         $ensureColumn($db, $schema, 'score_a', "INT NULL AFTER player_b_name");
@@ -608,7 +834,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $savedGame = $typeStmt->fetch(PDO::FETCH_ASSOC) ?: [];
                 $savedType = normalize_competition_type((string)($savedGame['competition_type'] ?? ''));
                 $savedRound = (int)($savedGame['round_no'] ?? 0);
-                if ($savedType !== '') {
+                if ($savedType === 'Mexicano') {
                     [$nextCreated, $nextUpdated] = sync_next_round_from_round($db, $savedType, $savedRound, (int)($_SESSION['admin_id'] ?? 0));
                     if ($nextCreated > 0 || $nextUpdated > 0) {
                         $roundSynced = true;
@@ -644,6 +870,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $titlePrefix = trim((string)($_POST['game_title'] ?? ''));
         $gameDateRaw = trim((string)($_POST['game_date'] ?? ''));
         $matchTotalPoints = isset($_POST['match_total_points']) ? (int)$_POST['match_total_points'] : 0;
+        $courtCount = normalize_court_count($_POST['court_count'] ?? 1);
         $adminId = (int)($_SESSION['admin_id'] ?? 0);
 
         if (!in_array($type, $allowedTypes, true)) {
@@ -660,48 +887,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash['error'] = 'Attendee accepted belum cukup untuk format team (minimal 4 orang).';
             } elseif (count($attendees) % 2 !== 0) {
                 $flash['error'] = 'Jumlah attendee harus genap untuk format team 2 orang.';
+            } elseif ($type === 'Americano' && count($attendees) % 4 !== 0) {
+                $flash['error'] = 'Americano membutuhkan jumlah pemain kelipatan 4 agar semua pemain bermain di setiap ronde.';
+            } elseif ($courtCount > intdiv(count($attendees), 4)) {
+                $flash['error'] = 'Jumlah court terlalu banyak untuk total pemain. Maksimal court aktif: ' . (int)intdiv(count($attendees), 4) . '.';
             } else {
-                // Round 1 team composition is created once.
-                // Americano will re-randomize team members in next rounds.
-                // Mexicano next rounds are rebuilt by player ranking pattern (1&3 vs 2&4).
                 shuffle($attendees);
-
-                $teams = build_teams_from_players($attendees);
-                if ($type === 'Americano') {
-                    shuffle($teams);
-                }
-                $pairs = build_pairs_from_teams($teams);
-                if (!$pairs) {
-                    $flash['error'] = 'Gagal membentuk bagan pertandingan.';
-                } else {
-                    try {
-                        $insert = $db->prepare(
-                            'INSERT INTO competition_games (
-                                package_id, competition_type, game_title, round_no, match_no, match_total_points,
-                                player_a_user_id, player_a_name, player_b_user_id, player_b_name,
-                                score_a, score_b, game_date, notes, created_by_admin_id, created_at
-                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-                        );
-                        $created = 0;
-                        $roundNo = 1;
-                        foreach ($pairs as $mIdx => $pair) {
-                            $matchNo = $mIdx + 1;
-                            $label = $titlePrefix !== '' ? $titlePrefix : $type;
+                try {
+                    $insert = $db->prepare(
+                        'INSERT INTO competition_games (
+                            package_id, competition_type, game_title, round_no, session_no, match_no, court_no, court_count, match_total_points,
+                            player_a_user_id, player_a_name, player_b_user_id, player_b_name,
+                            score_a, score_b, game_date, notes, created_by_admin_id, created_at
+                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                    );
+                    $created = 0;
+                    $label = $titlePrefix !== '' ? $titlePrefix : $type;
+                    if ($type === 'Americano') {
+                        $schedule = build_americano_full_rounds($attendees, $courtCount);
+                        if (!$schedule || empty($schedule['matches'])) {
+                            throw new RuntimeException('Gagal menyusun jadwal Americano.');
+                        }
+                        foreach ((array)$schedule['matches'] as $row) {
+                            $roundNo = (int)($row['round_no'] ?? 1);
+                            $sessionNo = (int)($row['session_no'] ?? 1);
+                            $matchNo = (int)($row['match_no'] ?? 1);
+                            $courtNo = (int)($row['court_no'] ?? 1);
                             $title = $label . ' - R' . $roundNo . ' M' . $matchNo;
                             $insert->execute([
-                                null, $type, $title, $roundNo, $matchNo, $matchTotalPoints,
-                                null, (string)$pair[0], null, (string)$pair[1],
-                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, null,
+                                null, $type, $title, $roundNo, $sessionNo, $matchNo, $courtNo, $courtCount, $matchTotalPoints,
+                                null, (string)($row['player_a_name'] ?? ''), null, (string)($row['player_b_name'] ?? ''),
+                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, 'mode_cycle=single',
                                 $adminId > 0 ? $adminId : null, date('Y-m-d H:i:s'),
                             ]);
                             $created++;
                         }
-                        $flash[$created > 0 ? 'success' : 'error'] = $created > 0
-                            ? ('Berhasil generate Round 1 (' . $created . ' match) untuk ' . $type . '. Round berikutnya otomatis setelah seluruh skor round selesai.')
-                            : 'Tidak ada match yang berhasil dibuat.';
-                    } catch (Throwable $e) {
-                        $flash['error'] = 'Gagal menambahkan jadwal competition.';
+                        $flash['success'] = 'Americano: '
+                            . (int)($schedule['logical_rounds'] ?? 0) . ' ronde logika, '
+                            . (int)($schedule['sesi_per_round'] ?? 0) . ' sesi/ronde, total '
+                            . (int)($schedule['total_sesi'] ?? 0) . ' sesi, '
+                            . $created . ' match.';
+                    } else {
+                        // Mexicano starts from round 1 and grows by ranking after each completed round.
+                        $teams = build_teams_from_players($attendees);
+                        $pairs = build_pairs_from_teams($teams);
+                        if (!$pairs) {
+                            throw new RuntimeException('Gagal membentuk bagan Mexicano.');
+                        }
+                        $roundNo = 1;
+                        foreach ($pairs as $mIdx => $pair) {
+                            $matchNo = $mIdx + 1;
+                            $sessionNo = (int)floor(($matchNo - 1) / $courtCount) + 1;
+                            $courtNo = (($mIdx % $courtCount) + 1);
+                            $title = $label . ' - R' . $roundNo . ' M' . $matchNo;
+                            $insert->execute([
+                                null, $type, $title, $roundNo, $sessionNo, $matchNo, $courtNo, $courtCount, $matchTotalPoints,
+                                null, (string)$pair[0], null, (string)$pair[1],
+                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, 'mode_cycle=single',
+                                $adminId > 0 ? $adminId : null, date('Y-m-d H:i:s'),
+                            ]);
+                            $created++;
+                        }
+                        $estimation = calculate_round_estimation(count($attendees), $courtCount, $type);
+                        $wavesPerRound = (int)($estimation['waves_per_logical_round'] ?? 0);
+                        $flash['success'] = 'Berhasil generate Round 1 Mexicano (' . $created . ' match) di ' . $courtCount . ' court. Per ronde butuh ' . max(1, $wavesPerRound) . ' wave.';
                     }
+                } catch (Throwable $e) {
+                    $flash['error'] = 'Gagal menambahkan jadwal competition.';
                 }
             }
         }
@@ -725,7 +977,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $games = [];
 try {
     $games = $db->query(
-        "SELECT id, game_title, round_no, match_no, match_total_points, game_date, created_at, competition_type,
+        "SELECT id, game_title, round_no, session_no, match_no, court_no, court_count, match_total_points, game_date, created_at, competition_type,
                 player_a_name, player_b_name, score_a, score_b
          FROM competition_games
          ORDER BY
@@ -734,7 +986,7 @@ try {
               WHEN LOWER(TRIM(competition_type)) LIKE '%mexicano%' THEN 2
               ELSE 3
             END,
-            COALESCE(round_no, 999999), COALESCE(match_no, 999999), id"
+            COALESCE(round_no, 999999), COALESCE(session_no, 1), COALESCE(match_no, 999999), id"
     )->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     $games = [];
@@ -742,54 +994,109 @@ try {
 
 $attendeeNames = fetch_competition_attendees($db);
 $registeredAttendeeCount = count($attendeeNames);
-$gamesByType = ['Americano' => [], 'Mexicano' => []];
-foreach ($games as $game) {
-    $type = normalize_competition_type((string)($game['competition_type'] ?? ''));
-    if ($type !== '') {
-        $gamesByType[$type][] = $game;
+
+$tournaments = [];
+$recentCustomLabelByType = ['Americano' => '', 'Mexicano' => ''];
+$gamesByIdAsc = $games;
+usort($gamesByIdAsc, static function (array $a, array $b): int {
+    return (int)($a['id'] ?? 0) <=> (int)($b['id'] ?? 0);
+});
+foreach ($gamesByIdAsc as $row) {
+    $type = normalize_competition_type((string)($row['competition_type'] ?? ''));
+    if ($type === '') {
+        continue;
+    }
+    $gameTitle = trim((string)($row['game_title'] ?? ''));
+    $baseLabel = build_competition_label_from_title($type, $gameTitle !== '' ? $gameTitle : $type);
+    $isAutoTitle = is_auto_competition_title($type, $gameTitle);
+    if ($isAutoTitle) {
+        $label = trim((string)($recentCustomLabelByType[$type] ?? ''));
+        if ($label === '') {
+            $label = $baseLabel;
+        }
+    } else {
+        $label = $baseLabel;
+        $recentCustomLabelByType[$type] = $label;
+    }
+    $key = md5(strtolower($type . '|' . $label));
+
+    if (!isset($tournaments[$key])) {
+        $tournaments[$key] = [
+            'key' => $key,
+            'type' => $type,
+            'label' => $label,
+            'games' => [],
+            'players' => [],
+            'updated_at' => '',
+            'updated_ts' => 0,
+            'rounds' => [],
+            'standings' => [],
+        ];
+    }
+    $tournaments[$key]['games'][] = $row;
+
+    $createdAt = trim((string)($row['created_at'] ?? ''));
+    $createdTs = competition_ts($createdAt);
+    if ($createdTs > (int)$tournaments[$key]['updated_ts']) {
+        $tournaments[$key]['updated_ts'] = $createdTs;
+        $tournaments[$key]['updated_at'] = $createdAt;
+    }
+
+    $teamA = trim((string)($row['player_a_name'] ?? ''));
+    $teamB = trim((string)($row['player_b_name'] ?? ''));
+    foreach (array_merge(split_team_members($teamA), split_team_members($teamB)) as $member) {
+        $nameKey = strtolower(trim((string)$member));
+        if ($nameKey === '' || $nameKey === 'bye' || $nameKey === 'tbd') {
+            continue;
+        }
+        $tournaments[$key]['players'][$nameKey] = trim((string)$member);
     }
 }
 
-$standingsByType = ['Americano' => [], 'Mexicano' => []];
-foreach ($gamesByType as $type => $rows) {
-    $table = [];
-    foreach ($rows as $row) {
-        $teamA = trim((string)($row['player_a_name'] ?? ''));
-        $teamB = trim((string)($row['player_b_name'] ?? ''));
-        $membersA = split_team_members($teamA);
-        $membersB = split_team_members($teamB);
-        $sa = isset($row['score_a']) && $row['score_a'] !== null ? (int)$row['score_a'] : null;
-        $sb = isset($row['score_b']) && $row['score_b'] !== null ? (int)$row['score_b'] : null;
-        if (!$membersA || !$membersB || $sa === null || $sb === null || !in_array($sa + $sb, PADEL_ALLOWED_TOTAL_POINTS, true)) {
-            continue;
+foreach ($tournaments as $key => $tournament) {
+    $gamesRows = (array)($tournament['games'] ?? []);
+    usort($gamesRows, static function (array $a, array $b): int {
+        $ra = (int)($a['round_no'] ?? 0);
+        $rb = (int)($b['round_no'] ?? 0);
+        if ($ra !== $rb) {
+            return $ra <=> $rb;
         }
-        foreach ($membersA as $playerName) {
-            if (!isset($table[$playerName])) {
-                $table[$playerName] = ['name' => $playerName, 'win' => 0, 'point_total' => 0];
-            }
-            $table[$playerName]['point_total'] += $sa;
-            if ($sa > $sb) {
-                $table[$playerName]['win']++;
-            }
+        $sa = (int)($a['session_no'] ?? 1);
+        $sb = (int)($b['session_no'] ?? 1);
+        if ($sa !== $sb) {
+            return $sa <=> $sb;
         }
-        foreach ($membersB as $playerName) {
-            if (!isset($table[$playerName])) {
-                $table[$playerName] = ['name' => $playerName, 'win' => 0, 'point_total' => 0];
-            }
-            $table[$playerName]['point_total'] += $sb;
-            if ($sb > $sa) {
-                $table[$playerName]['win']++;
-            }
+        $ma = (int)($a['match_no'] ?? 0);
+        $mb = (int)($b['match_no'] ?? 0);
+        if ($ma !== $mb) {
+            return $ma <=> $mb;
         }
-    }
-    $rows = array_values($table);
-    usort($rows, static function (array $x, array $y): int {
-        if ((int)$x['win'] !== (int)$y['win']) return (int)$y['win'] <=> (int)$x['win'];
-        if ((int)$x['point_total'] !== (int)$y['point_total']) return (int)$y['point_total'] <=> (int)$x['point_total'];
-        return strcmp((string)$x['name'], (string)$y['name']);
+        return (int)($a['id'] ?? 0) <=> (int)($b['id'] ?? 0);
     });
-    $standingsByType[$type] = $rows;
+
+    $rounds = [];
+    foreach ($gamesRows as $row) {
+        $roundNo = (int)($row['round_no'] ?? 0);
+        if ($roundNo <= 0) {
+            $roundNo = 999999;
+        }
+        if (!isset($rounds[$roundNo])) {
+            $rounds[$roundNo] = [];
+        }
+        $rounds[$roundNo][] = $row;
+    }
+    ksort($rounds, SORT_NUMERIC);
+    $standingRows = build_standings_from_games($gamesRows);
+
+    $tournaments[$key]['games'] = $gamesRows;
+    $tournaments[$key]['rounds'] = $rounds;
+    $tournaments[$key]['standings'] = $standingRows;
 }
+
+$tournamentList = array_values($tournaments);
+usort($tournamentList, static function (array $a, array $b): int {
+    return (int)($b['updated_ts'] ?? 0) <=> (int)($a['updated_ts'] ?? 0);
+});
 
 $extraHead = <<<HTML
 <style>
@@ -815,46 +1122,48 @@ $extraHead = <<<HTML
   .rounds-track{display:flex;gap:0;transition:transform .28s ease}
   .round-column{width:100%;max-width:100%;position:relative;flex:0 0 100%;min-width:100%;box-sizing:border-box;padding-right:0}
   .round-column + .round-column::before{display:none}
-  .round-column{--round-accent:#ff0033;--round-bg:#ffd6de}
-  .round-column:nth-child(6n+1){--round-accent:#ff0033;--round-bg:#ffd6de}
-  .round-column:nth-child(6n+2){--round-accent:#ff6a00;--round-bg:#ffe1cc}
-  .round-column:nth-child(6n+3){--round-accent:#ffd400;--round-bg:#fff6bf}
-  .round-column:nth-child(6n+4){--round-accent:#00c853;--round-bg:#d4ffd9}
-  .round-column:nth-child(6n+5){--round-accent:#00b0ff;--round-bg:#d6f3ff}
-  .round-column:nth-child(6n+6){--round-accent:#7c4dff;--round-bg:#e3d9ff}
-  .round-block{border:1px solid var(--round-accent);border-radius:14px;padding:10px;background:var(--round-bg);box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}
-  .round-title{margin:0 0 10px;font-size:12px;color:var(--round-accent);font-weight:900;text-transform:uppercase;letter-spacing:.5px}
-  .match-item + .match-item{margin-top:8px}
-  .match-item{border:1px solid #d7e3f5;border-radius:12px;background:#fff;padding:10px;box-shadow:0 4px 12px rgba(15,32,60,.06)}
-  .match-box{border:2px solid #2e323b;border-radius:6px;background:#fff;overflow:hidden}
+  .round-column{--round-accent:#1f2937;--round-bg:#ffffff}
+  .round-column:nth-child(6n+1),
+  .round-column:nth-child(6n+2),
+  .round-column:nth-child(6n+3),
+  .round-column:nth-child(6n+4),
+  .round-column:nth-child(6n+5),
+  .round-column:nth-child(6n+6){--round-accent:#1f2937;--round-bg:#ffffff}
+  .round-block{border:1px solid #e3e7ee;border-radius:16px;padding:14px;background:#fff;box-shadow:0 6px 18px rgba(15,32,60,.05)}
+  .round-title{margin:0 0 16px;font-size:16px;color:#111827;font-weight:900;text-transform:uppercase;letter-spacing:.4px}
+  .match-item + .match-item{margin-top:18px}
+  .match-item{border:0;border-radius:0;background:transparent;padding:0;box-shadow:none}
+  .match-box{display:grid;grid-template-columns:1fr auto 1fr;border:0;border-radius:12px;background:#f1f2f4;overflow:hidden;box-shadow:0 2px 8px rgba(15,32,60,.06)}
   .match-summary{display:grid;gap:8px}
   .match-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-  .match-caption{font-size:11px;color:#47628b;font-weight:700}
-  .match-top-actions{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;border-top:1px dashed #d6e0f0;padding-top:8px}
+  .match-caption{font-size:15px;color:#111827;font-weight:800;line-height:1.15}
+  .match-top-actions{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding-top:10px}
   .match-score-preview{font-size:12px;font-weight:800;color:#173964}
   .match-score-preview .score-pill{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;border-radius:6px;background:#111827;color:#fff;font-size:12px;padding:0 7px}
   .match-open-score{min-width:110px}
   .match-open-score[disabled]{opacity:.55}
-  .seed-line{padding:7px 8px;font-size:12px;color:#173964;min-height:34px;display:flex;align-items:center}
-  .seed-line + .seed-line{border-top:1px solid #d5deed}
+  .seed-side{padding:12px 14px;display:grid;gap:4px;align-content:center}
+  .seed-side + .seed-side{border-left:1px solid #d5deed}
+  .seed-line{padding:0;font-size:15px;color:#2b2f36;min-height:34px;display:flex;align-items:center;line-height:1.2}
+  .seed-vs{display:flex;align-items:center;justify-content:center;padding:0 16px;font-size:24px;font-weight:900;color:#353b47;text-transform:lowercase;border-left:1px solid #e3e7ee;border-right:1px solid #e3e7ee;background:#eceef2}
   .score-editor{display:grid;grid-template-columns:1fr;row-gap:10px}
   .score-label{font-size:11px;color:#47628b;font-weight:800}
   .score-vs{display:none}
   .score-total-hint{grid-column:1 / -1;display:inline-flex;align-items:center;gap:6px;color:#173964;font-weight:800;background:#eef4ff;border:1px solid #d3e1fb;border-radius:999px;padding:6px 10px;width:max-content}
   .score-strip{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
-  .score-side{font-size:11px;color:#47628b;font-weight:800}
+  .score-side{font-size:15px;color:#334155;font-weight:800}
   .score-vs-inline{font-size:12px;color:#405d84;font-weight:900;text-transform:lowercase}
   .score-separator{font-weight:900;color:#4f6489;text-align:center}
-  .match-actions{margin-top:8px;display:flex;justify-content:flex-end}
+  .match-actions{margin-top:10px;display:flex;justify-content:flex-end}
   .score-editor select,.score-editor input{border:1px solid #c6d4ea;border-radius:8px;padding:7px 8px;background:#fff}
   .score-editor input{width:68px;text-align:center;font-weight:700;color:#14345f}
   .score-box{
     width:66px;
-    height:46px;
+    height:52px;
     border:2px solid #0d1117 !important;
     background:#0d1117 !important;
     color:#fff !important;
-    font-size:30px;
+    font-size:36px;
     font-weight:900;
     letter-spacing:.5px;
     text-align:center;
@@ -871,7 +1180,7 @@ $extraHead = <<<HTML
   .live-status{min-height:16px;font-size:11px;color:#4c6388;grid-column:1 / -1}
   .live-status.ok{color:#18633a}
   .live-status.error{color:#b43636}
-  .type-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:2px 0 8px}
+  .type-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:4px 0 14px}
   .standing-wrap{overflow-x:auto;margin-top:10px}
   .standing-wrap{cursor:grab;user-select:none}
   .standing-wrap.is-dragging{cursor:grabbing}
@@ -891,11 +1200,11 @@ $extraHead = <<<HTML
   .tournament-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:18px 22px;border-bottom:0;background:linear-gradient(180deg,#9f8ad0 0%,#7b69b0 100%);position:sticky;top:0;z-index:2}
   .tournament-modal-title{margin:0;font-size:44px;color:#fff;font-weight:900;letter-spacing:.4px;text-transform:uppercase}
   .tournament-modal-close{border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.2);color:#fff;border-radius:10px;min-width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1}
-  .tournament-modal-body{padding:14px 18px 18px;overflow:auto;background:#f2f3f5}
+  .tournament-modal-body{padding:18px 22px 22px;overflow:auto;background:#f6f7f9;font-family:"Trebuchet MS","Segoe UI",Tahoma,sans-serif}
   .tour-detail-grid{display:grid;grid-template-columns:minmax(360px,500px) minmax(0,1fr);gap:16px;align-items:start}
-  .standing-panel,.round-panel{background:#fff;border:1px solid #d7dbe5;border-radius:14px;padding:12px}
+  .standing-panel,.round-panel{background:#fff;border:1px solid #dfe4ec;border-radius:16px;padding:14px}
   .standing-panel-title{margin:0 0 8px;font-size:12px;font-weight:900;color:#334155;text-transform:uppercase;letter-spacing:.45px}
-  .round-panel-title{margin:0 0 8px;font-size:40px;font-weight:900;color:#0f172a;letter-spacing:.2px}
+  .round-panel-title{margin:0 0 14px;font-size:48px;font-weight:900;color:#0f172a;letter-spacing:.2px;line-height:1}
   .game-input-trigger{width:100%;min-height:46px}
   .game-input-modal{position:fixed;inset:0;background:rgba(10,20,40,.38);z-index:5200;display:none;align-items:center;justify-content:center;padding:18px}
   .game-input-modal.is-open{display:flex}
@@ -944,7 +1253,7 @@ render_header([
     <div class="admin-header spaced">
       <div>
         <h1 class="admin-title">Competition</h1>
-        <p class="admin-sub">Generate hanya Round 1 dulu. Round berikutnya terisi bertahap saat skor round sebelumnya mulai diinput.</p>
+        <p class="admin-sub">Americano langsung generate semua ronde. Mexicano generate Round 1 dulu, ronde berikutnya tersusun bertahap dari ranking saat ronde sebelumnya selesai.</p>
       </div>
       <div class="competition-actions"><a class="btn ghost" href="/admin/dashboard"><i class="bi bi-arrow-left"></i> Dashboard</a></div>
     </div>
@@ -971,52 +1280,22 @@ render_header([
         </div>
         <div class="tournament-list">
           <?php $hasTournament = false; ?>
-          <?php foreach (['Americano', 'Mexicano'] as $type): ?>
+          <?php foreach ($tournamentList as $tournament): ?>
             <?php
-              $typeGames = $gamesByType[$type] ?? [];
+              $type = (string)($tournament['type'] ?? '');
+              $tourKey = (string)($tournament['key'] ?? '');
+              $typeGames = (array)($tournament['games'] ?? []);
               if (!$typeGames) {
                   continue;
               }
               $hasTournament = true;
-              $firstTitle = trim((string)($typeGames[0]['game_title'] ?? $type));
-              $label = preg_replace('/\s*-\s*R\d+\s*M\d+\s*$/i', '', $firstTitle);
-              $label = trim((string)$label);
-              if ($label === '') {
-                  $label = $type;
-              }
-              $uniquePlayers = [];
-              foreach ($typeGames as $gameRow) {
-                  $teamA = trim((string)($gameRow['player_a_name'] ?? ''));
-                  $teamB = trim((string)($gameRow['player_b_name'] ?? ''));
-                  if ($teamA !== '' && strtoupper($teamA) !== 'BYE') {
-                      foreach (split_team_members($teamA) as $member) {
-                          $key = strtolower(trim($member));
-                          if ($key !== '') {
-                              $uniquePlayers[$key] = true;
-                          }
-                      }
-                  }
-                  if ($teamB !== '' && strtoupper($teamB) !== 'BYE') {
-                      foreach (split_team_members($teamB) as $member) {
-                          $key = strtolower(trim($member));
-                          if ($key !== '') {
-                              $uniquePlayers[$key] = true;
-                          }
-                      }
-                  }
-              }
-              $updatedAt = trim((string)($typeGames[0]['created_at'] ?? ''));
-              foreach ($typeGames as $gameRow) {
-                  $candidateTs = strtotime((string)($gameRow['created_at'] ?? ''));
-                  $currentTs = strtotime($updatedAt);
-                  if ($candidateTs && (!$currentTs || $candidateTs > $currentTs)) {
-                      $updatedAt = (string)$gameRow['created_at'];
-                  }
-              }
+              $label = (string)($tournament['label'] ?? $type);
+              $playerCount = count((array)($tournament['players'] ?? []));
+              $updatedAt = trim((string)($tournament['updated_at'] ?? ''));
             ?>
-            <button type="button" class="tournament-card" data-open-type="<?= h($type) ?>" data-game-type="<?= h($type) ?>">
+            <button type="button" class="tournament-card" data-open-tournament="<?= h($tourKey) ?>" data-game-type="<?= h($type) ?>">
               <div class="tournament-name"><?= h($label) ?></div>
-              <div class="tournament-meta"><?= (int)count($uniquePlayers) ?> players</div>
+              <div class="tournament-meta"><?= (int)$playerCount ?> players</div>
               <div class="tournament-updated">Updated <?= $updatedAt !== '' ? h(date('d M Y H:i', strtotime($updatedAt))) : '-' ?></div>
             </button>
           <?php endforeach; ?>
@@ -1032,25 +1311,22 @@ render_header([
               <button class="tournament-modal-close" type="button" data-modal-close aria-label="Tutup">&times;</button>
             </div>
             <div class="tournament-modal-body">
-              <?php foreach (['Americano', 'Mexicano'] as $type): ?>
-                <div data-type-panel="<?= h($type) ?>" style="display:none;">
+              <?php foreach ($tournamentList as $tournament): ?>
                 <?php
-                  $typeGames = $gamesByType[$type] ?? [];
-                  $roundGroups = [];
-                  foreach ($typeGames as $row) {
-                      $roundNo = (int)($row['round_no'] ?? 0);
-                      if ($roundNo <= 0) $roundNo = 999999;
-                      if (!isset($roundGroups[$roundNo])) $roundGroups[$roundNo] = [];
-                      $roundGroups[$roundNo][] = $row;
-                  }
-                  ksort($roundGroups, SORT_NUMERIC);
+                  $type = (string)($tournament['type'] ?? '');
+                  $tourKey = (string)($tournament['key'] ?? '');
+                  $typeGames = (array)($tournament['games'] ?? []);
+                  $roundGroups = (array)($tournament['rounds'] ?? []);
+                ?>
+                <div data-tournament-panel="<?= h($tourKey) ?>" style="display:none;">
+                <?php
                   $roundCompletedMap = [];
                   foreach ($roundGroups as $progressRoundNo => $progressRows) {
                       $roundCompletedMap[$progressRoundNo] = is_round_completed($progressRows);
                   }
                 ?>
                 <div class="type-head">
-                  <h3 style="margin:0;"><?= h($type) ?> <small style="font-weight:400;color:#5a6b86;"><?= count($typeGames) ?> match</small></h3>
+                  <h3 style="margin:0;"><?= h((string)($tournament['label'] ?? $type)) ?> <small style="font-weight:400;color:#5a6b86;"><?= h($type) ?> • <?= count($typeGames) ?> match</small></h3>
                 </div>
                 <?php if (!$typeGames): ?>
                   <p class="admin-sub" style="margin:0;">Belum ada match <?= h($type) ?>.</p>
@@ -1061,10 +1337,10 @@ render_header([
                       <div class="standing-wrap" style="margin-top:0;">
                         <table class="standing-table">
                           <thead>
-                            <tr><th>#</th><th>Team</th><th>Win</th><th>Total Point</th></tr>
+                            <tr><th>#</th><th>Player</th><th>Diff</th><th>Total Point</th></tr>
                           </thead>
                           <tbody>
-                            <?php $rows = $standingsByType[$type] ?? []; ?>
+                            <?php $rows = (array)($tournament['standings'] ?? []); ?>
                             <?php if (!$rows): ?>
                               <tr><td colspan="4">Belum ada skor valid untuk klasemen <?= h($type) ?>.</td></tr>
                             <?php else: ?>
@@ -1072,7 +1348,7 @@ render_header([
                                 <tr<?= $idx === 0 ? ' style="background:#ffe44a;"' : '' ?>>
                                   <td><?= (int)($idx + 1) ?></td>
                                   <td><?= h((string)($row['name'] ?? '-')) ?></td>
-                                  <td><?= (int)($row['win'] ?? 0) ?></td>
+                                  <td><?= (int)($row['point_diff'] ?? 0) ?></td>
                                   <td><strong><?= (int)($row['point_total'] ?? 0) ?></strong></td>
                                 </tr>
                               <?php endforeach; ?>
@@ -1095,11 +1371,11 @@ render_header([
                               <div class="round-block">
                                 <p class="round-title"><?= h($roundNo === 999999 ? 'Round Tanpa Nomor' : ('Round ' . $roundNo)) ?></p>
                             <?php
-                              $allowedTeamsForRound = PHP_INT_MAX;
+                              $isRoundUnlocked = true;
                               if ($roundNo !== 999999 && $roundNo > 1) {
                                   $prevRoundNo = $roundNo - 1;
                                   if (!($roundCompletedMap[$prevRoundNo] ?? false)) {
-                                      $allowedTeamsForRound = 0;
+                                      $isRoundUnlocked = false;
                                   }
                               }
                             ?>
@@ -1114,21 +1390,13 @@ render_header([
                                 }
                                 $nameA = trim((string)($game['player_a_name'] ?? '')) ?: 'TBD';
                                 $nameB = trim((string)($game['player_b_name'] ?? '')) ?: 'TBD';
-                                $slotA = ($mIdx * 2);
-                                $slotB = ($mIdx * 2) + 1;
                                 $displayA = $nameA;
                                 $displayB = $nameB;
-                                if ($slotA >= $allowedTeamsForRound) {
-                                    $displayA = 'BYE';
-                                }
-                                if ($slotB >= $allowedTeamsForRound) {
-                                    $displayB = 'BYE';
-                                }
                                 if (strtoupper($displayA) === 'TBD') { $displayA = 'BYE'; }
                                 if (strtoupper($displayB) === 'TBD') { $displayB = 'BYE'; }
                                 $isLocked = ($displayA === 'BYE' || $displayB === 'BYE');
                                 $isCompleted = ($sa !== null && $sb !== null && in_array(((int)$sa + (int)$sb), PADEL_ALLOWED_TOTAL_POINTS, true));
-                                $isScoreInputDisabled = ($isLocked || $isCompleted);
+                                $isScoreInputDisabled = ($isLocked || $isCompleted || !$isRoundUnlocked);
                                 if ($isLocked) {
                                     $sa = null;
                                     $sb = null;
@@ -1138,7 +1406,9 @@ render_header([
                               <div class="match-item" data-match-item>
                                 <div class="match-summary">
                                   <div class="match-meta">
-                                    <span class="match-caption"><?= h((string)($game['game_title'] ?? ('Match #' . ((int)($game['match_no'] ?? 0))))) ?> - Total <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'belum set' ?></span>
+                                    <?php $courtNoDisplay = (int)($game['court_no'] ?? 0); ?>
+                                    <?php $sessionNoDisplay = (int)($game['session_no'] ?? 1); ?>
+                                    <span class="match-caption"><?= h((string)($game['game_title'] ?? ('Match #' . ((int)($game['match_no'] ?? 0))))) ?> - Sesi <?= max(1, $sessionNoDisplay) ?> - Court <?= $courtNoDisplay > 0 ? $courtNoDisplay : (int)($game['match_no'] ?? 1) ?> - Total <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'belum set' ?></span>
                                   </div>
                                 </div>
                                 <div class="match-top-actions">
@@ -1163,8 +1433,13 @@ render_header([
                                   </form>
                                 </div>
                                 <div class="match-box">
-                                  <div class="seed-line"><?= h($displayA) ?></div>
-                                  <div class="seed-line"><?= h($displayB) ?></div>
+                                  <div class="seed-side">
+                                    <div class="seed-line"><?= h($displayA) ?></div>
+                                  </div>
+                                  <div class="seed-vs">vs</div>
+                                  <div class="seed-side">
+                                    <div class="seed-line"><?= h($displayB) ?></div>
+                                  </div>
                                 </div>
                                 <div class="live-status" data-inline-score-status aria-live="polite"></div>
                                 <div class="match-actions">
@@ -1223,7 +1498,14 @@ render_header([
                     <?php endforeach; ?>
                   </select>
                 </div>
-                <p class="note">Total poin dipilih sekali saat generate dan otomatis dipakai di semua ronde. Americano: round berikutnya menunggu round sebelumnya selesai penuh, lalu tim+slot+lawan diacak ulang. Mexicano: round berikutnya menunggu round sebelumnya selesai penuh, lalu pemain diurutkan berdasarkan ranking dan dipasangkan pola 1&3 vs 2&4 per grup.</p>
+                <div>
+                  <label for="courtCount">Jumlah Court Aktif</label>
+                  <input id="courtCount" name="court_count" type="number" min="1" max="12" value="1" required>
+                </div>
+                <p class="note" id="courtEstimatorText">
+                  Isi jumlah court untuk hitung ronde logika vs sesi eksekusi. Jika court kurang, sistem otomatis pecah jadi beberapa sesi per ronde.
+                </p>
+                <p class="note">Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Leaderboard diurutkan dari total poin, lalu selisih poin, lalu head-to-head. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
                 <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
               </form>
             </div>
@@ -1235,12 +1517,13 @@ render_header([
 </main>
 <script>
 (function () {
-  var activeTypeTarget = '';
-  var roundIndexByType = {};
+  var activeTournamentKey = '';
+  var roundIndexByTournament = {};
   var activeGameFilter = 'all';
   var isTournamentModalOpen = false;
   var toastStack = document.getElementById('toastStack');
   var gameInputModal = document.querySelector('[data-game-input-modal]');
+  var acceptedPlayerCount = <?= (int)$registeredAttendeeCount ?>;
   var initialFlashSuccess = <?= json_encode((string)($flash['success'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   var initialFlashError = <?= json_encode((string)($flash['error'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
@@ -1255,32 +1538,32 @@ render_header([
     gameInputModal.setAttribute('aria-hidden', 'true');
   }
 
-  function applyTypeFilter(boardRoot, target) {
-    var panels = boardRoot.querySelectorAll('[data-type-panel]');
+  function applyTournamentFilter(boardRoot, target) {
+    var panels = boardRoot.querySelectorAll('[data-tournament-panel]');
     if (!panels.length) return;
-    activeTypeTarget = target || activeTypeTarget || '';
+    activeTournamentKey = target || activeTournamentKey || '';
     panels.forEach(function (panel) {
-      var type = panel.getAttribute('data-type-panel') || '';
-      panel.style.display = (activeTypeTarget !== '' && activeTypeTarget === type) ? '' : 'none';
+      var key = panel.getAttribute('data-tournament-panel') || '';
+      panel.style.display = (activeTournamentKey !== '' && activeTournamentKey === key) ? '' : 'none';
     });
-    boardRoot.querySelectorAll('[data-open-type]').forEach(function (card) {
-      var cardType = card.getAttribute('data-open-type') || '';
-      card.classList.toggle('is-active', cardType === activeTypeTarget);
+    boardRoot.querySelectorAll('[data-open-tournament]').forEach(function (card) {
+      var cardKey = card.getAttribute('data-open-tournament') || '';
+      card.classList.toggle('is-active', cardKey === activeTournamentKey);
     });
   }
 
-  function setTournamentModalState(boardRoot, isOpen, type) {
+  function setTournamentModalState(boardRoot, isOpen, key) {
     if (!boardRoot) return;
     var modal = boardRoot.querySelector('[data-tournament-modal]');
     if (!modal) return;
     if (isOpen) {
-      if (type) {
-        activeTypeTarget = type;
+      if (key) {
+        activeTournamentKey = key;
       }
-      applyTypeFilter(boardRoot, activeTypeTarget);
-      var activePanel = boardRoot.querySelector('[data-type-panel="' + String(activeTypeTarget) + '"]');
+      applyTournamentFilter(boardRoot, activeTournamentKey);
+      var activePanel = boardRoot.querySelector('[data-tournament-panel="' + String(activeTournamentKey) + '"]');
       if (activePanel) {
-        var savedRoundIndex = parseInt(roundIndexByType[activeTypeTarget], 10);
+        var savedRoundIndex = parseInt(roundIndexByTournament[activeTournamentKey], 10);
         if (!Number.isFinite(savedRoundIndex) || savedRoundIndex < 0) {
           savedRoundIndex = 0;
         }
@@ -1290,7 +1573,11 @@ render_header([
       }
       var titleEl = boardRoot.querySelector('[data-modal-title]');
       if (titleEl) {
-        titleEl.textContent = (activeTypeTarget ? activeTypeTarget + ' - Detail Tournament' : 'Detail Tournament');
+        var card = boardRoot.querySelector('[data-open-tournament="' + String(activeTournamentKey) + '"]');
+        var cardTitleEl = card ? card.querySelector('.tournament-name') : null;
+        var cardType = card ? (card.getAttribute('data-game-type') || '') : '';
+        var cardTitle = cardTitleEl ? String(cardTitleEl.textContent || '').trim() : '';
+        titleEl.textContent = cardTitle !== '' ? (cardTitle + (cardType !== '' ? ' - ' + cardType : '')) : 'Detail Tournament';
       }
       modal.classList.add('is-open');
       modal.setAttribute('aria-hidden', 'false');
@@ -1318,8 +1605,8 @@ render_header([
         if (!newBoard || !currentBoard || !currentBoard.parentNode) return;
         currentBoard.parentNode.replaceChild(newBoard, currentBoard);
         initBoardInteractions(newBoard);
-        if (isTournamentModalOpen && activeTypeTarget !== '') {
-          setTournamentModalState(newBoard, true, activeTypeTarget);
+        if (isTournamentModalOpen && activeTournamentKey !== '') {
+          setTournamentModalState(newBoard, true, activeTournamentKey);
         }
       });
   }
@@ -1386,7 +1673,7 @@ render_header([
       var track = panel.querySelector('[data-round-track]');
       var nav = panel.querySelector('[data-round-nav]');
       if (!track || !nav) return;
-      var panelType = panel.getAttribute('data-type-panel') || '';
+      var panelType = panel.getAttribute('data-tournament-panel') || '';
       var cols = Array.prototype.slice.call(track.querySelectorAll('[data-round-col]'));
       var prevBtn = nav.querySelector('[data-round-prev]');
       var nextBtn = nav.querySelector('[data-round-next]');
@@ -1403,7 +1690,7 @@ render_header([
       var hasRoundAttr = panel.hasAttribute('data-round-index');
       var current = parseInt(panel.getAttribute('data-round-index') || '0', 10);
       if (!hasRoundAttr && panelType) {
-        var saved = parseInt(roundIndexByType[panelType], 10);
+        var saved = parseInt(roundIndexByTournament[panelType], 10);
         if (Number.isFinite(saved) && saved >= 0) {
           current = saved;
         }
@@ -1421,7 +1708,7 @@ render_header([
       function update() {
         panel.setAttribute('data-round-index', String(current));
         if (panelType) {
-          roundIndexByType[panelType] = current;
+          roundIndexByTournament[panelType] = current;
         }
         track.style.transform = 'translateX(' + String(-100 * current) + '%)';
         if (label) {
@@ -1458,11 +1745,11 @@ render_header([
       update();
     }
 
-    boardRoot.querySelectorAll('[data-open-type]').forEach(function (card) {
+    boardRoot.querySelectorAll('[data-open-tournament]').forEach(function (card) {
       card.addEventListener('click', function () {
-        var type = card.getAttribute('data-open-type') || '';
-        if (!type) return;
-        setTournamentModalState(boardRoot, true, type);
+        var key = card.getAttribute('data-open-tournament') || '';
+        if (!key) return;
+        setTournamentModalState(boardRoot, true, key);
       });
     });
     var modal = boardRoot.querySelector('[data-tournament-modal]');
@@ -1479,7 +1766,7 @@ render_header([
       });
     }
 
-    boardRoot.querySelectorAll('[data-type-panel]').forEach(function (panel) {
+    boardRoot.querySelectorAll('[data-tournament-panel]').forEach(function (panel) {
       initRoundNavigator(panel);
     });
 
@@ -1626,8 +1913,46 @@ render_header([
   }
 
   var createForm = document.querySelector('[data-create-match-form]');
+  function updateCourtEstimator() {
+    if (!createForm) return;
+    var infoEl = createForm.querySelector('#courtEstimatorText');
+    var typeEl = createForm.querySelector('[name=\"competition_type\"]');
+    var courtEl = createForm.querySelector('[name=\"court_count\"]');
+    if (!infoEl || !typeEl || !courtEl) return;
+
+    var type = String(typeEl.value || '');
+    var courts = parseInt(courtEl.value || '1', 10);
+    if (!Number.isFinite(courts) || courts < 1) courts = 1;
+    if (courts > 12) courts = 12;
+    var maxMatchesPerLogicalRound = Math.floor(acceptedPlayerCount / 4);
+    if (maxMatchesPerLogicalRound <= 0) {
+      infoEl.textContent = 'Attendee belum cukup. Minimal 4 pemain untuk 1 match.';
+      return;
+    }
+    if (courts > maxMatchesPerLogicalRound) {
+      courts = maxMatchesPerLogicalRound;
+    }
+    var wavesPerLogicalRound = Math.ceil(maxMatchesPerLogicalRound / Math.max(1, courts));
+    if (type === 'Americano') {
+      var logicalRounds = Math.max(1, acceptedPlayerCount - 1);
+      var estimatedSlots = logicalRounds * wavesPerLogicalRound;
+      infoEl.textContent = 'Americano: ' + acceptedPlayerCount + ' pemain, ' + courts + ' court aktif, ' + logicalRounds + ' ronde logika, ' + wavesPerLogicalRound + ' sesi/ronde, total ' + estimatedSlots + ' sesi.';
+      return;
+    }
+    if (type === 'Mexicano') {
+      var recommendedRounds = 6;
+      var estimatedMexSlots = recommendedRounds * wavesPerLogicalRound;
+      infoEl.textContent = 'Mexicano: pairing dinamis berdasar ranking tiap ronde. Dengan ' + courts + ' court aktif, estimasi ' + wavesPerLogicalRound + ' wave/ronde, rekomendasi awal ' + recommendedRounds + ' ronde (' + estimatedMexSlots + ' slot ronde).';
+      return;
+    }
+    infoEl.textContent = 'Pilih tipe game dulu untuk lihat estimasi ronde dari jumlah court.';
+  }
+
   document.querySelectorAll('[data-open-game-input-modal]').forEach(function (btn) {
-    btn.addEventListener('click', function () { setGameInputModalState(true); });
+    btn.addEventListener('click', function () {
+      setGameInputModalState(true);
+      updateCourtEstimator();
+    });
   });
   if (gameInputModal) {
     gameInputModal.addEventListener('click', function (ev) {
@@ -1638,6 +1963,17 @@ render_header([
     });
   }
   if (createForm) {
+    var typeSelectEl = createForm.querySelector('[name=\"competition_type\"]');
+    var courtInputEl = createForm.querySelector('[name=\"court_count\"]');
+    if (typeSelectEl) {
+      typeSelectEl.addEventListener('change', updateCourtEstimator);
+    }
+    if (courtInputEl) {
+      courtInputEl.addEventListener('change', updateCourtEstimator);
+      courtInputEl.addEventListener('input', updateCourtEstimator);
+    }
+    updateCourtEstimator();
+
     createForm.addEventListener('submit', function (ev) {
       ev.preventDefault();
       var btn = createForm.querySelector('button[type="submit"]');
