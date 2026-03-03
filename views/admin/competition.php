@@ -712,12 +712,23 @@ $extraHead = <<<HTML
   .type-filter{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
   .type-filter button{border:1px solid #bfd0ea;background:#fff;color:#163966;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
   .type-filter button.active{background:#1a66e9;border-color:#1a66e9;color:#fff}
-  .rounds-scroll{overflow:visible;padding-bottom:4px;margin-top:10px}
-  .rounds-track{display:grid;grid-template-columns:1fr;gap:12px}
-  .round-column{width:100%;max-width:100%;position:relative;flex:none}
+  .rounds-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 8px}
+  .rounds-nav-btn{width:34px;min-width:34px;height:34px;border-radius:10px;border:1px solid #c6d4ea;background:#fff;color:#163966;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+  .rounds-nav-btn:disabled{opacity:.45;cursor:not-allowed}
+  .rounds-nav-label{font-size:12px;font-weight:800;color:#173964;letter-spacing:.35px;text-transform:uppercase}
+  .rounds-scroll{overflow:hidden;padding-bottom:4px;margin-top:0}
+  .rounds-track{display:flex;gap:0;transition:transform .28s ease}
+  .round-column{width:100%;max-width:100%;position:relative;flex:0 0 100%;min-width:100%;box-sizing:border-box;padding-right:0}
   .round-column + .round-column::before{display:none}
-  .round-block{border:1px solid #dce6f8;border-radius:14px;padding:10px;background:#f8fbff;box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}
-  .round-title{margin:0 0 10px;font-size:12px;color:#173964;font-weight:900;text-transform:uppercase;letter-spacing:.5px}
+  .round-column{--round-accent:#0047ff;--round-bg:#d9e6ff}
+  .round-column:nth-child(6n+1){--round-accent:#0047ff;--round-bg:#d9e6ff}
+  .round-column:nth-child(6n+2){--round-accent:#00897b;--round-bg:#ccfff7}
+  .round-column:nth-child(6n+3){--round-accent:#7c00ff;--round-bg:#ead6ff}
+  .round-column:nth-child(6n+4){--round-accent:#ff5a00;--round-bg:#ffe2cc}
+  .round-column:nth-child(6n+5){--round-accent:#e0005a;--round-bg:#ffd2e5}
+  .round-column:nth-child(6n+6){--round-accent:#4caf00;--round-bg:#e3ffd1}
+  .round-block{border:1px solid var(--round-accent);border-radius:14px;padding:10px;background:var(--round-bg);box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}
+  .round-title{margin:0 0 10px;font-size:12px;color:var(--round-accent);font-weight:900;text-transform:uppercase;letter-spacing:.5px}
   .match-item + .match-item{margin-top:8px}
   .match-item{border:1px solid #d7e3f5;border-radius:12px;background:#fff;padding:10px;box-shadow:0 4px 12px rgba(15,32,60,.06)}
   .match-box{border:2px solid #2e323b;border-radius:6px;background:#fff;overflow:hidden}
@@ -791,7 +802,7 @@ $extraHead = <<<HTML
   @keyframes toastIn{from{opacity:0;transform:translateY(-5px) translateX(10px)}to{opacity:1;transform:translateY(0) translateX(0)}}
   @media (max-width:980px){
     .competition-grid{grid-template-columns:1fr}
-    .round-column{width:100%}
+    .round-column{width:100%;min-width:100%}
     .tournament-name{font-size:18px}
     .tournament-modal{padding:10px}
     .tournament-modal-card{max-height:95vh}
@@ -949,10 +960,15 @@ render_header([
                 <?php if (!$typeGames): ?>
                   <p class="admin-sub" style="margin:0;">Belum ada match <?= h($type) ?>.</p>
                 <?php else: ?>
+                  <div class="rounds-nav" data-round-nav>
+                    <button type="button" class="rounds-nav-btn" data-round-prev aria-label="Round sebelumnya"><i class="bi bi-chevron-left"></i></button>
+                    <div class="rounds-nav-label" data-round-label>Round 1</div>
+                    <button type="button" class="rounds-nav-btn" data-round-next aria-label="Round selanjutnya"><i class="bi bi-chevron-right"></i></button>
+                  </div>
                   <div class="rounds-scroll">
-                    <div class="rounds-track">
+                    <div class="rounds-track" data-round-track>
                       <?php foreach ($roundGroups as $roundNo => $matches): ?>
-                        <div class="round-column">
+                        <div class="round-column" data-round-col>
                           <div class="round-block">
                             <p class="round-title"><?= h($roundNo === 999999 ? 'Round Tanpa Nomor' : ('Round ' . $roundNo)) ?></p>
                             <?php
@@ -988,6 +1004,8 @@ render_header([
                                 if (strtoupper($displayA) === 'TBD') { $displayA = 'BYE'; }
                                 if (strtoupper($displayB) === 'TBD') { $displayB = 'BYE'; }
                                 $isLocked = ($displayA === 'BYE' || $displayB === 'BYE');
+                                $isCompleted = ($sa !== null && $sb !== null && in_array(((int)$sa + (int)$sb), PADEL_ALLOWED_TOTAL_POINTS, true));
+                                $isScoreInputDisabled = ($isLocked || $isCompleted);
                                 if ($isLocked) {
                                     $sa = null;
                                     $sb = null;
@@ -1011,27 +1029,33 @@ render_header([
                                     </span>
                                     <div class="score-strip">
                                       <span class="score-side">Skor 1</span>
-                                      <select id="score_a_<?= (int)$game['id'] ?>" name="score_a" data-score-a class="score-box" <?= $isLocked ? 'disabled' : '' ?>>
+                                      <select id="score_a_<?= (int)$game['id'] ?>" name="score_a" data-score-a class="score-box" <?= $isScoreInputDisabled ? 'disabled' : '' ?>>
                                         <?php if ($configuredTotal > 0): ?>
                                           <?php for ($scoreOption = 0; $scoreOption <= $configuredTotal; $scoreOption++): ?>
-                                            <option value="<?= (int)$scoreOption ?>"<?= $sa !== null && (int)$sa === (int)$scoreOption ? ' selected' : '' ?>><?= str_pad((string)$scoreOption, 2, '0', STR_PAD_LEFT) ?></option>
+                                            <?php
+                                              $isSelectedA = ($sa !== null) ? ((int)$sa === (int)$scoreOption) : ($scoreOption === 0);
+                                            ?>
+                                            <option value="<?= (int)$scoreOption ?>"<?= $isSelectedA ? ' selected' : '' ?>><?= str_pad((string)$scoreOption, 2, '0', STR_PAD_LEFT) ?></option>
                                           <?php endfor; ?>
                                         <?php else: ?>
                                           <option value="">--</option>
                                         <?php endif; ?>
                                       </select>
                                       <span class="score-vs-inline">vs</span>
-                                      <select id="score_b_<?= (int)$game['id'] ?>" name="score_b" data-score-b class="score-box" <?= $isLocked ? 'disabled' : '' ?>>
+                                      <select id="score_b_<?= (int)$game['id'] ?>" name="score_b" data-score-b class="score-box" <?= $isScoreInputDisabled ? 'disabled' : '' ?>>
                                         <?php if ($configuredTotal > 0): ?>
                                           <?php for ($scoreOption = 0; $scoreOption <= $configuredTotal; $scoreOption++): ?>
-                                            <option value="<?= (int)$scoreOption ?>"<?= $sb !== null && (int)$sb === (int)$scoreOption ? ' selected' : '' ?>><?= str_pad((string)$scoreOption, 2, '0', STR_PAD_LEFT) ?></option>
+                                            <?php
+                                              $isSelectedB = ($sb !== null) ? ((int)$sb === (int)$scoreOption) : ($scoreOption === 0);
+                                            ?>
+                                            <option value="<?= (int)$scoreOption ?>"<?= $isSelectedB ? ' selected' : '' ?>><?= str_pad((string)$scoreOption, 2, '0', STR_PAD_LEFT) ?></option>
                                           <?php endfor; ?>
                                         <?php else: ?>
                                           <option value="">--</option>
                                         <?php endif; ?>
                                       </select>
                                       <span class="score-side">Skor 2</span>
-                                      <button class="btn ghost small" type="submit" <?= $isLocked ? 'disabled' : '' ?>>Save</button>
+                                      <button class="btn ghost small" type="submit" <?= $isScoreInputDisabled ? 'disabled' : '' ?>>Save</button>
                                     </div>
                                     <div class="live-status" data-live-status aria-live="polite"></div>
                                   </form>
@@ -1119,6 +1143,12 @@ render_header([
         activeTypeTarget = type;
       }
       applyTypeFilter(boardRoot, activeTypeTarget);
+      var activePanel = boardRoot.querySelector('[data-type-panel="' + String(activeTypeTarget) + '"]');
+      if (activePanel) {
+        activePanel.setAttribute('data-round-index', '0');
+        var resetEvent = new CustomEvent('round-navigate');
+        activePanel.dispatchEvent(resetEvent);
+      }
       var titleEl = boardRoot.querySelector('[data-modal-title]');
       if (titleEl) {
         titleEl.textContent = (activeTypeTarget ? activeTypeTarget + ' - Detail Tournament' : 'Detail Tournament');
@@ -1215,6 +1245,67 @@ render_header([
   }
 
   function initBoardInteractions(boardRoot) {
+    function initRoundNavigator(panel) {
+      if (!panel) return;
+      var track = panel.querySelector('[data-round-track]');
+      var nav = panel.querySelector('[data-round-nav]');
+      if (!track || !nav) return;
+      var cols = Array.prototype.slice.call(track.querySelectorAll('[data-round-col]'));
+      var prevBtn = nav.querySelector('[data-round-prev]');
+      var nextBtn = nav.querySelector('[data-round-next]');
+      var label = nav.querySelector('[data-round-label]');
+      if (!cols.length) {
+        nav.style.display = 'none';
+        return;
+      }
+      if (cols.length <= 1) {
+        nav.style.display = 'none';
+      }
+      var maxIndex = Math.max(0, cols.length - 1);
+      var current = parseInt(panel.getAttribute('data-round-index') || '0', 10);
+      if (!Number.isFinite(current) || current < 0) current = 0;
+      if (current > maxIndex) current = maxIndex;
+
+      function getRoundLabelText(col, fallbackIndex) {
+        if (!col) return 'Round ' + String(fallbackIndex + 1);
+        var titleEl = col.querySelector('.round-title');
+        var t = titleEl ? String(titleEl.textContent || '').trim() : '';
+        return t !== '' ? t : ('Round ' + String(fallbackIndex + 1));
+      }
+
+      function update() {
+        panel.setAttribute('data-round-index', String(current));
+        track.style.transform = 'translateX(' + String(-100 * current) + '%)';
+        if (label) {
+          label.textContent = getRoundLabelText(cols[current], current) + ' (' + String(current + 1) + '/' + String(cols.length) + ')';
+        }
+        if (prevBtn) prevBtn.disabled = current <= 0;
+        if (nextBtn) nextBtn.disabled = current >= maxIndex;
+      }
+
+      if (prevBtn) {
+        prevBtn.addEventListener('click', function () {
+          if (current <= 0) return;
+          current--;
+          update();
+        });
+      }
+      if (nextBtn) {
+        nextBtn.addEventListener('click', function () {
+          if (current >= maxIndex) return;
+          current++;
+          update();
+        });
+      }
+      panel.addEventListener('round-navigate', function () {
+        current = parseInt(panel.getAttribute('data-round-index') || '0', 10);
+        if (!Number.isFinite(current) || current < 0) current = 0;
+        if (current > maxIndex) current = maxIndex;
+        update();
+      });
+      update();
+    }
+
     boardRoot.querySelectorAll('[data-open-type]').forEach(function (card) {
       card.addEventListener('click', function () {
         var type = card.getAttribute('data-open-type') || '';
@@ -1235,6 +1326,10 @@ render_header([
         });
       });
     }
+
+    boardRoot.querySelectorAll('[data-type-panel]').forEach(function (panel) {
+      initRoundNavigator(panel);
+    });
 
     boardRoot.querySelectorAll('[data-score-editor]').forEach(function (form) {
       var totalEl = form.querySelector('[data-score-total]');
@@ -1282,16 +1377,13 @@ render_header([
           aEl.value = String(total - b);
           return;
         }
-        if (a !== null && b === null) {
+        if (a !== null && b !== null) {
           aEl.value = String(a);
           bEl.value = String(total - a);
-        } else if (b !== null && a === null) {
-          bEl.value = String(b);
-          aEl.value = String(total - b);
-        } else if (a !== null && b !== null) {
-          aEl.value = String(a);
-          bEl.value = String(total - a);
+          return;
         }
+        if (a !== null) aEl.value = String(a);
+        if (b !== null) bEl.value = String(b);
       }
 
       aEl.addEventListener('input', function () { sync('a'); });
@@ -1314,12 +1406,13 @@ render_header([
         var a = clampScore(aEl.value, total);
         var b = clampScore(bEl.value, total);
         if (a === null && b === null) return;
-        if (a === null && b !== null) {
-          a = total - b;
-        } else if (b === null && a !== null) {
-          b = total - a;
-        } else if (a !== null && b !== null && a + b !== total) {
-          b = total - a;
+        if (a === null || b === null) {
+          setStatus('Skor harus diisi lengkap untuk kedua sisi.', 'error');
+          return;
+        }
+        if ((a + b) !== total) {
+          setStatus('Total skor harus sama dengan total poin (' + total + ').', 'error');
+          return;
         }
         aEl.value = a !== null ? String(a) : '';
         bEl.value = b !== null ? String(b) : '';
@@ -1356,7 +1449,7 @@ render_header([
             if (submitBtn) submitBtn.disabled = false;
           });
       });
-      sync('total');
+      applyMax(parseTotal());
     });
 
     boardRoot.querySelectorAll('[data-delete-game-form]').forEach(function (form) {
