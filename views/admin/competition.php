@@ -58,6 +58,24 @@ function validate_padel_score(?int $scoreA, ?int $scoreB, ?int $selectedTotal): 
     return '';
 }
 
+function read_configured_match_total(PDO $db, int $gameId): ?int {
+    if ($gameId <= 0) {
+        return null;
+    }
+    try {
+        $stmt = $db->prepare('SELECT match_total_points FROM competition_games WHERE id = ? LIMIT 1');
+        $stmt->execute([$gameId]);
+        $val = $stmt->fetchColumn();
+        if ($val === false || $val === null || $val === '') {
+            return null;
+        }
+        $total = (int)$val;
+        return in_array($total, PADEL_ALLOWED_TOTAL_POINTS, true) ? $total : null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
 function is_ajax_request(): bool {
     $requestedWith = strtolower(trim((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')));
     if ($requestedWith === 'xmlhttprequest') {
@@ -243,7 +261,7 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
     }
 
     $fetchSource = $db->prepare(
-        "SELECT id, match_no, player_a_name, player_b_name, score_a, score_b
+        "SELECT id, match_no, player_a_name, player_b_name, score_a, score_b, match_total_points
          FROM competition_games
          WHERE competition_type = ? AND round_no = ?
          ORDER BY match_no ASC, id ASC"
@@ -283,6 +301,19 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
     $allTeams = array_values(array_unique($allTeams));
     $completedTeams = array_values(array_unique($completedTeams));
     if (count($completedTeams) < 2) {
+        return [0, 0];
+    }
+    $configuredTotal = null;
+    foreach ($rows as $row) {
+        $candidateTotal = isset($row['match_total_points']) && $row['match_total_points'] !== null
+            ? (int)$row['match_total_points']
+            : null;
+        if ($candidateTotal !== null && in_array($candidateTotal, PADEL_ALLOWED_TOTAL_POINTS, true)) {
+            $configuredTotal = $candidateTotal;
+            break;
+        }
+    }
+    if ($configuredTotal === null) {
         return [0, 0];
     }
 
@@ -332,14 +363,14 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
 
     $insert = $db->prepare(
         "INSERT INTO competition_games (
-            package_id, competition_type, game_title, round_no, match_no,
+            package_id, competition_type, game_title, round_no, match_no, match_total_points,
             player_a_user_id, player_a_name, player_b_user_id, player_b_name,
             score_a, score_b, game_date, notes, created_by_admin_id, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     $update = $db->prepare(
         "UPDATE competition_games
-         SET game_title = ?, player_a_name = ?, player_b_name = ?
+         SET game_title = ?, match_total_points = ?, player_a_name = ?, player_b_name = ?
          WHERE id = ?"
     );
     $deleteRow = $db->prepare(
@@ -359,7 +390,7 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
             $row = $existingRows[$idx];
             $hasScore = ($row['score_a'] !== null || $row['score_b'] !== null);
             if (!$hasScore) {
-                $update->execute([$title, $a, $b, (int)$row['id']]);
+                $update->execute([$title, $configuredTotal, $a, $b, (int)$row['id']]);
                 $updated++;
             }
             continue;
@@ -371,6 +402,7 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
             $title,
             $nextRound,
             $matchNo,
+            $configuredTotal,
             null,
             $a,
             null,
@@ -412,6 +444,7 @@ try {
             game_title VARCHAR(160) NOT NULL,
             round_no INT NULL,
             match_no INT NULL,
+            match_total_points INT NULL,
             player_a_user_id INT NULL,
             player_a_name VARCHAR(150) NULL,
             player_b_user_id INT NULL,
@@ -446,6 +479,7 @@ try {
         $ensureColumn($db, $schema, 'competition_type', "VARCHAR(20) NULL AFTER package_id");
         $ensureColumn($db, $schema, 'round_no', "INT NULL AFTER game_title");
         $ensureColumn($db, $schema, 'match_no', "INT NULL AFTER round_no");
+        $ensureColumn($db, $schema, 'match_total_points', "INT NULL AFTER match_no");
         $ensureColumn($db, $schema, 'player_a_name', "VARCHAR(150) NULL AFTER player_a_user_id");
         $ensureColumn($db, $schema, 'player_b_name', "VARCHAR(150) NULL AFTER player_b_user_id");
         $ensureColumn($db, $schema, 'score_a', "INT NULL AFTER player_b_name");
@@ -463,12 +497,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $gameId = (int)($_POST['game_id'] ?? 0);
         [$scoreA, $scoreB, $selectedTotal, $parseError] = parse_score_request($_POST);
         $roundSynced = false;
+        $configuredTotal = null;
         if ($gameId <= 0) {
             $flash['error'] = 'ID game tidak valid.';
         } elseif ($parseError !== '') {
             $flash['error'] = $parseError;
         } else {
-            $scoreError = validate_padel_score($scoreA, $scoreB, $selectedTotal);
+            $configuredTotal = read_configured_match_total($db, $gameId);
+            if ($configuredTotal === null) {
+                $flash['error'] = 'Total poin game belum dikonfigurasi. Generate ulang match dari form atas.';
+            }
+            $scoreError = $flash['error'] === '' ? validate_padel_score($scoreA, $scoreB, $configuredTotal) : '';
             if ($scoreError !== '') {
                 $flash['error'] = $scoreError;
             }
@@ -519,10 +558,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $type = trim((string)($_POST['competition_type'] ?? ''));
         $titlePrefix = trim((string)($_POST['game_title'] ?? ''));
         $gameDateRaw = trim((string)($_POST['game_date'] ?? ''));
+        $matchTotalPoints = isset($_POST['match_total_points']) ? (int)$_POST['match_total_points'] : 0;
         $adminId = (int)($_SESSION['admin_id'] ?? 0);
 
         if (!in_array($type, $allowedTypes, true)) {
             $flash['error'] = 'Pilih tipe game yang valid.';
+        } elseif (!in_array($matchTotalPoints, PADEL_ALLOWED_TOTAL_POINTS, true)) {
+            $flash['error'] = 'Pilih total poin match yang valid.';
         } elseif ($titlePrefix !== '' && mb_strlen($titlePrefix) > 160) {
             $flash['error'] = 'Label game terlalu panjang (maksimal 160 karakter).';
         } elseif ($gameDateRaw !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $gameDateRaw)) {
@@ -550,10 +592,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     try {
                         $insert = $db->prepare(
                             'INSERT INTO competition_games (
-                                package_id, competition_type, game_title, round_no, match_no,
+                                package_id, competition_type, game_title, round_no, match_no, match_total_points,
                                 player_a_user_id, player_a_name, player_b_user_id, player_b_name,
                                 score_a, score_b, game_date, notes, created_by_admin_id, created_at
-                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
                         );
                         $created = 0;
                         $roundNo = 1;
@@ -562,7 +604,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $label = $titlePrefix !== '' ? $titlePrefix : $type;
                             $title = $label . ' - R' . $roundNo . ' M' . $matchNo;
                             $insert->execute([
-                                null, $type, $title, $roundNo, $matchNo,
+                                null, $type, $title, $roundNo, $matchNo, $matchTotalPoints,
                                 null, (string)$pair[0], null, (string)$pair[1],
                                 null, null, $gameDateRaw !== '' ? $gameDateRaw : null, null,
                                 $adminId > 0 ? $adminId : null, date('Y-m-d H:i:s'),
@@ -598,7 +640,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $games = [];
 try {
     $games = $db->query(
-        "SELECT id, game_title, round_no, match_no, game_date, created_at, competition_type,
+        "SELECT id, game_title, round_no, match_no, match_total_points, game_date, created_at, competition_type,
                 player_a_name, player_b_name, score_a, score_b
          FROM competition_games
          ORDER BY
@@ -671,9 +713,9 @@ $extraHead = <<<HTML
   .type-filter button{border:1px solid #bfd0ea;background:#fff;color:#163966;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
   .type-filter button.active{background:#1a66e9;border-color:#1a66e9;color:#fff}
   .rounds-scroll{overflow:visible;padding-bottom:4px;margin-top:10px}
-  .rounds-track{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
-  .round-column{width:250px;max-width:100%;position:relative;flex:0 1 250px}
-  .round-column + .round-column::before{content:"";position:absolute;left:-11px;top:50%;width:11px;border-top:2px solid #2e323b;opacity:.45}
+  .rounds-track{display:grid;grid-template-columns:1fr;gap:14px}
+  .round-column{width:100%;max-width:100%;position:relative;flex:none}
+  .round-column + .round-column::before{display:none}
   .round-block{border:1px solid #dce6f8;border-radius:12px;padding:8px;background:#f9fbff}
   .round-title{margin:0 0 8px;font-size:12px;color:#173964;font-weight:800;text-transform:uppercase}
   .match-item + .match-item{margin-top:8px}
@@ -693,7 +735,16 @@ $extraHead = <<<HTML
   table.standing-table{width:100%;border-collapse:collapse;min-width:560px}
   .standing-table th,.standing-table td{text-align:left;padding:8px 7px;border-bottom:1px solid #dfe8f8;font-size:12px;color:#183054}
   .standing-table th{font-size:11px;color:#5a6b86;text-transform:uppercase}
-  @media (max-width:980px){.competition-grid{grid-template-columns:1fr}.round-column{width:230px}}
+  .toast-stack{position:fixed;top:18px;right:18px;z-index:9999;display:grid;gap:10px;max-width:min(420px,calc(100vw - 24px))}
+  .toast-item{display:flex;align-items:flex-start;gap:10px;border-radius:12px;padding:11px 12px;box-shadow:0 10px 24px rgba(10,20,40,.18);border:1px solid transparent;background:#fff;animation:toastIn .18s ease-out}
+  .toast-item.success{border-color:#9ad5b0;background:#e9f8ef;color:#14532d}
+  .toast-item.error{border-color:#efb1b1;background:#feeeee;color:#991b1b}
+  .toast-item i{font-size:15px;line-height:1.2;margin-top:1px}
+  .toast-msg{font-size:13px;font-weight:700;line-height:1.45}
+  .toast-close{border:0;background:transparent;color:inherit;cursor:pointer;padding:0 2px;font-size:16px;line-height:1;opacity:.72}
+  .toast-close:hover{opacity:1}
+  @keyframes toastIn{from{opacity:0;transform:translateY(-5px) translateX(10px)}to{opacity:1;transform:translateY(0) translateX(0)}}
+  @media (max-width:980px){.competition-grid{grid-template-columns:1fr}.round-column{width:100%}}
 </style>
 HTML;
 
@@ -715,12 +766,15 @@ render_header([
       <div class="competition-actions"><a class="btn ghost" href="/admin/dashboard"><i class="bi bi-arrow-left"></i> Dashboard</a></div>
     </div>
 
-    <?php if (!empty($flash['success'])): ?><div class="alert success"><i class="bi bi-check-circle"></i> <?= h($flash['success']) ?></div><?php endif; ?>
-    <?php if (!empty($flash['error'])): ?><div class="alert error"><i class="bi bi-exclamation-triangle"></i> <?= h($flash['error']) ?></div><?php endif; ?>
+    <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+    <noscript>
+      <?php if (!empty($flash['success'])): ?><div class="alert success"><i class="bi bi-check-circle"></i> <?= h($flash['success']) ?></div><?php endif; ?>
+      <?php if (!empty($flash['error'])): ?><div class="alert error"><i class="bi bi-exclamation-triangle"></i> <?= h($flash['error']) ?></div><?php endif; ?>
+    </noscript>
     <section class="competition-grid">
       <div class="competition-card">
         <h2><i class="bi bi-plus-circle"></i> Tambah Game</h2>
-        <form method="post" class="competition-form">
+        <form method="post" class="competition-form" data-create-match-form>
           <input type="hidden" name="competition_action" value="create_match">
           <div>
             <label for="competitionType">Tipe Game</label>
@@ -738,8 +792,17 @@ render_header([
             <label for="gameDate">Tanggal Game (Opsional)</label>
             <input id="gameDate" name="game_date" type="date">
           </div>
+          <div>
+            <label for="matchTotalPoints">Total Poin Match</label>
+            <select id="matchTotalPoints" name="match_total_points" required>
+              <option value="">-- pilih total poin --</option>
+              <?php foreach (PADEL_ALLOWED_TOTAL_POINTS as $tp): ?>
+                <option value="<?= (int)$tp ?>"><?= (int)$tp ?> poin</option>
+              <?php endforeach; ?>
+            </select>
+          </div>
           <p class="admin-sub" style="margin:0;">Total attendee accepted: <strong><?= (int)$registeredAttendeeCount ?></strong>.</p>
-          <p class="note">Americano: round berikutnya menunggu round sebelumnya selesai penuh, lalu tim+slot+lawan diacak ulang. Mexicano: tim tetap, round berikutnya menunggu round sebelumnya selesai penuh, lalu lawan disusun dari ranking (1 vs 2, dst).</p>
+          <p class="note">Total poin dipilih sekali saat generate dan otomatis dipakai di semua ronde. Americano: round berikutnya menunggu round sebelumnya selesai penuh, lalu tim+slot+lawan diacak ulang. Mexicano: tim tetap, round berikutnya menunggu round sebelumnya selesai penuh, lalu lawan disusun dari ranking (1 vs 2, dst).</p>
           <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
         </form>
       </div>
@@ -801,6 +864,10 @@ render_header([
                           $sa = isset($game['score_a']) && $game['score_a'] !== null ? (int)$game['score_a'] : null;
                           $sb = isset($game['score_b']) && $game['score_b'] !== null ? (int)$game['score_b'] : null;
                           $st = ($sa !== null && $sb !== null) ? ($sa + $sb) : 0;
+                          $configuredTotal = isset($game['match_total_points']) && $game['match_total_points'] !== null ? (int)$game['match_total_points'] : 0;
+                          if (!in_array($configuredTotal, PADEL_ALLOWED_TOTAL_POINTS, true) && in_array($st, PADEL_ALLOWED_TOTAL_POINTS, true)) {
+                              $configuredTotal = $st;
+                          }
                           $nameA = trim((string)($game['player_a_name'] ?? '')) ?: 'TBD';
                           $nameB = trim((string)($game['player_b_name'] ?? '')) ?: 'TBD';
                           $slotA = ($mIdx * 2);
@@ -830,14 +897,11 @@ render_header([
                           <form method="post" class="score-editor" data-score-editor style="margin-top:6px;">
                             <input type="hidden" name="competition_action" value="update_score">
                             <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
+                            <input type="hidden" name="score_total" data-score-total value="<?= $configuredTotal > 0 ? (int)$configuredTotal : '' ?>">
                             <span class="score-vs"><?= h($displayA) ?> vs <?= h($displayB) ?></span>
-                            <label class="score-label" for="score_total_<?= (int)$game['id'] ?>">Total</label>
-                            <select id="score_total_<?= (int)$game['id'] ?>" name="score_total" data-score-total <?= $isLocked ? 'disabled' : '' ?>>
-                              <option value="">-- total --</option>
-                              <?php foreach (PADEL_ALLOWED_TOTAL_POINTS as $tp): ?>
-                                <option value="<?= (int)$tp ?>"<?= $st === (int)$tp ? ' selected' : '' ?>><?= (int)$tp ?></option>
-                              <?php endforeach; ?>
-                            </select>
+                            <span class="score-label" style="grid-column:1 / -1;display:block;color:#173964;font-weight:700;">
+                              Total: <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'Belum dikonfigurasi' ?>
+                            </span>
                             <label class="score-label" for="score_a_<?= (int)$game['id'] ?>">Skor 1</label>
                             <input id="score_a_<?= (int)$game['id'] ?>" type="number" name="score_a" data-score-a min="0" value="<?= $sa !== null ? (int)$sa : '' ?>" placeholder="A" <?= $isLocked ? 'disabled' : '' ?>>
                             <span>-</span>
@@ -847,7 +911,7 @@ render_header([
                             <div class="live-status" data-live-status aria-live="polite"></div>
                           </form>
                           <div class="match-actions">
-                            <form method="post" onsubmit="return confirm('Hapus game ini?');">
+                            <form method="post" data-delete-game-form>
                               <input type="hidden" name="competition_action" value="delete_game">
                               <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
                               <button class="btn ghost small" type="submit">Hapus</button>
@@ -894,6 +958,9 @@ render_header([
 <script>
 (function () {
   var activeTypeTarget = 'all';
+  var toastStack = document.getElementById('toastStack');
+  var initialFlashSuccess = <?= json_encode((string)($flash['success'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  var initialFlashError = <?= json_encode((string)($flash['error'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
   function applyTypeFilter(boardRoot, target) {
     var filterWrap = boardRoot.querySelector('[data-type-filter]');
@@ -910,8 +977,11 @@ render_header([
   }
 
   function refreshCompetitionBoard() {
-    return fetch(window.location.pathname + window.location.search, {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    var url = new URL(window.location.pathname + window.location.search, window.location.origin);
+    url.searchParams.set('_rt', String(Date.now()));
+    return fetch(url.toString(), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      cache: 'no-store'
     })
       .then(function (response) { return response.text(); })
       .then(function (html) {
@@ -924,6 +994,43 @@ render_header([
         initBoardInteractions(newBoard);
         applyTypeFilter(newBoard, activeTypeTarget);
       });
+  }
+
+  function showToast(message, kind, durationMs) {
+    if (!toastStack || !message) return;
+    var tone = kind === 'error' ? 'error' : 'success';
+    var item = document.createElement('div');
+    item.className = 'toast-item ' + tone;
+    item.innerHTML =
+      '<i class="bi ' + (tone === 'error' ? 'bi-exclamation-triangle' : 'bi-check-circle') + '"></i>' +
+      '<div class="toast-msg"></div>' +
+      '<button type="button" class="toast-close" aria-label="Close">&times;</button>';
+    var msgEl = item.querySelector('.toast-msg');
+    if (msgEl) msgEl.textContent = String(message);
+    var closeBtn = item.querySelector('.toast-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function () {
+        if (item.parentNode) item.parentNode.removeChild(item);
+      });
+    }
+    toastStack.appendChild(item);
+    window.setTimeout(function () {
+      if (item.parentNode) item.parentNode.removeChild(item);
+    }, durationMs || 4500);
+  }
+
+  function postCompetitionForm(form) {
+    return fetch(window.location.pathname + window.location.search, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      },
+      body: new FormData(form),
+      cache: 'no-store'
+    }).then(function (response) {
+      return response.json();
+    });
   }
 
   function showStatusOnGameForm(gameId, message, kind, durationMs) {
@@ -1054,7 +1161,8 @@ render_header([
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json'
           },
-          body: new FormData(form)
+          body: new FormData(form),
+          cache: 'no-store'
         })
           .then(function (response) { return response.json(); })
           .then(function (data) {
@@ -1063,6 +1171,7 @@ render_header([
             }
             var okMessage = data.message || 'Skor berhasil disimpan.';
             setStatus(okMessage, 'ok');
+            showToast(okMessage, 'success', 4500);
             return refreshCompetitionBoard().then(function () {
               showStatusOnGameForm(currentGameId, okMessage, 'ok', 5000);
             });
@@ -1070,6 +1179,7 @@ render_header([
           .catch(function (error) {
             var errMsg = error && error.message ? error.message : 'Terjadi kesalahan saat simpan.';
             setStatus(errMsg, 'error');
+            showToast(errMsg, 'error', 5000);
           })
           .finally(function () {
             if (submitBtn) submitBtn.disabled = false;
@@ -1077,12 +1187,64 @@ render_header([
       });
       sync('total');
     });
+
+    boardRoot.querySelectorAll('[data-delete-game-form]').forEach(function (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        if (!window.confirm('Hapus game ini?')) return;
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        postCompetitionForm(form)
+          .then(function (data) {
+            if (!data || !data.ok) {
+              throw new Error((data && data.message) ? data.message : 'Gagal menghapus game.');
+            }
+            showToast(data.message || 'Game berhasil dihapus.', 'success', 4500);
+            return refreshCompetitionBoard();
+          })
+          .catch(function (error) {
+            showToast(error && error.message ? error.message : 'Terjadi kesalahan saat menghapus game.', 'error', 5000);
+          })
+          .finally(function () {
+            if (btn) btn.disabled = false;
+          });
+      });
+    });
   }
 
   var board = document.querySelector('[data-live-board]');
   if (board) {
     initBoardInteractions(board);
     applyTypeFilter(board, activeTypeTarget);
+  }
+
+  var createForm = document.querySelector('[data-create-match-form]');
+  if (createForm) {
+    createForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var btn = createForm.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+      postCompetitionForm(createForm)
+        .then(function (data) {
+          if (!data || !data.ok) {
+            throw new Error((data && data.message) ? data.message : 'Gagal generate match.');
+          }
+          showToast(data.message || 'Match berhasil digenerate.', 'success', 5000);
+          return refreshCompetitionBoard();
+        })
+        .catch(function (error) {
+          showToast(error && error.message ? error.message : 'Terjadi kesalahan saat generate match.', 'error', 5500);
+        })
+        .finally(function () {
+          if (btn) btn.disabled = false;
+        });
+    });
+  }
+
+  if (initialFlashSuccess) {
+    showToast(initialFlashSuccess, 'success', 5000);
+  } else if (initialFlashError) {
+    showToast(initialFlashError, 'error', 5500);
   }
 })();
 </script>
