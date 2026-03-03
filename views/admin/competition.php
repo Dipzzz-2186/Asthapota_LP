@@ -846,12 +846,26 @@ render_header([
               if ($label === '') {
                   $label = $type;
               }
-              $uniqueTeams = [];
+              $uniquePlayers = [];
               foreach ($typeGames as $gameRow) {
                   $teamA = trim((string)($gameRow['player_a_name'] ?? ''));
                   $teamB = trim((string)($gameRow['player_b_name'] ?? ''));
-                  if ($teamA !== '' && strtoupper($teamA) !== 'BYE') $uniqueTeams[$teamA] = true;
-                  if ($teamB !== '' && strtoupper($teamB) !== 'BYE') $uniqueTeams[$teamB] = true;
+                  if ($teamA !== '' && strtoupper($teamA) !== 'BYE') {
+                      foreach (split_team_members($teamA) as $member) {
+                          $key = strtolower(trim($member));
+                          if ($key !== '') {
+                              $uniquePlayers[$key] = true;
+                          }
+                      }
+                  }
+                  if ($teamB !== '' && strtoupper($teamB) !== 'BYE') {
+                      foreach (split_team_members($teamB) as $member) {
+                          $key = strtolower(trim($member));
+                          if ($key !== '') {
+                              $uniquePlayers[$key] = true;
+                          }
+                      }
+                  }
               }
               $updatedAt = trim((string)($typeGames[0]['created_at'] ?? ''));
               foreach ($typeGames as $gameRow) {
@@ -864,7 +878,7 @@ render_header([
             ?>
             <button type="button" class="tournament-card" data-open-type="<?= h($type) ?>">
               <div class="tournament-name"><?= h($label) ?></div>
-              <div class="tournament-meta"><?= (int)count($uniqueTeams) ?> players</div>
+              <div class="tournament-meta"><?= (int)count($uniquePlayers) ?> players</div>
               <div class="tournament-updated">Updated <?= $updatedAt !== '' ? h(date('d M Y H:i', strtotime($updatedAt))) : '-' ?></div>
             </button>
           <?php endforeach; ?>
