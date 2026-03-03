@@ -58,6 +58,21 @@ function validate_padel_score(?int $scoreA, ?int $scoreB, ?int $selectedTotal): 
     return '';
 }
 
+function is_ajax_request(): bool {
+    $requestedWith = strtolower(trim((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')));
+    if ($requestedWith === 'xmlhttprequest') {
+        return true;
+    }
+    $accept = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
+    return strpos($accept, 'application/json') !== false;
+}
+
+function respond_json(array $payload): void {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 function fetch_competition_attendees(PDO $db): array {
     try {
         $rows = $db->query(
@@ -442,10 +457,12 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string)($_POST['competition_action'] ?? 'create_match'));
     $allowedTypes = ['Americano', 'Mexicano'];
+    $ajaxRequest = is_ajax_request();
 
     if ($action === 'update_score') {
         $gameId = (int)($_POST['game_id'] ?? 0);
         [$scoreA, $scoreB, $selectedTotal, $parseError] = parse_score_request($_POST);
+        $roundSynced = false;
         if ($gameId <= 0) {
             $flash['error'] = 'ID game tidak valid.';
         } elseif ($parseError !== '') {
@@ -470,12 +487,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($savedType !== '') {
                     [$nextCreated, $nextUpdated] = sync_next_round_from_round($db, $savedType, $savedRound, (int)($_SESSION['admin_id'] ?? 0));
                     if ($nextCreated > 0 || $nextUpdated > 0) {
+                        $roundSynced = true;
                         $flash['success'] .= ' Round berikutnya disinkronkan otomatis.';
                     }
                 }
             } catch (Throwable $e) {
                 $flash['error'] = 'Gagal memperbarui skor game.';
             }
+        }
+        if ($ajaxRequest) {
+            respond_json([
+                'ok' => $flash['error'] === '',
+                'message' => $flash['error'] !== '' ? $flash['error'] : $flash['success'],
+                'round_synced' => $roundSynced,
+            ]);
         }
     } elseif ($action === 'delete_game') {
         $gameId = (int)($_POST['game_id'] ?? 0);
@@ -555,6 +580,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if ($ajaxRequest) {
+        respond_json([
+            'ok' => $flash['error'] === '',
+            'message' => $flash['error'] !== '' ? $flash['error'] : $flash['success'],
+        ]);
+    }
+    if ($flash['success'] !== '') {
+        $flash['error'] = '';
+    } elseif ($flash['error'] !== '') {
+        $flash['success'] = '';
+    }
     $_SESSION['competition_flash'] = $flash;
     redirect('/admin/competition');
 }
@@ -625,13 +661,18 @@ $extraHead = <<<HTML
   .competition-card{background:rgba(255,255,255,.92);border:1px solid rgba(15,32,60,.12);border-radius:16px;padding:16px;box-shadow:0 8px 26px rgba(15,32,60,.08)}
   .competition-form{display:grid;gap:10px}.competition-form label{font-size:12px;color:#415a80;font-weight:700}
   .competition-form input,.competition-form select{width:100%;border-radius:10px;border:1px solid #c6d4ea;padding:10px 11px;background:#fff}
+  .alert{margin-bottom:14px}
+  .alert.success{background:#e8f8ee;border:1px solid #b7e6c4;color:#18633a}
+  .alert.success i{color:#18633a}
+  .alert.error{background:#fdeeee;border:1px solid #f3bcbc;color:#b43636}
+  .alert.error i{color:#b43636}
   .note{font-size:12px;color:#385885;background:#edf4ff;border:1px solid #d3e3ff;border-radius:10px;padding:8px 10px;margin:0}
   .type-filter{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
   .type-filter button{border:1px solid #bfd0ea;background:#fff;color:#163966;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
   .type-filter button.active{background:#1a66e9;border-color:#1a66e9;color:#fff}
-  .rounds-scroll{overflow-x:auto;padding-bottom:4px;margin-top:10px}
-  .rounds-track{display:flex;align-items:flex-start;gap:16px;min-width:max-content}
-  .round-column{width:250px;position:relative}
+  .rounds-scroll{overflow:visible;padding-bottom:4px;margin-top:10px}
+  .rounds-track{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+  .round-column{width:250px;max-width:100%;position:relative;flex:0 1 250px}
   .round-column + .round-column::before{content:"";position:absolute;left:-11px;top:50%;width:11px;border-top:2px solid #2e323b;opacity:.45}
   .round-block{border:1px solid #dce6f8;border-radius:12px;padding:8px;background:#f9fbff}
   .round-title{margin:0 0 8px;font-size:12px;color:#173964;font-weight:800;text-transform:uppercase}
@@ -645,6 +686,9 @@ $extraHead = <<<HTML
   .match-actions{margin-top:6px;display:flex;justify-content:center}
   .score-editor select,.score-editor input{border:1px solid #c6d4ea;border-radius:8px;padding:5px 6px}
   .score-editor input{width:52px;text-align:center}
+  .live-status{min-height:16px;font-size:11px;text-align:center;color:#4c6388;flex:0 0 100%;margin-top:2px}
+  .live-status.ok{color:#18633a}
+  .live-status.error{color:#b43636}
   .standing-wrap{overflow-x:auto;margin-top:12px}
   table.standing-table{width:100%;border-collapse:collapse;min-width:560px}
   .standing-table th,.standing-table td{text-align:left;padding:8px 7px;border-bottom:1px solid #dfe8f8;font-size:12px;color:#183054}
@@ -673,7 +717,6 @@ render_header([
 
     <?php if (!empty($flash['success'])): ?><div class="alert success"><i class="bi bi-check-circle"></i> <?= h($flash['success']) ?></div><?php endif; ?>
     <?php if (!empty($flash['error'])): ?><div class="alert error"><i class="bi bi-exclamation-triangle"></i> <?= h($flash['error']) ?></div><?php endif; ?>
-
     <section class="competition-grid">
       <div class="competition-card">
         <h2><i class="bi bi-plus-circle"></i> Tambah Game</h2>
@@ -701,13 +744,14 @@ render_header([
         </form>
       </div>
 
-      <div class="competition-card">
+      <div class="competition-card" data-live-board>
         <h2><i class="bi bi-grid-3x3-gap"></i> Bagan Match + Skor Tengah</h2>
         <div class="type-filter" data-type-filter>
           <button type="button" class="active" data-type-target="all">Semua</button>
           <button type="button" data-type-target="Americano">Americano</button>
           <button type="button" data-type-target="Mexicano">Mexicano</button>
         </div>
+
         <?php foreach (['Americano', 'Mexicano'] as $type): ?>
           <div data-type-panel="<?= h($type) ?>">
           <?php
@@ -800,6 +844,7 @@ render_header([
                             <label class="score-label" for="score_b_<?= (int)$game['id'] ?>">Skor 2</label>
                             <input id="score_b_<?= (int)$game['id'] ?>" type="number" name="score_b" data-score-b min="0" value="<?= $sb !== null ? (int)$sb : '' ?>" placeholder="B" <?= $isLocked ? 'disabled' : '' ?>>
                             <button class="btn ghost small" type="submit" <?= $isLocked ? 'disabled' : '' ?>>Save</button>
+                            <div class="live-status" data-live-status aria-live="polite"></div>
                           </form>
                           <div class="match-actions">
                             <form method="post" onsubmit="return confirm('Hapus game ini?');">
@@ -848,91 +893,197 @@ render_header([
 </main>
 <script>
 (function () {
-  var filterWrap = document.querySelector('[data-type-filter]');
-  var panels = document.querySelectorAll('[data-type-panel]');
-  if (filterWrap && panels.length) {
+  var activeTypeTarget = 'all';
+
+  function applyTypeFilter(boardRoot, target) {
+    var filterWrap = boardRoot.querySelector('[data-type-filter]');
+    var panels = boardRoot.querySelectorAll('[data-type-panel]');
+    if (!filterWrap || !panels.length) return;
+    activeTypeTarget = target || 'all';
     filterWrap.querySelectorAll('button[data-type-target]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var target = btn.getAttribute('data-type-target') || 'all';
-        filterWrap.querySelectorAll('button[data-type-target]').forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        panels.forEach(function (panel) {
-          var type = panel.getAttribute('data-type-panel') || '';
-          panel.style.display = (target === 'all' || target === type) ? '' : 'none';
-        });
-      });
+      btn.classList.toggle('active', (btn.getAttribute('data-type-target') || 'all') === activeTypeTarget);
+    });
+    panels.forEach(function (panel) {
+      var type = panel.getAttribute('data-type-panel') || '';
+      panel.style.display = (activeTypeTarget === 'all' || activeTypeTarget === type) ? '' : 'none';
     });
   }
 
-  document.querySelectorAll('[data-score-editor]').forEach(function (form) {
-    var totalEl = form.querySelector('[data-score-total]');
-    var aEl = form.querySelector('[data-score-a]');
-    var bEl = form.querySelector('[data-score-b]');
-    if (!totalEl || !aEl || !bEl) return;
-    function parseTotal() {
-      var total = parseInt(totalEl.value || '', 10);
-      return Number.isFinite(total) && total >= 0 ? total : null;
+  function refreshCompetitionBoard() {
+    return fetch(window.location.pathname + window.location.search, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (response) { return response.text(); })
+      .then(function (html) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        var newBoard = doc.querySelector('[data-live-board]');
+        var currentBoard = document.querySelector('[data-live-board]');
+        if (!newBoard || !currentBoard || !currentBoard.parentNode) return;
+        currentBoard.parentNode.replaceChild(newBoard, currentBoard);
+        initBoardInteractions(newBoard);
+        applyTypeFilter(newBoard, activeTypeTarget);
+      });
+  }
+
+  function showStatusOnGameForm(gameId, message, kind, durationMs) {
+    if (!gameId) return;
+    var form = document.querySelector('[data-score-editor] input[name="game_id"][value="' + String(gameId) + '"]');
+    if (!form) return;
+    var scoreForm = form.closest('[data-score-editor]');
+    if (!scoreForm) return;
+    var statusEl = scoreForm.querySelector('[data-live-status]');
+    if (!statusEl) return;
+    statusEl.textContent = message || '';
+    statusEl.classList.remove('ok', 'error');
+    if (kind) statusEl.classList.add(kind);
+    if (message) {
+      window.setTimeout(function () {
+        // Clear only if status is still showing the same message.
+        if (statusEl.textContent === message) {
+          statusEl.textContent = '';
+          statusEl.classList.remove('ok', 'error');
+        }
+      }, durationMs || 5000);
     }
-    function clampScore(v, total) {
-      var n = parseInt(v || '', 10);
-      if (!Number.isFinite(n)) return null;
-      if (n < 0) n = 0;
-      if (n > total) n = total;
-      return n;
+  }
+
+  function initBoardInteractions(boardRoot) {
+    var filterWrap = boardRoot.querySelector('[data-type-filter]');
+    if (filterWrap) {
+      filterWrap.querySelectorAll('button[data-type-target]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          applyTypeFilter(boardRoot, btn.getAttribute('data-type-target') || 'all');
+        });
+      });
     }
-    function applyMax(total) {
-      var maxVal = total !== null ? String(total) : '';
-      aEl.setAttribute('max', maxVal);
-      bEl.setAttribute('max', maxVal);
-    }
-    function sync(source) {
-      var total = parseTotal();
-      applyMax(total);
-      if (total === null) return;
-      var a = clampScore(aEl.value, total);
-      var b = clampScore(bEl.value, total);
-      if (source === 'a' && a !== null) {
-        aEl.value = String(a);
-        bEl.value = String(total - a);
-        return;
+
+    boardRoot.querySelectorAll('[data-score-editor]').forEach(function (form) {
+      var totalEl = form.querySelector('[data-score-total]');
+      var aEl = form.querySelector('[data-score-a]');
+      var bEl = form.querySelector('[data-score-b]');
+      var statusEl = form.querySelector('[data-live-status]');
+      var submitBtn = form.querySelector('button[type="submit"]');
+      if (!totalEl || !aEl || !bEl) return;
+
+      function setStatus(message, kind) {
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.classList.remove('ok', 'error');
+        if (kind) statusEl.classList.add(kind);
       }
-      if (source === 'b' && b !== null) {
-        bEl.value = String(b);
-        aEl.value = String(total - b);
-        return;
+      function parseTotal() {
+        var total = parseInt(totalEl.value || '', 10);
+        return Number.isFinite(total) && total >= 0 ? total : null;
       }
-      if (a !== null && b === null) {
-        aEl.value = String(a);
-        bEl.value = String(total - a);
-      } else if (b !== null && a === null) {
-        bEl.value = String(b);
-        aEl.value = String(total - b);
-      } else if (a !== null && b !== null) {
-        aEl.value = String(a);
-        bEl.value = String(total - a);
+      function clampScore(v, total) {
+        var n = parseInt(v || '', 10);
+        if (!Number.isFinite(n)) return null;
+        if (n < 0) n = 0;
+        if (n > total) n = total;
+        return n;
       }
-    }
-    aEl.addEventListener('input', function () { sync('a'); });
-    bEl.addEventListener('input', function () { sync('b'); });
-    totalEl.addEventListener('change', function () { sync('total'); });
-    form.addEventListener('submit', function (ev) {
-      var total = parseTotal();
-      if (total === null) return;
-      var a = clampScore(aEl.value, total);
-      var b = clampScore(bEl.value, total);
-      if (a === null && b === null) return;
-      if (a === null && b !== null) {
-        a = total - b;
-      } else if (b === null && a !== null) {
-        b = total - a;
-      } else if (a !== null && b !== null && a + b !== total) {
-        b = total - a;
+      function applyMax(total) {
+        var maxVal = total !== null ? String(total) : '';
+        aEl.setAttribute('max', maxVal);
+        bEl.setAttribute('max', maxVal);
       }
-      aEl.value = a !== null ? String(a) : '';
-      bEl.value = b !== null ? String(b) : '';
+      function sync(source) {
+        var total = parseTotal();
+        applyMax(total);
+        if (total === null) return;
+        var a = clampScore(aEl.value, total);
+        var b = clampScore(bEl.value, total);
+        if (source === 'a' && a !== null) {
+          aEl.value = String(a);
+          bEl.value = String(total - a);
+          return;
+        }
+        if (source === 'b' && b !== null) {
+          bEl.value = String(b);
+          aEl.value = String(total - b);
+          return;
+        }
+        if (a !== null && b === null) {
+          aEl.value = String(a);
+          bEl.value = String(total - a);
+        } else if (b !== null && a === null) {
+          bEl.value = String(b);
+          aEl.value = String(total - b);
+        } else if (a !== null && b !== null) {
+          aEl.value = String(a);
+          bEl.value = String(total - a);
+        }
+      }
+
+      aEl.addEventListener('input', function () { sync('a'); });
+      bEl.addEventListener('input', function () { sync('b'); });
+      aEl.addEventListener('change', function () { sync('a'); });
+      bEl.addEventListener('change', function () { sync('b'); });
+      totalEl.addEventListener('change', function () { sync('total'); });
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var gameIdEl = form.querySelector('input[name="game_id"]');
+        var currentGameId = gameIdEl ? parseInt(gameIdEl.value || '0', 10) : 0;
+        var total = parseTotal();
+        var hasScoreInput = String(aEl.value || '').trim() !== '' || String(bEl.value || '').trim() !== '';
+        if (total === null) {
+          if (hasScoreInput) {
+            setStatus('Pilih total poin dulu sebelum simpan skor.', 'error');
+          }
+          return;
+        }
+        var a = clampScore(aEl.value, total);
+        var b = clampScore(bEl.value, total);
+        if (a === null && b === null) return;
+        if (a === null && b !== null) {
+          a = total - b;
+        } else if (b === null && a !== null) {
+          b = total - a;
+        } else if (a !== null && b !== null && a + b !== total) {
+          b = total - a;
+        }
+        aEl.value = a !== null ? String(a) : '';
+        bEl.value = b !== null ? String(b) : '';
+
+        setStatus('Menyimpan...', null);
+        if (submitBtn) submitBtn.disabled = true;
+        fetch(window.location.pathname + window.location.search, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+          },
+          body: new FormData(form)
+        })
+          .then(function (response) { return response.json(); })
+          .then(function (data) {
+            if (!data || !data.ok) {
+              throw new Error((data && data.message) ? data.message : 'Gagal menyimpan skor.');
+            }
+            var okMessage = data.message || 'Skor berhasil disimpan.';
+            setStatus(okMessage, 'ok');
+            return refreshCompetitionBoard().then(function () {
+              showStatusOnGameForm(currentGameId, okMessage, 'ok', 5000);
+            });
+          })
+          .catch(function (error) {
+            var errMsg = error && error.message ? error.message : 'Terjadi kesalahan saat simpan.';
+            setStatus(errMsg, 'error');
+          })
+          .finally(function () {
+            if (submitBtn) submitBtn.disabled = false;
+          });
+      });
+      sync('total');
     });
-    sync('total');
-  });
+  }
+
+  var board = document.querySelector('[data-live-board]');
+  if (board) {
+    initBoardInteractions(board);
+    applyTypeFilter(board, activeTypeTarget);
+  }
 })();
 </script>
 <?php render_footer(['isAdmin' => true]); ?>
