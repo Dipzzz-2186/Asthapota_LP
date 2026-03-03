@@ -54,8 +54,8 @@ if (!function_exists('render_navbar')) {
             <a class="btn primary" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
           <?php else: ?>
             <a class="icon-btn" href="/register"><i class="bi bi-person"></i></a>
-            <a class="icon-btn" href="/packages-view"><i class="bi bi-bag"></i></a>
-            <a class="btn primary" href="/register">Register Now <i class="bi bi-arrow-right"></i></a>
+            <a class="icon-btn" href="/packages"><i class="bi bi-bag"></i></a>
+            <a class="btn primary" href="/events">Event Page <i class="bi bi-arrow-right"></i></a>
           <?php endif; ?>
         </div>
       </div>
@@ -125,21 +125,13 @@ if (!function_exists('render_footer')) {
           <img class="footer-logo" src="/assets/img/lopad.jpg" alt="Lopad logo">
           <div>
             <div class="footer-title">Temu Padel 2026</div>
-            <div class="footer-subtitle">A Monkeybar x BAPORA Event</div>
+            <div class="footer-subtitle">A Monkeybar x BAPORA HIPPI</div>
           </div>
-        </div>
-        <div class="footer-links">
-          <div class="footer-heading">Explore</div>
-          <a href="#about">About</a>
-          <a href="#program">Program</a>
-          <a href="#social">Social</a>
-          <a href="#packages">Packages</a>
-          <a href="#faq">FAQ</a>
         </div>
         <div class="footer-links">
           <div class="footer-heading">Quick Links</div>
           <a href="/register">Register</a>
-          <a href="/packages-view">Package Detail</a>
+          <a href="/packages">Package Detail</a>
         </div>
         <div class="footer-contact">
           <div class="footer-heading">Contact</div>
