@@ -143,6 +143,53 @@ function build_ranking_points(PDO $db, string $competitionType): array {
     return $points;
 }
 
+function build_player_ranking_stats(PDO $db, string $competitionType): array {
+    $stats = [];
+    try {
+        $stmt = $db->prepare(
+            "SELECT player_a_name, player_b_name, score_a, score_b
+             FROM competition_games
+             WHERE competition_type = ?"
+        );
+        $stmt->execute([$competitionType]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $teamA = trim((string)($row['player_a_name'] ?? ''));
+            $teamB = trim((string)($row['player_b_name'] ?? ''));
+            $membersA = split_team_members($teamA);
+            $membersB = split_team_members($teamB);
+            $sa = isset($row['score_a']) && $row['score_a'] !== null ? (int)$row['score_a'] : null;
+            $sb = isset($row['score_b']) && $row['score_b'] !== null ? (int)$row['score_b'] : null;
+            if (!$membersA || !$membersB || $sa === null || $sb === null) {
+                continue;
+            }
+            if (!in_array($sa + $sb, PADEL_ALLOWED_TOTAL_POINTS, true)) {
+                continue;
+            }
+            foreach ($membersA as $name) {
+                if (!isset($stats[$name])) {
+                    $stats[$name] = ['win' => 0, 'point_total' => 0];
+                }
+                $stats[$name]['point_total'] += $sa;
+                if ($sa > $sb) {
+                    $stats[$name]['win']++;
+                }
+            }
+            foreach ($membersB as $name) {
+                if (!isset($stats[$name])) {
+                    $stats[$name] = ['win' => 0, 'point_total' => 0];
+                }
+                $stats[$name]['point_total'] += $sb;
+                if ($sb > $sa) {
+                    $stats[$name]['win']++;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        $stats = [];
+    }
+    return $stats;
+}
+
 function build_round_robin(array $players): array {
     $players = array_values($players);
     if (count($players) < 2) {
@@ -329,24 +376,62 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
         $nextTeams = build_teams_from_players($members);
         shuffle($nextTeams);
     } else {
-        $ranking = build_ranking_points($db, 'Mexicano');
-        // Mexicano team composition stays fixed; only opponent pairing follows ranking.
-        $nextTeams = $allTeams;
-        usort($nextTeams, static function (string $x, string $y) use ($ranking): int {
-            $px = (int)($ranking[$x] ?? 0);
-            $py = (int)($ranking[$y] ?? 0);
+        $memberPool = [];
+        foreach ($allTeams as $teamName) {
+            foreach (split_team_members($teamName) as $member) {
+                $memberPool[] = $member;
+            }
+        }
+        $memberPool = array_values(array_unique($memberPool));
+        if (count($memberPool) < 4) {
+            return [0, 0];
+        }
+        $ranking = build_player_ranking_stats($db, 'Mexicano');
+        usort($memberPool, static function (string $x, string $y) use ($ranking): int {
+            $wx = (int)($ranking[$x]['win'] ?? 0);
+            $wy = (int)($ranking[$y]['win'] ?? 0);
+            if ($wx !== $wy) {
+                return $wy <=> $wx;
+            }
+            $px = (int)($ranking[$x]['point_total'] ?? 0);
+            $py = (int)($ranking[$y]['point_total'] ?? 0);
             if ($px !== $py) {
                 return $py <=> $px;
             }
             return strcmp($x, $y);
         });
+
+        $pairs = [];
+        $totalMembers = count($memberPool);
+        $fullGroups = intdiv($totalMembers, 4);
+        for ($group = 0; $group < $fullGroups; $group++) {
+            $offset = $group * 4;
+            $chunk = array_slice($memberPool, $offset, 4);
+            if (count($chunk) < 4) {
+                continue;
+            }
+            // Mexicano round pairing: ranking 1&3 vs 2&4 (per group of 4 players).
+            $teamA = $chunk[0] . ' & ' . $chunk[2];
+            $teamB = $chunk[1] . ' & ' . $chunk[3];
+            $pairs[] = [$teamA, $teamB];
+        }
+        $leftovers = array_slice($memberPool, $fullGroups * 4);
+        if ($leftovers) {
+            $leftoverTeams = build_teams_from_players($leftovers);
+            foreach (build_pairs_from_teams($leftoverTeams) as $leftoverPair) {
+                $pairs[] = $leftoverPair;
+            }
+        }
+        if (!$pairs) {
+            return [0, 0];
+        }
     }
 
     if ($type === 'Americano') {
         // For Americano, randomize slot positions as well so teams can land on different boxes.
         shuffle($nextTeams);
+        $pairs = build_pairs_from_teams($nextTeams);
     }
-    $pairs = build_pairs_from_teams($nextTeams);
     if (!$pairs) {
         return [0, 0];
     }
@@ -577,8 +662,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash['error'] = 'Jumlah attendee harus genap untuk format team 2 orang.';
             } else {
                 // Round 1 team composition is created once.
-                // Americano will re-randomize team members in next rounds,
-                // while Mexicano keeps this team composition fixed.
+                // Americano will re-randomize team members in next rounds.
+                // Mexicano next rounds are rebuilt by player ranking pattern (1&3 vs 2&4).
                 shuffle($attendees);
 
                 $teams = build_teams_from_players($attendees);
@@ -1138,7 +1223,7 @@ render_header([
                     <?php endforeach; ?>
                   </select>
                 </div>
-                <p class="note">Total poin dipilih sekali saat generate dan otomatis dipakai di semua ronde. Americano: round berikutnya menunggu round sebelumnya selesai penuh, lalu tim+slot+lawan diacak ulang. Mexicano: tim tetap, round berikutnya menunggu round sebelumnya selesai penuh, lalu lawan disusun dari ranking (1 vs 2, dst).</p>
+                <p class="note">Total poin dipilih sekali saat generate dan otomatis dipakai di semua ronde. Americano: round berikutnya menunggu round sebelumnya selesai penuh, lalu tim+slot+lawan diacak ulang. Mexicano: round berikutnya menunggu round sebelumnya selesai penuh, lalu pemain diurutkan berdasarkan ranking dan dipasangkan pola 1&3 vs 2&4 per grup.</p>
                 <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
               </form>
             </div>
