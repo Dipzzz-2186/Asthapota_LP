@@ -669,29 +669,38 @@ $standingsByType = ['Americano' => [], 'Mexicano' => []];
 foreach ($gamesByType as $type => $rows) {
     $table = [];
     foreach ($rows as $row) {
-        $a = trim((string)($row['player_a_name'] ?? ''));
-        $b = trim((string)($row['player_b_name'] ?? ''));
+        $teamA = trim((string)($row['player_a_name'] ?? ''));
+        $teamB = trim((string)($row['player_b_name'] ?? ''));
+        $membersA = split_team_members($teamA);
+        $membersB = split_team_members($teamB);
         $sa = isset($row['score_a']) && $row['score_a'] !== null ? (int)$row['score_a'] : null;
         $sb = isset($row['score_b']) && $row['score_b'] !== null ? (int)$row['score_b'] : null;
-        if ($a === '' || $b === '' || $sa === null || $sb === null || !in_array($sa + $sb, PADEL_ALLOWED_TOTAL_POINTS, true)) {
+        if (!$membersA || !$membersB || $sa === null || $sb === null || !in_array($sa + $sb, PADEL_ALLOWED_TOTAL_POINTS, true)) {
             continue;
         }
-        if (!isset($table[$a])) $table[$a] = ['name' => $a, 'match' => 0, 'win' => 0, 'draw' => 0, 'lose' => 0, 'pf' => 0, 'pa' => 0, 'point_total' => 0];
-        if (!isset($table[$b])) $table[$b] = ['name' => $b, 'match' => 0, 'win' => 0, 'draw' => 0, 'lose' => 0, 'pf' => 0, 'pa' => 0, 'point_total' => 0];
-        $table[$a]['match']++; $table[$b]['match']++;
-        $table[$a]['pf'] += $sa; $table[$a]['pa'] += $sb; $table[$a]['point_total'] += $sa;
-        $table[$b]['pf'] += $sb; $table[$b]['pa'] += $sa; $table[$b]['point_total'] += $sb;
-        if ($sa > $sb) { $table[$a]['win']++; $table[$b]['lose']++; }
-        elseif ($sa < $sb) { $table[$b]['win']++; $table[$a]['lose']++; }
-        else { $table[$a]['draw']++; $table[$b]['draw']++; }
+        foreach ($membersA as $playerName) {
+            if (!isset($table[$playerName])) {
+                $table[$playerName] = ['name' => $playerName, 'win' => 0, 'point_total' => 0];
+            }
+            $table[$playerName]['point_total'] += $sa;
+            if ($sa > $sb) {
+                $table[$playerName]['win']++;
+            }
+        }
+        foreach ($membersB as $playerName) {
+            if (!isset($table[$playerName])) {
+                $table[$playerName] = ['name' => $playerName, 'win' => 0, 'point_total' => 0];
+            }
+            $table[$playerName]['point_total'] += $sb;
+            if ($sb > $sa) {
+                $table[$playerName]['win']++;
+            }
+        }
     }
     $rows = array_values($table);
     usort($rows, static function (array $x, array $y): int {
-        $dx = (int)$x['pf'] - (int)$x['pa'];
-        $dy = (int)$y['pf'] - (int)$y['pa'];
-        if ((int)$x['point_total'] !== (int)$y['point_total']) return (int)$y['point_total'] <=> (int)$x['point_total'];
-        if ($dx !== $dy) return $dy <=> $dx;
         if ((int)$x['win'] !== (int)$y['win']) return (int)$y['win'] <=> (int)$x['win'];
+        if ((int)$x['point_total'] !== (int)$y['point_total']) return (int)$y['point_total'] <=> (int)$x['point_total'];
         return strcmp((string)$x['name'], (string)$y['name']);
     });
     $standingsByType[$type] = $rows;
@@ -777,7 +786,8 @@ $extraHead = <<<HTML
   .live-status{min-height:16px;font-size:11px;color:#4c6388;grid-column:1 / -1}
   .live-status.ok{color:#18633a}
   .live-status.error{color:#b43636}
-  .standing-wrap{overflow-x:auto;margin-top:12px}
+  .type-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:2px 0 8px}
+  .standing-wrap{overflow-x:auto;margin-top:10px}
   table.standing-table{width:100%;border-collapse:collapse;min-width:560px}
   .standing-table th,.standing-table td{text-align:left;padding:8px 7px;border-bottom:1px solid #dfe8f8;font-size:12px;color:#183054}
   .standing-table th{font-size:11px;color:#5a6b86;text-transform:uppercase}
@@ -795,6 +805,13 @@ $extraHead = <<<HTML
   .tournament-modal-title{margin:0;font-size:18px;color:#0f294d;font-weight:800}
   .tournament-modal-close{border:1px solid #c6d4ea;background:#fff;color:#163966;border-radius:10px;min-width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1}
   .tournament-modal-body{padding:12px 14px 14px;overflow:auto;background:#fbfdff}
+  .leaderboard-modal{position:fixed;inset:0;background:rgba(10,20,40,.46);z-index:5050;display:none;align-items:center;justify-content:center;padding:18px}
+  .leaderboard-modal.is-open{display:flex}
+  .leaderboard-modal-card{width:min(860px,100%);max-height:92vh;display:grid;grid-template-rows:auto minmax(0,1fr);border-radius:16px;background:#fff;border:1px solid rgba(15,32,60,.15);box-shadow:0 18px 38px rgba(10,20,40,.24);overflow:hidden}
+  .leaderboard-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #d9e3f4;background:#f7faff;position:sticky;top:0;z-index:2}
+  .leaderboard-modal-title{margin:0;font-size:18px;color:#0f294d;font-weight:800}
+  .leaderboard-modal-close{border:1px solid #c6d4ea;background:#fff;color:#163966;border-radius:10px;min-width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1}
+  .leaderboard-modal-body{padding:12px 14px 14px;overflow:auto;background:#fbfdff}
   .score-modal{position:fixed;inset:0;background:rgba(10,20,40,.4);z-index:5100;display:none;align-items:center;justify-content:center;padding:18px}
   .score-modal.is-open{display:flex}
   .score-modal-card{width:min(560px,100%);border-radius:14px;background:#fff;border:1px solid #d4e0f2;box-shadow:0 18px 38px rgba(10,20,40,.24);overflow:hidden}
@@ -833,6 +850,7 @@ $extraHead = <<<HTML
     .score-strip{justify-content:flex-start}
     .score-modal{padding:10px}
     .game-input-modal{padding:10px}
+    .leaderboard-modal{padding:10px}
   }
 </style>
 HTML;
@@ -955,7 +973,10 @@ render_header([
                       $roundCompletedMap[$progressRoundNo] = is_round_completed($progressRows);
                   }
                 ?>
-                <h3 style="margin:2px 0 8px;"><?= h($type) ?> <small style="font-weight:400;color:#5a6b86;"><?= count($typeGames) ?> match</small></h3>
+                <div class="type-head">
+                  <h3 style="margin:0;"><?= h($type) ?> <small style="font-weight:400;color:#5a6b86;"><?= count($typeGames) ?> match</small></h3>
+                  <button type="button" class="btn ghost small" data-open-leaderboard="<?= h($type) ?>"><i class="bi bi-trophy"></i> Leaderboard</button>
+                </div>
                 <?php if (!$typeGames): ?>
                   <p class="admin-sub" style="margin:0;">Belum ada match <?= h($type) ?>.</p>
                 <?php else: ?>
@@ -1056,30 +1077,43 @@ render_header([
                     </div>
                   </div>
                 <?php endif; ?>
-
-                <div class="standing-wrap">
-                  <table class="standing-table">
-                    <thead>
-                      <tr><th>#</th><th>Team</th><th>M</th><th>W</th><th>D</th><th>L</th><th>PF</th><th>PA</th><th>Diff</th><th>Total Poin</th></tr>
-                    </thead>
-                    <tbody>
-                      <?php $rows = $standingsByType[$type] ?? []; ?>
-                      <?php if (!$rows): ?>
-                        <tr><td colspan="10">Belum ada skor valid untuk klasemen <?= h($type) ?>.</td></tr>
-                      <?php else: ?>
-                        <?php foreach ($rows as $idx => $row): ?>
-                          <?php $diff = (int)($row['pf'] ?? 0) - (int)($row['pa'] ?? 0); ?>
-                          <tr>
-                            <td><?= (int)($idx + 1) ?></td><td><?= h((string)($row['name'] ?? '-')) ?></td><td><?= (int)($row['match'] ?? 0) ?></td>
-                            <td><?= (int)($row['win'] ?? 0) ?></td><td><?= (int)($row['draw'] ?? 0) ?></td><td><?= (int)($row['lose'] ?? 0) ?></td>
-                            <td><?= (int)($row['pf'] ?? 0) ?></td><td><?= (int)($row['pa'] ?? 0) ?></td><td><?= $diff >= 0 ? '+' . $diff : (string)$diff ?></td>
-                            <td><strong><?= (int)($row['point_total'] ?? 0) ?></strong></td>
-                          </tr>
-                        <?php endforeach; ?>
-                      <?php endif; ?>
-                    </tbody>
-                  </table>
                 </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        </div>
+        <div class="leaderboard-modal" data-leaderboard-modal aria-hidden="true">
+          <div class="leaderboard-modal-card" role="dialog" aria-modal="true" aria-labelledby="leaderboardModalTitle">
+            <div class="leaderboard-modal-head">
+              <h3 class="leaderboard-modal-title" id="leaderboardModalTitle" data-leaderboard-modal-title>Leaderboard</h3>
+              <button class="leaderboard-modal-close" type="button" data-leaderboard-modal-close aria-label="Tutup">&times;</button>
+            </div>
+            <div class="leaderboard-modal-body">
+              <?php foreach (['Americano', 'Mexicano'] as $type): ?>
+                <div data-leaderboard-panel="<?= h($type) ?>" style="display:none;">
+                  <h4 style="margin:0 0 8px; color:#0f294d;"><?= h($type) ?> Leaderboard</h4>
+                  <div class="standing-wrap">
+                    <table class="standing-table">
+                      <thead>
+                        <tr><th>#</th><th>Player</th><th>W</th><th>Total Point</th></tr>
+                      </thead>
+                      <tbody>
+                        <?php $rows = $standingsByType[$type] ?? []; ?>
+                        <?php if (!$rows): ?>
+                          <tr><td colspan="4">Belum ada skor valid untuk klasemen <?= h($type) ?>.</td></tr>
+                        <?php else: ?>
+                          <?php foreach ($rows as $idx => $row): ?>
+                            <tr>
+                              <td><?= (int)($idx + 1) ?></td>
+                              <td><?= h((string)($row['name'] ?? '-')) ?></td>
+                              <td><?= (int)($row['win'] ?? 0) ?></td>
+                              <td><strong><?= (int)($row['point_total'] ?? 0) ?></strong></td>
+                            </tr>
+                          <?php endforeach; ?>
+                        <?php endif; ?>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               <?php endforeach; ?>
             </div>
@@ -1163,8 +1197,11 @@ render_header([
 <script>
 (function () {
   var activeTypeTarget = '';
+  var activeLeaderboardTarget = '';
+  var roundIndexByType = {};
   var activeGameFilter = 'all';
   var isTournamentModalOpen = false;
+  var isLeaderboardModalOpen = false;
   var toastStack = document.getElementById('toastStack');
   var gameInputModal = document.querySelector('[data-game-input-modal]');
   var initialFlashSuccess = <?= json_encode((string)($flash['success'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -1206,7 +1243,11 @@ render_header([
       applyTypeFilter(boardRoot, activeTypeTarget);
       var activePanel = boardRoot.querySelector('[data-type-panel="' + String(activeTypeTarget) + '"]');
       if (activePanel) {
-        activePanel.setAttribute('data-round-index', '0');
+        var savedRoundIndex = parseInt(roundIndexByType[activeTypeTarget], 10);
+        if (!Number.isFinite(savedRoundIndex) || savedRoundIndex < 0) {
+          savedRoundIndex = 0;
+        }
+        activePanel.setAttribute('data-round-index', String(savedRoundIndex));
         var resetEvent = new CustomEvent('round-navigate');
         activePanel.dispatchEvent(resetEvent);
       }
@@ -1222,6 +1263,13 @@ render_header([
     modal.classList.remove('is-open');
     modal.setAttribute('aria-hidden', 'true');
     isTournamentModalOpen = false;
+    isLeaderboardModalOpen = false;
+    activeLeaderboardTarget = '';
+    var leaderboardModal = boardRoot.querySelector('[data-leaderboard-modal]');
+    if (leaderboardModal) {
+      leaderboardModal.classList.remove('is-open');
+      leaderboardModal.setAttribute('aria-hidden', 'true');
+    }
   }
 
   function refreshCompetitionBoard() {
@@ -1242,6 +1290,12 @@ render_header([
         initBoardInteractions(newBoard);
         if (isTournamentModalOpen && activeTypeTarget !== '') {
           setTournamentModalState(newBoard, true, activeTypeTarget);
+          if (isLeaderboardModalOpen && activeLeaderboardTarget !== '') {
+            var lbBtn = newBoard.querySelector(
+              '[data-type-panel="' + String(activeTypeTarget) + '"] [data-open-leaderboard="' + String(activeLeaderboardTarget) + '"]'
+            );
+            if (lbBtn) lbBtn.click();
+          }
         }
       });
   }
@@ -1308,6 +1362,7 @@ render_header([
       var track = panel.querySelector('[data-round-track]');
       var nav = panel.querySelector('[data-round-nav]');
       if (!track || !nav) return;
+      var panelType = panel.getAttribute('data-type-panel') || '';
       var cols = Array.prototype.slice.call(track.querySelectorAll('[data-round-col]'));
       var prevBtn = nav.querySelector('[data-round-prev]');
       var nextBtn = nav.querySelector('[data-round-next]');
@@ -1320,7 +1375,14 @@ render_header([
         nav.style.display = 'none';
       }
       var maxIndex = Math.max(0, cols.length - 1);
+      var hasRoundAttr = panel.hasAttribute('data-round-index');
       var current = parseInt(panel.getAttribute('data-round-index') || '0', 10);
+      if (!hasRoundAttr && panelType) {
+        var saved = parseInt(roundIndexByType[panelType], 10);
+        if (Number.isFinite(saved) && saved >= 0) {
+          current = saved;
+        }
+      }
       if (!Number.isFinite(current) || current < 0) current = 0;
       if (current > maxIndex) current = maxIndex;
 
@@ -1333,6 +1395,9 @@ render_header([
 
       function update() {
         panel.setAttribute('data-round-index', String(current));
+        if (panelType) {
+          roundIndexByType[panelType] = current;
+        }
         track.style.transform = 'translateX(' + String(-100 * current) + '%)';
         if (label) {
           label.textContent = getRoundLabelText(cols[current], current) + ' (' + String(current + 1) + '/' + String(cols.length) + ')';
@@ -1388,6 +1453,51 @@ render_header([
     boardRoot.querySelectorAll('[data-type-panel]').forEach(function (panel) {
       initRoundNavigator(panel);
     });
+
+    var leaderboardModal = boardRoot.querySelector('[data-leaderboard-modal]');
+    var leaderboardModalTitle = leaderboardModal ? leaderboardModal.querySelector('[data-leaderboard-modal-title]') : null;
+    function openLeaderboardModal(type) {
+      if (!leaderboardModal || !type) return;
+      activeLeaderboardTarget = type;
+      var hasPanel = false;
+      leaderboardModal.querySelectorAll('[data-leaderboard-panel]').forEach(function (panel) {
+        var panelType = panel.getAttribute('data-leaderboard-panel') || '';
+        var active = panelType === activeLeaderboardTarget;
+        panel.style.display = active ? '' : 'none';
+        if (active) hasPanel = true;
+      });
+      if (!hasPanel) return;
+      if (leaderboardModalTitle) {
+        leaderboardModalTitle.textContent = activeLeaderboardTarget + ' Leaderboard';
+      }
+      leaderboardModal.classList.add('is-open');
+      leaderboardModal.setAttribute('aria-hidden', 'false');
+      isLeaderboardModalOpen = true;
+    }
+    function closeLeaderboardModal() {
+      if (!leaderboardModal) return;
+      leaderboardModal.classList.remove('is-open');
+      leaderboardModal.setAttribute('aria-hidden', 'true');
+      isLeaderboardModalOpen = false;
+    }
+    boardRoot.querySelectorAll('[data-open-leaderboard]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var type = btn.getAttribute('data-open-leaderboard') || activeTypeTarget || '';
+        openLeaderboardModal(type);
+      });
+    });
+    if (leaderboardModal) {
+      leaderboardModal.addEventListener('click', function (ev) {
+        if (ev.target === leaderboardModal) {
+          closeLeaderboardModal();
+        }
+      });
+      leaderboardModal.querySelectorAll('[data-leaderboard-modal-close]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          closeLeaderboardModal();
+        });
+      });
+    }
 
     var scoreModal = boardRoot.querySelector('[data-score-modal]');
     var scoreModalForm = scoreModal ? scoreModal.querySelector('[data-score-modal-form]') : null;
