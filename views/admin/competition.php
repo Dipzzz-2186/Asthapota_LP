@@ -713,29 +713,53 @@ $extraHead = <<<HTML
   .type-filter button{border:1px solid #bfd0ea;background:#fff;color:#163966;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
   .type-filter button.active{background:#1a66e9;border-color:#1a66e9;color:#fff}
   .rounds-scroll{overflow:visible;padding-bottom:4px;margin-top:10px}
-  .rounds-track{display:grid;grid-template-columns:1fr;gap:14px}
+  .rounds-track{display:grid;grid-template-columns:1fr;gap:12px}
   .round-column{width:100%;max-width:100%;position:relative;flex:none}
   .round-column + .round-column::before{display:none}
-  .round-block{border:1px solid #dce6f8;border-radius:12px;padding:8px;background:#f9fbff}
-  .round-title{margin:0 0 8px;font-size:12px;color:#173964;font-weight:800;text-transform:uppercase}
+  .round-block{border:1px solid #dce6f8;border-radius:14px;padding:10px;background:#f8fbff;box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}
+  .round-title{margin:0 0 10px;font-size:12px;color:#173964;font-weight:900;text-transform:uppercase;letter-spacing:.5px}
   .match-item + .match-item{margin-top:8px}
-  .match-item{border:1px solid #d7e3f5;border-radius:10px;background:#fff;padding:8px}
+  .match-item{border:1px solid #d7e3f5;border-radius:12px;background:#fff;padding:10px;box-shadow:0 4px 12px rgba(15,32,60,.06)}
   .match-box{border:2px solid #2e323b;border-radius:6px;background:#fff;overflow:hidden}
   .match-summary{display:grid;gap:8px}
   .match-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
   .match-caption{font-size:11px;color:#47628b;font-weight:700}
-  .match-toggle{min-width:170px}
-  .match-detail[hidden]{display:none !important}
-  .match-detail{padding-top:2px}
+  .match-detail{padding-top:8px;border-top:1px dashed #d6e0f0;margin-top:4px}
   .seed-line{padding:7px 8px;font-size:12px;color:#173964;min-height:34px;display:flex;align-items:center}
   .seed-line + .seed-line{border-top:1px solid #d5deed}
-  .score-editor{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
-  .score-label{font-size:11px;color:#47628b;font-weight:700}
-  .score-vs{font-size:11px;color:#365781;font-weight:700;min-width:100%;text-align:center}
-  .match-actions{margin-top:6px;display:flex;justify-content:center}
-  .score-editor select,.score-editor input{border:1px solid #c6d4ea;border-radius:8px;padding:5px 6px}
-  .score-editor input{width:52px;text-align:center}
-  .live-status{min-height:16px;font-size:11px;text-align:center;color:#4c6388;flex:0 0 100%;margin-top:2px}
+  .score-editor{display:grid;grid-template-columns:1fr;row-gap:8px}
+  .score-label{font-size:11px;color:#47628b;font-weight:800}
+  .score-vs{display:none}
+  .score-total-hint{grid-column:1 / -1;display:inline-flex;align-items:center;gap:6px;color:#173964;font-weight:800;background:#eef4ff;border:1px solid #d3e1fb;border-radius:999px;padding:6px 10px;width:max-content}
+  .score-strip{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+  .score-side{font-size:11px;color:#47628b;font-weight:800}
+  .score-vs-inline{font-size:12px;color:#405d84;font-weight:900;text-transform:lowercase}
+  .score-separator{font-weight:900;color:#4f6489;text-align:center}
+  .match-actions{margin-top:8px;display:flex;justify-content:flex-end}
+  .score-editor select,.score-editor input{border:1px solid #c6d4ea;border-radius:8px;padding:7px 8px;background:#fff}
+  .score-editor input{width:68px;text-align:center;font-weight:700;color:#14345f}
+  .score-box{
+    width:66px;
+    height:46px;
+    border:2px solid #0d1117 !important;
+    background:#0d1117 !important;
+    color:#fff !important;
+    font-size:30px;
+    font-weight:900;
+    letter-spacing:.5px;
+    text-align:center;
+    border-radius:8px !important;
+    padding:0 2px !important;
+    line-height:1;
+    -webkit-appearance:none;
+    appearance:none;
+    background-image:none !important;
+    text-indent:0;
+  }
+  .score-box:focus{outline:2px solid #7aa7ff;outline-offset:2px}
+  .score-editor button[type="submit"]{height:34px}
+  .live-status{min-height:16px;font-size:11px;color:#4c6388;grid-column:1 / -1}
+  .match-detail .match-box{margin-top:2px}
   .live-status.ok{color:#18633a}
   .live-status.error{color:#b43636}
   .standing-wrap{overflow-x:auto;margin-top:12px}
@@ -752,10 +776,10 @@ $extraHead = <<<HTML
   .tournament-modal{position:fixed;inset:0;background:rgba(10,20,40,.44);z-index:5000;display:none;align-items:center;justify-content:center;padding:18px}
   .tournament-modal.is-open{display:flex}
   .tournament-modal-card{width:min(1200px,100%);max-height:92vh;display:grid;grid-template-rows:auto minmax(0,1fr);border-radius:16px;background:#fff;border:1px solid rgba(15,32,60,.15);box-shadow:0 18px 38px rgba(10,20,40,.24);overflow:hidden}
-  .tournament-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #d9e3f4;background:#f7faff}
+  .tournament-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #d9e3f4;background:#f7faff;position:sticky;top:0;z-index:2}
   .tournament-modal-title{margin:0;font-size:18px;color:#0f294d;font-weight:800}
   .tournament-modal-close{border:1px solid #c6d4ea;background:#fff;color:#163966;border-radius:10px;min-width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1}
-  .tournament-modal-body{padding:12px 14px 14px;overflow:auto}
+  .tournament-modal-body{padding:12px 14px 14px;overflow:auto;background:#fbfdff}
   .toast-stack{position:fixed;top:18px;right:18px;z-index:9999;display:grid;gap:10px;max-width:min(420px,calc(100vw - 24px))}
   .toast-item{display:flex;align-items:flex-start;gap:10px;border-radius:12px;padding:11px 12px;box-shadow:0 10px 24px rgba(10,20,40,.18);border:1px solid transparent;background:#fff;animation:toastIn .18s ease-out}
   .toast-item.success{border-color:#9ad5b0;background:#e9f8ef;color:#14532d}
@@ -765,7 +789,17 @@ $extraHead = <<<HTML
   .toast-close{border:0;background:transparent;color:inherit;cursor:pointer;padding:0 2px;font-size:16px;line-height:1;opacity:.72}
   .toast-close:hover{opacity:1}
   @keyframes toastIn{from{opacity:0;transform:translateY(-5px) translateX(10px)}to{opacity:1;transform:translateY(0) translateX(0)}}
-  @media (max-width:980px){.competition-grid{grid-template-columns:1fr}.round-column{width:100%}.tournament-name{font-size:18px}.tournament-modal{padding:10px}.tournament-modal-card{max-height:95vh}}
+  @media (max-width:980px){
+    .competition-grid{grid-template-columns:1fr}
+    .round-column{width:100%}
+    .tournament-name{font-size:18px}
+    .tournament-modal{padding:10px}
+    .tournament-modal-card{max-height:95vh}
+    .score-editor{grid-template-columns:1fr 72px 14px 1fr 72px;row-gap:7px}
+    .score-editor button[type="submit"]{grid-column:1 / -1;justify-self:start}
+    .match-actions{justify-content:flex-start}
+    .score-strip{justify-content:flex-start}
+  }
 </style>
 HTML;
 
@@ -962,32 +996,49 @@ render_header([
                               ?>
                               <div class="match-item" data-match-item>
                                 <div class="match-summary">
-                                  <div class="match-box">
-                                    <div class="seed-line"><?= h($displayA) ?></div>
-                                    <div class="seed-line"><?= h($displayB) ?></div>
-                                  </div>
                                   <div class="match-meta">
                                     <span class="match-caption"><?= h((string)($game['game_title'] ?? ('Match #' . ((int)($game['match_no'] ?? 0))))) ?> - Total <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'belum set' ?></span>
-                                    <button class="btn ghost small match-toggle" type="button" data-match-toggle aria-expanded="false">Detail / Input Skor</button>
                                   </div>
                                 </div>
-                                <div class="match-detail" data-match-detail hidden>
+                                <div class="match-detail">
                                   <form method="post" class="score-editor" data-score-editor style="margin-top:6px;">
                                     <input type="hidden" name="competition_action" value="update_score">
                                     <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
                                     <input type="hidden" name="score_total" data-score-total value="<?= $configuredTotal > 0 ? (int)$configuredTotal : '' ?>">
                                     <span class="score-vs"><?= h($displayA) ?> vs <?= h($displayB) ?></span>
-                                    <span class="score-label" style="grid-column:1 / -1;display:block;color:#173964;font-weight:700;">
+                                    <span class="score-total-hint">
                                       Total: <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'Belum dikonfigurasi' ?>
                                     </span>
-                                    <label class="score-label" for="score_a_<?= (int)$game['id'] ?>">Skor 1</label>
-                                    <input id="score_a_<?= (int)$game['id'] ?>" type="number" name="score_a" data-score-a min="0" value="<?= $sa !== null ? (int)$sa : '' ?>" placeholder="A" <?= $isLocked ? 'disabled' : '' ?>>
-                                    <span>-</span>
-                                    <label class="score-label" for="score_b_<?= (int)$game['id'] ?>">Skor 2</label>
-                                    <input id="score_b_<?= (int)$game['id'] ?>" type="number" name="score_b" data-score-b min="0" value="<?= $sb !== null ? (int)$sb : '' ?>" placeholder="B" <?= $isLocked ? 'disabled' : '' ?>>
-                                    <button class="btn ghost small" type="submit" <?= $isLocked ? 'disabled' : '' ?>>Save</button>
+                                    <div class="score-strip">
+                                      <span class="score-side">Skor 1</span>
+                                      <select id="score_a_<?= (int)$game['id'] ?>" name="score_a" data-score-a class="score-box" <?= $isLocked ? 'disabled' : '' ?>>
+                                        <?php if ($configuredTotal > 0): ?>
+                                          <?php for ($scoreOption = 0; $scoreOption <= $configuredTotal; $scoreOption++): ?>
+                                            <option value="<?= (int)$scoreOption ?>"<?= $sa !== null && (int)$sa === (int)$scoreOption ? ' selected' : '' ?>><?= str_pad((string)$scoreOption, 2, '0', STR_PAD_LEFT) ?></option>
+                                          <?php endfor; ?>
+                                        <?php else: ?>
+                                          <option value="">--</option>
+                                        <?php endif; ?>
+                                      </select>
+                                      <span class="score-vs-inline">vs</span>
+                                      <select id="score_b_<?= (int)$game['id'] ?>" name="score_b" data-score-b class="score-box" <?= $isLocked ? 'disabled' : '' ?>>
+                                        <?php if ($configuredTotal > 0): ?>
+                                          <?php for ($scoreOption = 0; $scoreOption <= $configuredTotal; $scoreOption++): ?>
+                                            <option value="<?= (int)$scoreOption ?>"<?= $sb !== null && (int)$sb === (int)$scoreOption ? ' selected' : '' ?>><?= str_pad((string)$scoreOption, 2, '0', STR_PAD_LEFT) ?></option>
+                                          <?php endfor; ?>
+                                        <?php else: ?>
+                                          <option value="">--</option>
+                                        <?php endif; ?>
+                                      </select>
+                                      <span class="score-side">Skor 2</span>
+                                      <button class="btn ghost small" type="submit" <?= $isLocked ? 'disabled' : '' ?>>Save</button>
+                                    </div>
                                     <div class="live-status" data-live-status aria-live="polite"></div>
                                   </form>
+                                  <div class="match-box">
+                                    <div class="seed-line"><?= h($displayA) ?></div>
+                                    <div class="seed-line"><?= h($displayB) ?></div>
+                                  </div>
                                   <div class="match-actions">
                                     <form method="post" data-delete-game-form>
                                       <input type="hidden" name="competition_action" value="delete_game">
@@ -1147,16 +1198,6 @@ render_header([
     if (!form) return;
     var scoreForm = form.closest('[data-score-editor]');
     if (!scoreForm) return;
-    var matchItem = scoreForm.closest('[data-match-item]');
-    if (matchItem) {
-      var detail = matchItem.querySelector('[data-match-detail]');
-      var toggle = matchItem.querySelector('[data-match-toggle]');
-      if (detail) detail.hidden = false;
-      if (toggle) {
-        toggle.setAttribute('aria-expanded', 'true');
-        toggle.textContent = 'Sembunyikan Detail';
-      }
-    }
     var statusEl = scoreForm.querySelector('[data-live-status]');
     if (!statusEl) return;
     statusEl.textContent = message || '';
@@ -1194,18 +1235,6 @@ render_header([
         });
       });
     }
-
-    boardRoot.querySelectorAll('[data-match-item]').forEach(function (item) {
-      var toggleBtn = item.querySelector('[data-match-toggle]');
-      var detail = item.querySelector('[data-match-detail]');
-      if (!toggleBtn || !detail) return;
-      toggleBtn.addEventListener('click', function () {
-        var nextOpen = detail.hidden;
-        detail.hidden = !nextOpen;
-        toggleBtn.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
-        toggleBtn.textContent = nextOpen ? 'Sembunyikan Detail' : 'Detail / Input Skor';
-      });
-    });
 
     boardRoot.querySelectorAll('[data-score-editor]').forEach(function (form) {
       var totalEl = form.querySelector('[data-score-total]');
