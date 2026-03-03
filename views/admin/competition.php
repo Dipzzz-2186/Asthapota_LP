@@ -701,6 +701,7 @@ $extraHead = <<<HTML
 <style>
   .competition-grid{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:16px;align-items:start}
   .competition-card{background:rgba(255,255,255,.92);border:1px solid rgba(15,32,60,.12);border-radius:16px;padding:16px;box-shadow:0 8px 26px rgba(15,32,60,.08)}
+  .competition-card--full{grid-column:1 / -1}
   .competition-form{display:grid;gap:10px}.competition-form label{font-size:12px;color:#415a80;font-weight:700}
   .competition-form input,.competition-form select{width:100%;border-radius:10px;border:1px solid #c6d4ea;padding:10px 11px;background:#fff}
   .alert{margin-bottom:14px}
@@ -720,13 +721,13 @@ $extraHead = <<<HTML
   .rounds-track{display:flex;gap:0;transition:transform .28s ease}
   .round-column{width:100%;max-width:100%;position:relative;flex:0 0 100%;min-width:100%;box-sizing:border-box;padding-right:0}
   .round-column + .round-column::before{display:none}
-  .round-column{--round-accent:#0047ff;--round-bg:#d9e6ff}
-  .round-column:nth-child(6n+1){--round-accent:#0047ff;--round-bg:#d9e6ff}
-  .round-column:nth-child(6n+2){--round-accent:#00897b;--round-bg:#ccfff7}
-  .round-column:nth-child(6n+3){--round-accent:#7c00ff;--round-bg:#ead6ff}
-  .round-column:nth-child(6n+4){--round-accent:#ff5a00;--round-bg:#ffe2cc}
-  .round-column:nth-child(6n+5){--round-accent:#e0005a;--round-bg:#ffd2e5}
-  .round-column:nth-child(6n+6){--round-accent:#4caf00;--round-bg:#e3ffd1}
+  .round-column{--round-accent:#ff0033;--round-bg:#ffd6de}
+  .round-column:nth-child(6n+1){--round-accent:#ff0033;--round-bg:#ffd6de}
+  .round-column:nth-child(6n+2){--round-accent:#ff6a00;--round-bg:#ffe1cc}
+  .round-column:nth-child(6n+3){--round-accent:#ffd400;--round-bg:#fff6bf}
+  .round-column:nth-child(6n+4){--round-accent:#00c853;--round-bg:#d4ffd9}
+  .round-column:nth-child(6n+5){--round-accent:#00b0ff;--round-bg:#d6f3ff}
+  .round-column:nth-child(6n+6){--round-accent:#7c4dff;--round-bg:#e3d9ff}
   .round-block{border:1px solid var(--round-accent);border-radius:14px;padding:10px;background:var(--round-bg);box-shadow:inset 0 1px 0 rgba(255,255,255,.75)}
   .round-title{margin:0 0 10px;font-size:12px;color:var(--round-accent);font-weight:900;text-transform:uppercase;letter-spacing:.5px}
   .match-item + .match-item{margin-top:8px}
@@ -735,10 +736,14 @@ $extraHead = <<<HTML
   .match-summary{display:grid;gap:8px}
   .match-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
   .match-caption{font-size:11px;color:#47628b;font-weight:700}
-  .match-detail{padding-top:8px;border-top:1px dashed #d6e0f0;margin-top:4px}
+  .match-top-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;border-top:1px dashed #d6e0f0;padding-top:8px}
+  .match-score-preview{font-size:12px;font-weight:800;color:#173964}
+  .match-score-preview .score-pill{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;border-radius:6px;background:#111827;color:#fff;font-size:12px;padding:0 7px}
+  .match-open-score{min-width:110px}
+  .match-open-score[disabled]{opacity:.55}
   .seed-line{padding:7px 8px;font-size:12px;color:#173964;min-height:34px;display:flex;align-items:center}
   .seed-line + .seed-line{border-top:1px solid #d5deed}
-  .score-editor{display:grid;grid-template-columns:1fr;row-gap:8px}
+  .score-editor{display:grid;grid-template-columns:1fr;row-gap:10px}
   .score-label{font-size:11px;color:#47628b;font-weight:800}
   .score-vs{display:none}
   .score-total-hint{grid-column:1 / -1;display:inline-flex;align-items:center;gap:6px;color:#173964;font-weight:800;background:#eef4ff;border:1px solid #d3e1fb;border-radius:999px;padding:6px 10px;width:max-content}
@@ -770,7 +775,6 @@ $extraHead = <<<HTML
   .score-box:focus{outline:2px solid #7aa7ff;outline-offset:2px}
   .score-editor button[type="submit"]{height:34px}
   .live-status{min-height:16px;font-size:11px;color:#4c6388;grid-column:1 / -1}
-  .match-detail .match-box{margin-top:2px}
   .live-status.ok{color:#18633a}
   .live-status.error{color:#b43636}
   .standing-wrap{overflow-x:auto;margin-top:12px}
@@ -791,6 +795,23 @@ $extraHead = <<<HTML
   .tournament-modal-title{margin:0;font-size:18px;color:#0f294d;font-weight:800}
   .tournament-modal-close{border:1px solid #c6d4ea;background:#fff;color:#163966;border-radius:10px;min-width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1}
   .tournament-modal-body{padding:12px 14px 14px;overflow:auto;background:#fbfdff}
+  .score-modal{position:fixed;inset:0;background:rgba(10,20,40,.4);z-index:5100;display:none;align-items:center;justify-content:center;padding:18px}
+  .score-modal.is-open{display:flex}
+  .score-modal-card{width:min(560px,100%);border-radius:14px;background:#fff;border:1px solid #d4e0f2;box-shadow:0 18px 38px rgba(10,20,40,.24);overflow:hidden}
+  .score-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #d9e3f4;background:#f7faff}
+  .score-modal-title{margin:0;font-size:16px;color:#0f294d;font-weight:800}
+  .score-modal-close{border:1px solid #c6d4ea;background:#fff;color:#163966;border-radius:10px;min-width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;line-height:1}
+  .score-modal-body{padding:12px 14px 14px}
+  .score-modal-teams{border:2px solid #2e323b;border-radius:8px;overflow:hidden;background:#fff;margin-top:4px}
+  .score-modal-teams .seed-line{min-height:36px}
+  .game-input-trigger{width:100%;min-height:46px}
+  .game-input-modal{position:fixed;inset:0;background:rgba(10,20,40,.38);z-index:5200;display:none;align-items:center;justify-content:center;padding:18px}
+  .game-input-modal.is-open{display:flex}
+  .game-input-modal-card{width:min(620px,100%);max-height:92vh;display:grid;grid-template-rows:auto minmax(0,1fr);border-radius:14px;background:#fff;border:1px solid #d4e0f2;box-shadow:0 18px 38px rgba(10,20,40,.24);overflow:hidden}
+  .game-input-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #d9e3f4;background:#f7faff}
+  .game-input-modal-title{margin:0;font-size:17px;color:#0f294d;font-weight:800}
+  .game-input-modal-close{border:1px solid #c6d4ea;background:#fff;color:#163966;border-radius:10px;min-width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;line-height:1}
+  .game-input-modal-body{padding:12px 14px 14px;overflow:auto}
   .toast-stack{position:fixed;top:18px;right:18px;z-index:9999;display:grid;gap:10px;max-width:min(420px,calc(100vw - 24px))}
   .toast-item{display:flex;align-items:flex-start;gap:10px;border-radius:12px;padding:11px 12px;box-shadow:0 10px 24px rgba(10,20,40,.18);border:1px solid transparent;background:#fff;animation:toastIn .18s ease-out}
   .toast-item.success{border-color:#9ad5b0;background:#e9f8ef;color:#14532d}
@@ -810,6 +831,8 @@ $extraHead = <<<HTML
     .score-editor button[type="submit"]{grid-column:1 / -1;justify-self:start}
     .match-actions{justify-content:flex-start}
     .score-strip{justify-content:flex-start}
+    .score-modal{padding:10px}
+    .game-input-modal{padding:10px}
   }
 </style>
 HTML;
@@ -840,40 +863,11 @@ render_header([
     <section class="competition-grid">
       <div class="competition-card">
         <h2><i class="bi bi-plus-circle"></i> Tambah Game</h2>
-        <form method="post" class="competition-form" data-create-match-form>
-          <input type="hidden" name="competition_action" value="create_match">
-          <div>
-            <label for="competitionType">Tipe Game</label>
-            <select id="competitionType" name="competition_type" required>
-              <option value="">-- pilih --</option>
-              <option value="Americano">Americano</option>
-              <option value="Mexicano">Mexicano</option>
-            </select>
-          </div>
-          <div>
-            <label for="gameTitle">Label Prefix (Opsional)</label>
-            <input id="gameTitle" name="game_title" type="text" maxlength="160" placeholder="Contoh: Week 1">
-          </div>
-          <div>
-            <label for="gameDate">Tanggal Game (Opsional)</label>
-            <input id="gameDate" name="game_date" type="date">
-          </div>
-          <div>
-            <label for="matchTotalPoints">Total Poin Match</label>
-            <select id="matchTotalPoints" name="match_total_points" required>
-              <option value="">-- pilih total poin --</option>
-              <?php foreach (PADEL_ALLOWED_TOTAL_POINTS as $tp): ?>
-                <option value="<?= (int)$tp ?>"><?= (int)$tp ?> poin</option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <p class="admin-sub" style="margin:0;">Total attendee accepted: <strong><?= (int)$registeredAttendeeCount ?></strong>.</p>
-          <p class="note">Total poin dipilih sekali saat generate dan otomatis dipakai di semua ronde. Americano: round berikutnya menunggu round sebelumnya selesai penuh, lalu tim+slot+lawan diacak ulang. Mexicano: tim tetap, round berikutnya menunggu round sebelumnya selesai penuh, lalu lawan disusun dari ranking (1 vs 2, dst).</p>
-          <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
-        </form>
+        <p class="admin-sub" style="margin:0 0 10px;">Total attendee accepted: <strong><?= (int)$registeredAttendeeCount ?></strong>.</p>
+        <button type="button" class="btn primary game-input-trigger" data-open-game-input-modal><i class="bi bi-plus-circle"></i> Input Game</button>
       </div>
 
-      <div class="competition-card" data-live-board>
+      <div class="competition-card competition-card--full" data-live-board>
         <h2><i class="bi bi-grid-3x3-gap"></i> Latest Tournaments</h2>
         <p class="admin-sub" style="margin:0;">Klik satu turnamen untuk buka detail ronde + input skor di modal.</p>
         <div class="tournament-list">
@@ -1018,58 +1012,36 @@ render_header([
                                     <span class="match-caption"><?= h((string)($game['game_title'] ?? ('Match #' . ((int)($game['match_no'] ?? 0))))) ?> - Total <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'belum set' ?></span>
                                   </div>
                                 </div>
-                                <div class="match-detail">
-                                  <form method="post" class="score-editor" data-score-editor style="margin-top:6px;">
-                                    <input type="hidden" name="competition_action" value="update_score">
+                                <div class="match-top-actions">
+                                  <div class="match-score-preview">
+                                    <span class="score-pill"><?= str_pad((string)($sa !== null ? (int)$sa : 0), 2, '0', STR_PAD_LEFT) ?></span>
+                                    <span style="margin:0 4px;">vs</span>
+                                    <span class="score-pill"><?= str_pad((string)($sb !== null ? (int)$sb : 0), 2, '0', STR_PAD_LEFT) ?></span>
+                                  </div>
+                                  <button
+                                    class="btn ghost small match-open-score"
+                                    type="button"
+                                    data-score-open
+                                    data-game-id="<?= (int)($game['id'] ?? 0) ?>"
+                                    data-score-a="<?= $sa !== null ? (int)$sa : 0 ?>"
+                                    data-score-b="<?= $sb !== null ? (int)$sb : 0 ?>"
+                                    data-score-total="<?= $configuredTotal > 0 ? (int)$configuredTotal : 0 ?>"
+                                    data-match-title="<?= h((string)($game['game_title'] ?? ('Match #' . ((int)($game['match_no'] ?? 0))))) ?>"
+                                    data-team-a="<?= h($displayA) ?>"
+                                    data-team-b="<?= h($displayB) ?>"
+                                    <?= $isScoreInputDisabled ? 'disabled' : '' ?>
+                                  >Input Skor</button>
+                                </div>
+                                <div class="match-box">
+                                  <div class="seed-line"><?= h($displayA) ?></div>
+                                  <div class="seed-line"><?= h($displayB) ?></div>
+                                </div>
+                                <div class="match-actions">
+                                  <form method="post" data-delete-game-form>
+                                    <input type="hidden" name="competition_action" value="delete_game">
                                     <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
-                                    <input type="hidden" name="score_total" data-score-total value="<?= $configuredTotal > 0 ? (int)$configuredTotal : '' ?>">
-                                    <span class="score-vs"><?= h($displayA) ?> vs <?= h($displayB) ?></span>
-                                    <span class="score-total-hint">
-                                      Total: <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'Belum dikonfigurasi' ?>
-                                    </span>
-                                    <div class="score-strip">
-                                      <span class="score-side">Skor 1</span>
-                                      <select id="score_a_<?= (int)$game['id'] ?>" name="score_a" data-score-a class="score-box" <?= $isScoreInputDisabled ? 'disabled' : '' ?>>
-                                        <?php if ($configuredTotal > 0): ?>
-                                          <?php for ($scoreOption = 0; $scoreOption <= $configuredTotal; $scoreOption++): ?>
-                                            <?php
-                                              $isSelectedA = ($sa !== null) ? ((int)$sa === (int)$scoreOption) : ($scoreOption === 0);
-                                            ?>
-                                            <option value="<?= (int)$scoreOption ?>"<?= $isSelectedA ? ' selected' : '' ?>><?= str_pad((string)$scoreOption, 2, '0', STR_PAD_LEFT) ?></option>
-                                          <?php endfor; ?>
-                                        <?php else: ?>
-                                          <option value="">--</option>
-                                        <?php endif; ?>
-                                      </select>
-                                      <span class="score-vs-inline">vs</span>
-                                      <select id="score_b_<?= (int)$game['id'] ?>" name="score_b" data-score-b class="score-box" <?= $isScoreInputDisabled ? 'disabled' : '' ?>>
-                                        <?php if ($configuredTotal > 0): ?>
-                                          <?php for ($scoreOption = 0; $scoreOption <= $configuredTotal; $scoreOption++): ?>
-                                            <?php
-                                              $isSelectedB = ($sb !== null) ? ((int)$sb === (int)$scoreOption) : ($scoreOption === 0);
-                                            ?>
-                                            <option value="<?= (int)$scoreOption ?>"<?= $isSelectedB ? ' selected' : '' ?>><?= str_pad((string)$scoreOption, 2, '0', STR_PAD_LEFT) ?></option>
-                                          <?php endfor; ?>
-                                        <?php else: ?>
-                                          <option value="">--</option>
-                                        <?php endif; ?>
-                                      </select>
-                                      <span class="score-side">Skor 2</span>
-                                      <button class="btn ghost small" type="submit" <?= $isScoreInputDisabled ? 'disabled' : '' ?>>Save</button>
-                                    </div>
-                                    <div class="live-status" data-live-status aria-live="polite"></div>
+                                    <button class="btn ghost small" type="submit">Hapus</button>
                                   </form>
-                                  <div class="match-box">
-                                    <div class="seed-line"><?= h($displayA) ?></div>
-                                    <div class="seed-line"><?= h($displayB) ?></div>
-                                  </div>
-                                  <div class="match-actions">
-                                    <form method="post" data-delete-game-form>
-                                      <input type="hidden" name="competition_action" value="delete_game">
-                                      <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
-                                      <button class="btn ghost small" type="submit">Hapus</button>
-                                    </form>
-                                  </div>
                                 </div>
                               </div>
                             <?php endforeach; ?>
@@ -1108,6 +1080,77 @@ render_header([
             </div>
           </div>
         </div>
+
+        <div class="score-modal" data-score-modal aria-hidden="true">
+          <div class="score-modal-card" role="dialog" aria-modal="true" aria-labelledby="scoreModalTitle">
+            <div class="score-modal-head">
+              <h3 class="score-modal-title" id="scoreModalTitle" data-score-modal-title>Input Skor</h3>
+              <button class="score-modal-close" type="button" data-score-modal-close aria-label="Tutup">&times;</button>
+            </div>
+            <div class="score-modal-body">
+              <form method="post" data-score-modal-form>
+                <input type="hidden" name="competition_action" value="update_score">
+                <input type="hidden" name="game_id" value="" data-score-modal-game-id>
+                <input type="hidden" name="score_total" value="" data-score-modal-total>
+                <span class="score-total-hint" data-score-modal-total-text>Total: -</span>
+                <div class="score-strip" style="margin-top:8px;">
+                  <span class="score-side">Skor 1</span>
+                  <select name="score_a" class="score-box" data-score-modal-a></select>
+                  <span class="score-vs-inline">vs</span>
+                  <select name="score_b" class="score-box" data-score-modal-b></select>
+                  <span class="score-side">Skor 2</span>
+                  <button class="btn ghost small" type="submit" data-score-modal-save>Save</button>
+                </div>
+                <div class="score-modal-teams" style="margin-top:10px;">
+                  <div class="seed-line" data-score-modal-team-a>-</div>
+                  <div class="seed-line" data-score-modal-team-b>-</div>
+                </div>
+                <div class="live-status" data-score-modal-status aria-live="polite" style="margin-top:8px;"></div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="game-input-modal" data-game-input-modal aria-hidden="true">
+          <div class="game-input-modal-card" role="dialog" aria-modal="true" aria-labelledby="gameInputModalTitle">
+            <div class="game-input-modal-head">
+              <h3 class="game-input-modal-title" id="gameInputModalTitle">Input Game</h3>
+              <button class="game-input-modal-close" type="button" data-close-game-input-modal aria-label="Tutup">&times;</button>
+            </div>
+            <div class="game-input-modal-body">
+              <form method="post" class="competition-form" data-create-match-form>
+                <input type="hidden" name="competition_action" value="create_match">
+                <div>
+                  <label for="competitionType">Tipe Game</label>
+                  <select id="competitionType" name="competition_type" required>
+                    <option value="">-- pilih --</option>
+                    <option value="Americano">Americano</option>
+                    <option value="Mexicano">Mexicano</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="gameTitle">Label Prefix (Opsional)</label>
+                  <input id="gameTitle" name="game_title" type="text" maxlength="160" placeholder="Contoh: Week 1">
+                </div>
+                <div>
+                  <label for="gameDate">Tanggal Game (Opsional)</label>
+                  <input id="gameDate" name="game_date" type="date">
+                </div>
+                <div>
+                  <label for="matchTotalPoints">Total Poin Match</label>
+                  <select id="matchTotalPoints" name="match_total_points" required>
+                    <option value="">-- pilih total poin --</option>
+                    <?php foreach (PADEL_ALLOWED_TOTAL_POINTS as $tp): ?>
+                      <option value="<?= (int)$tp ?>"><?= (int)$tp ?> poin</option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <p class="note">Total poin dipilih sekali saat generate dan otomatis dipakai di semua ronde. Americano: round berikutnya menunggu round sebelumnya selesai penuh, lalu tim+slot+lawan diacak ulang. Mexicano: tim tetap, round berikutnya menunggu round sebelumnya selesai penuh, lalu lawan disusun dari ranking (1 vs 2, dst).</p>
+                <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
+              </form>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -1117,8 +1160,20 @@ render_header([
   var activeTypeTarget = '';
   var isTournamentModalOpen = false;
   var toastStack = document.getElementById('toastStack');
+  var gameInputModal = document.querySelector('[data-game-input-modal]');
   var initialFlashSuccess = <?= json_encode((string)($flash['success'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   var initialFlashError = <?= json_encode((string)($flash['error'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+  function setGameInputModalState(isOpen) {
+    if (!gameInputModal) return;
+    if (isOpen) {
+      gameInputModal.classList.add('is-open');
+      gameInputModal.setAttribute('aria-hidden', 'false');
+      return;
+    }
+    gameInputModal.classList.remove('is-open');
+    gameInputModal.setAttribute('aria-hidden', 'true');
+  }
 
   function applyTypeFilter(boardRoot, target) {
     var panels = boardRoot.querySelectorAll('[data-type-panel]');
@@ -1222,28 +1277,6 @@ render_header([
     });
   }
 
-  function showStatusOnGameForm(gameId, message, kind, durationMs) {
-    if (!gameId) return;
-    var form = document.querySelector('[data-score-editor] input[name="game_id"][value="' + String(gameId) + '"]');
-    if (!form) return;
-    var scoreForm = form.closest('[data-score-editor]');
-    if (!scoreForm) return;
-    var statusEl = scoreForm.querySelector('[data-live-status]');
-    if (!statusEl) return;
-    statusEl.textContent = message || '';
-    statusEl.classList.remove('ok', 'error');
-    if (kind) statusEl.classList.add(kind);
-    if (message) {
-      window.setTimeout(function () {
-        // Clear only if status is still showing the same message.
-        if (statusEl.textContent === message) {
-          statusEl.textContent = '';
-          statusEl.classList.remove('ok', 'error');
-        }
-      }, durationMs || 5000);
-    }
-  }
-
   function initBoardInteractions(boardRoot) {
     function initRoundNavigator(panel) {
       if (!panel) return;
@@ -1331,126 +1364,170 @@ render_header([
       initRoundNavigator(panel);
     });
 
-    boardRoot.querySelectorAll('[data-score-editor]').forEach(function (form) {
-      var totalEl = form.querySelector('[data-score-total]');
-      var aEl = form.querySelector('[data-score-a]');
-      var bEl = form.querySelector('[data-score-b]');
-      var statusEl = form.querySelector('[data-live-status]');
-      var submitBtn = form.querySelector('button[type="submit"]');
-      if (!totalEl || !aEl || !bEl) return;
+    var scoreModal = boardRoot.querySelector('[data-score-modal]');
+    var scoreModalForm = scoreModal ? scoreModal.querySelector('[data-score-modal-form]') : null;
+    var scoreModalTitle = scoreModal ? scoreModal.querySelector('[data-score-modal-title]') : null;
+    var scoreModalGameId = scoreModal ? scoreModal.querySelector('[data-score-modal-game-id]') : null;
+    var scoreModalTotal = scoreModal ? scoreModal.querySelector('[data-score-modal-total]') : null;
+    var scoreModalTotalText = scoreModal ? scoreModal.querySelector('[data-score-modal-total-text]') : null;
+    var scoreModalA = scoreModal ? scoreModal.querySelector('[data-score-modal-a]') : null;
+    var scoreModalB = scoreModal ? scoreModal.querySelector('[data-score-modal-b]') : null;
+    var scoreModalTeamA = scoreModal ? scoreModal.querySelector('[data-score-modal-team-a]') : null;
+    var scoreModalTeamB = scoreModal ? scoreModal.querySelector('[data-score-modal-team-b]') : null;
+    var scoreModalStatus = scoreModal ? scoreModal.querySelector('[data-score-modal-status]') : null;
+    var scoreModalSaveBtn = scoreModal ? scoreModal.querySelector('[data-score-modal-save]') : null;
 
-      function setStatus(message, kind) {
-        if (!statusEl) return;
-        statusEl.textContent = message || '';
-        statusEl.classList.remove('ok', 'error');
-        if (kind) statusEl.classList.add(kind);
+    function closeScoreModal() {
+      if (!scoreModal) return;
+      scoreModal.classList.remove('is-open');
+      scoreModal.setAttribute('aria-hidden', 'true');
+      if (scoreModalStatus) {
+        scoreModalStatus.textContent = '';
+        scoreModalStatus.classList.remove('ok', 'error');
       }
-      function parseTotal() {
-        var total = parseInt(totalEl.value || '', 10);
-        return Number.isFinite(total) && total >= 0 ? total : null;
-      }
-      function clampScore(v, total) {
-        var n = parseInt(v || '', 10);
-        if (!Number.isFinite(n)) return null;
-        if (n < 0) n = 0;
-        if (n > total) n = total;
-        return n;
-      }
-      function applyMax(total) {
-        var maxVal = total !== null ? String(total) : '';
-        aEl.setAttribute('max', maxVal);
-        bEl.setAttribute('max', maxVal);
-      }
-      function sync(source) {
-        var total = parseTotal();
-        applyMax(total);
-        if (total === null) return;
-        var a = clampScore(aEl.value, total);
-        var b = clampScore(bEl.value, total);
-        if (source === 'a' && a !== null) {
-          aEl.value = String(a);
-          bEl.value = String(total - a);
-          return;
-        }
-        if (source === 'b' && b !== null) {
-          bEl.value = String(b);
-          aEl.value = String(total - b);
-          return;
-        }
-        if (a !== null && b !== null) {
-          aEl.value = String(a);
-          bEl.value = String(total - a);
-          return;
-        }
-        if (a !== null) aEl.value = String(a);
-        if (b !== null) bEl.value = String(b);
-      }
+    }
 
-      aEl.addEventListener('input', function () { sync('a'); });
-      bEl.addEventListener('input', function () { sync('b'); });
-      aEl.addEventListener('change', function () { sync('a'); });
-      bEl.addEventListener('change', function () { sync('b'); });
-      totalEl.addEventListener('change', function () { sync('total'); });
-      form.addEventListener('submit', function (ev) {
+    function setScoreModalStatus(message, kind) {
+      if (!scoreModalStatus) return;
+      scoreModalStatus.textContent = message || '';
+      scoreModalStatus.classList.remove('ok', 'error');
+      if (kind) scoreModalStatus.classList.add(kind);
+    }
+
+    function buildScoreOptions(selectEl, total, selectedValue) {
+      if (!selectEl) return;
+      selectEl.innerHTML = '';
+      if (!Number.isFinite(total) || total < 0) {
+        var fallback = document.createElement('option');
+        fallback.value = '';
+        fallback.textContent = '--';
+        selectEl.appendChild(fallback);
+        return;
+      }
+      var selectedNum = Number.isFinite(selectedValue) ? selectedValue : 0;
+      if (selectedNum < 0) selectedNum = 0;
+      if (selectedNum > total) selectedNum = total;
+      for (var i = 0; i <= total; i++) {
+        var option = document.createElement('option');
+        option.value = String(i);
+        option.textContent = String(i).padStart(2, '0');
+        if (i === selectedNum) option.selected = true;
+        selectEl.appendChild(option);
+      }
+    }
+
+    function parseModalScore(selectEl) {
+      if (!selectEl) return null;
+      var n = parseInt(selectEl.value || '', 10);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function syncModalScore(side) {
+      if (!scoreModalTotal || !scoreModalA || !scoreModalB) return;
+      var total = parseInt(scoreModalTotal.value || '', 10);
+      if (!Number.isFinite(total) || total < 0) return;
+      var a = parseModalScore(scoreModalA);
+      var b = parseModalScore(scoreModalB);
+      if (side === 'a' && a !== null) {
+        scoreModalB.value = String(Math.max(0, total - a));
+      } else if (side === 'b' && b !== null) {
+        scoreModalA.value = String(Math.max(0, total - b));
+      }
+    }
+
+    boardRoot.querySelectorAll('[data-score-open]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!scoreModal || !scoreModalForm || !scoreModalGameId || !scoreModalTotal || !scoreModalA || !scoreModalB) return;
+        var gameId = parseInt(btn.getAttribute('data-game-id') || '0', 10);
+        var total = parseInt(btn.getAttribute('data-score-total') || '0', 10);
+        var scoreA = parseInt(btn.getAttribute('data-score-a') || '0', 10);
+        var scoreB = parseInt(btn.getAttribute('data-score-b') || '0', 10);
+        if (!Number.isFinite(gameId) || gameId <= 0) return;
+        if (!Number.isFinite(total) || total <= 0) return;
+        if (!Number.isFinite(scoreA) || scoreA < 0) scoreA = 0;
+        if (!Number.isFinite(scoreB) || scoreB < 0) scoreB = 0;
+        if (scoreA > total) scoreA = total;
+        if (scoreB > total) scoreB = total;
+
+        scoreModalGameId.value = String(gameId);
+        scoreModalTotal.value = String(total);
+        buildScoreOptions(scoreModalA, total, scoreA);
+        buildScoreOptions(scoreModalB, total, scoreB);
+
+        if (scoreModalTitle) {
+          var title = btn.getAttribute('data-match-title') || 'Input Skor';
+          scoreModalTitle.textContent = title;
+        }
+        if (scoreModalTotalText) scoreModalTotalText.textContent = 'Total: ' + String(total) + ' poin';
+        if (scoreModalTeamA) scoreModalTeamA.textContent = btn.getAttribute('data-team-a') || '-';
+        if (scoreModalTeamB) scoreModalTeamB.textContent = btn.getAttribute('data-team-b') || '-';
+        setScoreModalStatus('', null);
+
+        scoreModal.classList.add('is-open');
+        scoreModal.setAttribute('aria-hidden', 'false');
+      });
+    });
+
+    if (scoreModal) {
+      scoreModal.addEventListener('click', function (ev) {
+        if (ev.target === scoreModal) {
+          closeScoreModal();
+        }
+      });
+      scoreModal.querySelectorAll('[data-score-modal-close]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          closeScoreModal();
+        });
+      });
+    }
+
+    if (scoreModalA) {
+      scoreModalA.addEventListener('change', function () { syncModalScore('a'); });
+      scoreModalA.addEventListener('input', function () { syncModalScore('a'); });
+    }
+    if (scoreModalB) {
+      scoreModalB.addEventListener('change', function () { syncModalScore('b'); });
+      scoreModalB.addEventListener('input', function () { syncModalScore('b'); });
+    }
+
+    if (scoreModalForm) {
+      scoreModalForm.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        var gameIdEl = form.querySelector('input[name="game_id"]');
-        var currentGameId = gameIdEl ? parseInt(gameIdEl.value || '0', 10) : 0;
-        var total = parseTotal();
-        var hasScoreInput = String(aEl.value || '').trim() !== '' || String(bEl.value || '').trim() !== '';
-        if (total === null) {
-          if (hasScoreInput) {
-            setStatus('Pilih total poin dulu sebelum simpan skor.', 'error');
-          }
+        var total = scoreModalTotal ? parseInt(scoreModalTotal.value || '', 10) : NaN;
+        var a = parseModalScore(scoreModalA);
+        var b = parseModalScore(scoreModalB);
+        if (!Number.isFinite(total) || total <= 0) {
+          setScoreModalStatus('Total poin tidak valid.', 'error');
           return;
         }
-        var a = clampScore(aEl.value, total);
-        var b = clampScore(bEl.value, total);
-        if (a === null && b === null) return;
         if (a === null || b === null) {
-          setStatus('Skor harus diisi lengkap untuk kedua sisi.', 'error');
+          setScoreModalStatus('Skor harus diisi lengkap.', 'error');
           return;
         }
         if ((a + b) !== total) {
-          setStatus('Total skor harus sama dengan total poin (' + total + ').', 'error');
+          setScoreModalStatus('Total skor harus sama dengan total poin (' + total + ').', 'error');
           return;
         }
-        aEl.value = a !== null ? String(a) : '';
-        bEl.value = b !== null ? String(b) : '';
-
-        setStatus('Menyimpan...', null);
-        if (submitBtn) submitBtn.disabled = true;
-        fetch(window.location.pathname + window.location.search, {
-          method: 'POST',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json'
-          },
-          body: new FormData(form),
-          cache: 'no-store'
-        })
-          .then(function (response) { return response.json(); })
+        setScoreModalStatus('Menyimpan...', null);
+        if (scoreModalSaveBtn) scoreModalSaveBtn.disabled = true;
+        postCompetitionForm(scoreModalForm)
           .then(function (data) {
             if (!data || !data.ok) {
               throw new Error((data && data.message) ? data.message : 'Gagal menyimpan skor.');
             }
-            var okMessage = data.message || 'Skor berhasil disimpan.';
-            setStatus(okMessage, 'ok');
-            showToast(okMessage, 'success', 4500);
-            return refreshCompetitionBoard().then(function () {
-              showStatusOnGameForm(currentGameId, okMessage, 'ok', 5000);
-            });
+            showToast(data.message || 'Skor berhasil disimpan.', 'success', 4500);
+            closeScoreModal();
+            return refreshCompetitionBoard();
           })
           .catch(function (error) {
-            var errMsg = error && error.message ? error.message : 'Terjadi kesalahan saat simpan.';
-            setStatus(errMsg, 'error');
-            showToast(errMsg, 'error', 5000);
+            setScoreModalStatus(error && error.message ? error.message : 'Terjadi kesalahan saat simpan.', 'error');
+            showToast(error && error.message ? error.message : 'Terjadi kesalahan saat simpan.', 'error', 5000);
           })
           .finally(function () {
-            if (submitBtn) submitBtn.disabled = false;
+            if (scoreModalSaveBtn) scoreModalSaveBtn.disabled = false;
           });
       });
-      applyMax(parseTotal());
-    });
+    }
 
     boardRoot.querySelectorAll('[data-delete-game-form]').forEach(function (form) {
       form.addEventListener('submit', function (ev) {
@@ -1482,6 +1559,17 @@ render_header([
   }
 
   var createForm = document.querySelector('[data-create-match-form]');
+  document.querySelectorAll('[data-open-game-input-modal]').forEach(function (btn) {
+    btn.addEventListener('click', function () { setGameInputModalState(true); });
+  });
+  if (gameInputModal) {
+    gameInputModal.addEventListener('click', function (ev) {
+      if (ev.target === gameInputModal) setGameInputModalState(false);
+    });
+    gameInputModal.querySelectorAll('[data-close-game-input-modal]').forEach(function (btn) {
+      btn.addEventListener('click', function () { setGameInputModalState(false); });
+    });
+  }
   if (createForm) {
     createForm.addEventListener('submit', function (ev) {
       ev.preventDefault();
@@ -1493,6 +1581,7 @@ render_header([
             throw new Error((data && data.message) ? data.message : 'Gagal generate match.');
           }
           showToast(data.message || 'Match berhasil digenerate.', 'success', 5000);
+          setGameInputModalState(false);
           return refreshCompetitionBoard();
         })
         .catch(function (error) {
