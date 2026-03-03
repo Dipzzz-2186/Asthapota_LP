@@ -719,7 +719,14 @@ $extraHead = <<<HTML
   .round-block{border:1px solid #dce6f8;border-radius:12px;padding:8px;background:#f9fbff}
   .round-title{margin:0 0 8px;font-size:12px;color:#173964;font-weight:800;text-transform:uppercase}
   .match-item + .match-item{margin-top:8px}
+  .match-item{border:1px solid #d7e3f5;border-radius:10px;background:#fff;padding:8px}
   .match-box{border:2px solid #2e323b;border-radius:6px;background:#fff;overflow:hidden}
+  .match-summary{display:grid;gap:8px}
+  .match-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .match-caption{font-size:11px;color:#47628b;font-weight:700}
+  .match-toggle{min-width:170px}
+  .match-detail[hidden]{display:none !important}
+  .match-detail{padding-top:2px}
   .seed-line{padding:7px 8px;font-size:12px;color:#173964;min-height:34px;display:flex;align-items:center}
   .seed-line + .seed-line{border-top:1px solid #d5deed}
   .score-editor{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
@@ -735,6 +742,20 @@ $extraHead = <<<HTML
   table.standing-table{width:100%;border-collapse:collapse;min-width:560px}
   .standing-table th,.standing-table td{text-align:left;padding:8px 7px;border-bottom:1px solid #dfe8f8;font-size:12px;color:#183054}
   .standing-table th{font-size:11px;color:#5a6b86;text-transform:uppercase}
+  .tournament-list{display:grid;gap:12px;margin-top:10px}
+  .tournament-card{width:100%;text-align:left;border:1px solid #d8e2f2;background:#f8fbff;border-radius:14px;padding:14px 14px;cursor:pointer;transition:.16s ease;border-color:#d8e2f2}
+  .tournament-card:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(15,32,60,.08);border-color:#bcd2f3}
+  .tournament-card.is-active{border-color:#1a66e9;box-shadow:0 0 0 2px rgba(26,102,233,.14)}
+  .tournament-name{font-size:20px;line-height:1.1;color:#0f294d;font-weight:800;letter-spacing:-.3px}
+  .tournament-meta{margin-top:6px;font-size:13px;font-weight:700;color:#1c426e}
+  .tournament-updated{margin-top:5px;font-size:11px;color:#5a6b86;font-weight:700;text-transform:uppercase;letter-spacing:.55px}
+  .tournament-modal{position:fixed;inset:0;background:rgba(10,20,40,.44);z-index:5000;display:none;align-items:center;justify-content:center;padding:18px}
+  .tournament-modal.is-open{display:flex}
+  .tournament-modal-card{width:min(1200px,100%);max-height:92vh;display:grid;grid-template-rows:auto minmax(0,1fr);border-radius:16px;background:#fff;border:1px solid rgba(15,32,60,.15);box-shadow:0 18px 38px rgba(10,20,40,.24);overflow:hidden}
+  .tournament-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #d9e3f4;background:#f7faff}
+  .tournament-modal-title{margin:0;font-size:18px;color:#0f294d;font-weight:800}
+  .tournament-modal-close{border:1px solid #c6d4ea;background:#fff;color:#163966;border-radius:10px;min-width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1}
+  .tournament-modal-body{padding:12px 14px 14px;overflow:auto}
   .toast-stack{position:fixed;top:18px;right:18px;z-index:9999;display:grid;gap:10px;max-width:min(420px,calc(100vw - 24px))}
   .toast-item{display:flex;align-items:flex-start;gap:10px;border-radius:12px;padding:11px 12px;box-shadow:0 10px 24px rgba(10,20,40,.18);border:1px solid transparent;background:#fff;animation:toastIn .18s ease-out}
   .toast-item.success{border-color:#9ad5b0;background:#e9f8ef;color:#14532d}
@@ -744,7 +765,7 @@ $extraHead = <<<HTML
   .toast-close{border:0;background:transparent;color:inherit;cursor:pointer;padding:0 2px;font-size:16px;line-height:1;opacity:.72}
   .toast-close:hover{opacity:1}
   @keyframes toastIn{from{opacity:0;transform:translateY(-5px) translateX(10px)}to{opacity:1;transform:translateY(0) translateX(0)}}
-  @media (max-width:980px){.competition-grid{grid-template-columns:1fr}.round-column{width:100%}}
+  @media (max-width:980px){.competition-grid{grid-template-columns:1fr}.round-column{width:100%}.tournament-name{font-size:18px}.tournament-modal{padding:10px}.tournament-modal-card{max-height:95vh}}
 </style>
 HTML;
 
@@ -808,172 +829,243 @@ render_header([
       </div>
 
       <div class="competition-card" data-live-board>
-        <h2><i class="bi bi-grid-3x3-gap"></i> Bagan Match + Skor Tengah</h2>
-        <div class="type-filter" data-type-filter>
-          <button type="button" class="active" data-type-target="all">Semua</button>
-          <button type="button" data-type-target="Americano">Americano</button>
-          <button type="button" data-type-target="Mexicano">Mexicano</button>
+        <h2><i class="bi bi-grid-3x3-gap"></i> Latest Tournaments</h2>
+        <p class="admin-sub" style="margin:0;">Klik satu turnamen untuk buka detail ronde + input skor di modal.</p>
+        <div class="tournament-list">
+          <?php $hasTournament = false; ?>
+          <?php foreach (['Americano', 'Mexicano'] as $type): ?>
+            <?php
+              $typeGames = $gamesByType[$type] ?? [];
+              if (!$typeGames) {
+                  continue;
+              }
+              $hasTournament = true;
+              $firstTitle = trim((string)($typeGames[0]['game_title'] ?? $type));
+              $label = preg_replace('/\s*-\s*R\d+\s*M\d+\s*$/i', '', $firstTitle);
+              $label = trim((string)$label);
+              if ($label === '') {
+                  $label = $type;
+              }
+              $uniqueTeams = [];
+              foreach ($typeGames as $gameRow) {
+                  $teamA = trim((string)($gameRow['player_a_name'] ?? ''));
+                  $teamB = trim((string)($gameRow['player_b_name'] ?? ''));
+                  if ($teamA !== '' && strtoupper($teamA) !== 'BYE') $uniqueTeams[$teamA] = true;
+                  if ($teamB !== '' && strtoupper($teamB) !== 'BYE') $uniqueTeams[$teamB] = true;
+              }
+              $updatedAt = trim((string)($typeGames[0]['created_at'] ?? ''));
+              foreach ($typeGames as $gameRow) {
+                  $candidateTs = strtotime((string)($gameRow['created_at'] ?? ''));
+                  $currentTs = strtotime($updatedAt);
+                  if ($candidateTs && (!$currentTs || $candidateTs > $currentTs)) {
+                      $updatedAt = (string)$gameRow['created_at'];
+                  }
+              }
+            ?>
+            <button type="button" class="tournament-card" data-open-type="<?= h($type) ?>">
+              <div class="tournament-name"><?= h($label) ?></div>
+              <div class="tournament-meta"><?= (int)count($uniqueTeams) ?> players</div>
+              <div class="tournament-updated">Updated <?= $updatedAt !== '' ? h(date('d M Y H:i', strtotime($updatedAt))) : '-' ?></div>
+            </button>
+          <?php endforeach; ?>
+          <?php if (!$hasTournament): ?>
+            <p class="admin-sub" style="margin:0;">Belum ada turnamen.</p>
+          <?php endif; ?>
         </div>
 
-        <?php foreach (['Americano', 'Mexicano'] as $type): ?>
-          <div data-type-panel="<?= h($type) ?>">
-          <?php
-            $typeGames = $gamesByType[$type] ?? [];
-            $roundGroups = [];
-            foreach ($typeGames as $row) {
-                $roundNo = (int)($row['round_no'] ?? 0);
-                if ($roundNo <= 0) $roundNo = 999999;
-                if (!isset($roundGroups[$roundNo])) $roundGroups[$roundNo] = [];
-                $roundGroups[$roundNo][] = $row;
-            }
-            ksort($roundGroups, SORT_NUMERIC);
-            $roundQualifiedTeams = [];
-            $roundCompletedMap = [];
-            foreach ($roundGroups as $progressRoundNo => $progressRows) {
-                $qualifiedCount = 0;
-                foreach ($progressRows as $progressRow) {
-                    if (has_valid_game_score($progressRow)) {
-                        $qualifiedCount += 2;
-                    }
-                }
-                $roundQualifiedTeams[$progressRoundNo] = $qualifiedCount;
-                $roundCompletedMap[$progressRoundNo] = is_round_completed($progressRows);
-            }
-          ?>
-          <h3 style="margin:12px 0 4px;"><?= h($type) ?> <small style="font-weight:400;color:#5a6b86;"><?= count($typeGames) ?> match</small></h3>
-          <?php if (!$typeGames): ?>
-            <p class="admin-sub" style="margin:0;">Belum ada match <?= h($type) ?>.</p>
-          <?php else: ?>
-            <div class="rounds-scroll">
-              <div class="rounds-track">
-                <?php foreach ($roundGroups as $roundNo => $matches): ?>
-                  <div class="round-column">
-                    <div class="round-block">
-                      <p class="round-title"><?= h($roundNo === 999999 ? 'Round Tanpa Nomor' : ('Round ' . $roundNo)) ?></p>
-                      <?php
-                        $allowedTeamsForRound = PHP_INT_MAX;
-                        if ($roundNo !== 999999 && $roundNo > 1) {
-                            $prevRoundNo = $roundNo - 1;
-                            if (!($roundCompletedMap[$prevRoundNo] ?? false)) {
-                                $allowedTeamsForRound = 0;
-                            }
-                        }
-                      ?>
-                      <?php foreach ($matches as $mIdx => $game): ?>
-                        <?php
-                          $sa = isset($game['score_a']) && $game['score_a'] !== null ? (int)$game['score_a'] : null;
-                          $sb = isset($game['score_b']) && $game['score_b'] !== null ? (int)$game['score_b'] : null;
-                          $st = ($sa !== null && $sb !== null) ? ($sa + $sb) : 0;
-                          $configuredTotal = isset($game['match_total_points']) && $game['match_total_points'] !== null ? (int)$game['match_total_points'] : 0;
-                          if (!in_array($configuredTotal, PADEL_ALLOWED_TOTAL_POINTS, true) && in_array($st, PADEL_ALLOWED_TOTAL_POINTS, true)) {
-                              $configuredTotal = $st;
-                          }
-                          $nameA = trim((string)($game['player_a_name'] ?? '')) ?: 'TBD';
-                          $nameB = trim((string)($game['player_b_name'] ?? '')) ?: 'TBD';
-                          $slotA = ($mIdx * 2);
-                          $slotB = ($mIdx * 2) + 1;
-                          $displayA = $nameA;
-                          $displayB = $nameB;
-                          if ($slotA >= $allowedTeamsForRound) {
-                              $displayA = 'BYE';
-                          }
-                          if ($slotB >= $allowedTeamsForRound) {
-                              $displayB = 'BYE';
-                          }
-                          if (strtoupper($displayA) === 'TBD') { $displayA = 'BYE'; }
-                          if (strtoupper($displayB) === 'TBD') { $displayB = 'BYE'; }
-                          $isLocked = ($displayA === 'BYE' || $displayB === 'BYE');
-                          if ($isLocked) {
-                              $sa = null;
-                              $sb = null;
-                              $st = 0;
-                          }
-                        ?>
-                        <div class="match-item">
-                          <div class="match-box">
-                            <div class="seed-line"><?= h($displayA) ?></div>
-                            <div class="seed-line"><?= h($displayB) ?></div>
-                          </div>
-                          <form method="post" class="score-editor" data-score-editor style="margin-top:6px;">
-                            <input type="hidden" name="competition_action" value="update_score">
-                            <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
-                            <input type="hidden" name="score_total" data-score-total value="<?= $configuredTotal > 0 ? (int)$configuredTotal : '' ?>">
-                            <span class="score-vs"><?= h($displayA) ?> vs <?= h($displayB) ?></span>
-                            <span class="score-label" style="grid-column:1 / -1;display:block;color:#173964;font-weight:700;">
-                              Total: <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'Belum dikonfigurasi' ?>
-                            </span>
-                            <label class="score-label" for="score_a_<?= (int)$game['id'] ?>">Skor 1</label>
-                            <input id="score_a_<?= (int)$game['id'] ?>" type="number" name="score_a" data-score-a min="0" value="<?= $sa !== null ? (int)$sa : '' ?>" placeholder="A" <?= $isLocked ? 'disabled' : '' ?>>
-                            <span>-</span>
-                            <label class="score-label" for="score_b_<?= (int)$game['id'] ?>">Skor 2</label>
-                            <input id="score_b_<?= (int)$game['id'] ?>" type="number" name="score_b" data-score-b min="0" value="<?= $sb !== null ? (int)$sb : '' ?>" placeholder="B" <?= $isLocked ? 'disabled' : '' ?>>
-                            <button class="btn ghost small" type="submit" <?= $isLocked ? 'disabled' : '' ?>>Save</button>
-                            <div class="live-status" data-live-status aria-live="polite"></div>
-                          </form>
-                          <div class="match-actions">
-                            <form method="post" data-delete-game-form>
-                              <input type="hidden" name="competition_action" value="delete_game">
-                              <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
-                              <button class="btn ghost small" type="submit">Hapus</button>
-                            </form>
+        <div class="tournament-modal" data-tournament-modal aria-hidden="true">
+          <div class="tournament-modal-card" role="dialog" aria-modal="true" aria-labelledby="tournamentModalTitle">
+            <div class="tournament-modal-head">
+              <h3 class="tournament-modal-title" id="tournamentModalTitle" data-modal-title>Detail Tournament</h3>
+              <button class="tournament-modal-close" type="button" data-modal-close aria-label="Tutup">&times;</button>
+            </div>
+            <div class="tournament-modal-body">
+              <?php foreach (['Americano', 'Mexicano'] as $type): ?>
+                <div data-type-panel="<?= h($type) ?>" style="display:none;">
+                <?php
+                  $typeGames = $gamesByType[$type] ?? [];
+                  $roundGroups = [];
+                  foreach ($typeGames as $row) {
+                      $roundNo = (int)($row['round_no'] ?? 0);
+                      if ($roundNo <= 0) $roundNo = 999999;
+                      if (!isset($roundGroups[$roundNo])) $roundGroups[$roundNo] = [];
+                      $roundGroups[$roundNo][] = $row;
+                  }
+                  ksort($roundGroups, SORT_NUMERIC);
+                  $roundCompletedMap = [];
+                  foreach ($roundGroups as $progressRoundNo => $progressRows) {
+                      $roundCompletedMap[$progressRoundNo] = is_round_completed($progressRows);
+                  }
+                ?>
+                <h3 style="margin:2px 0 8px;"><?= h($type) ?> <small style="font-weight:400;color:#5a6b86;"><?= count($typeGames) ?> match</small></h3>
+                <?php if (!$typeGames): ?>
+                  <p class="admin-sub" style="margin:0;">Belum ada match <?= h($type) ?>.</p>
+                <?php else: ?>
+                  <div class="rounds-scroll">
+                    <div class="rounds-track">
+                      <?php foreach ($roundGroups as $roundNo => $matches): ?>
+                        <div class="round-column">
+                          <div class="round-block">
+                            <p class="round-title"><?= h($roundNo === 999999 ? 'Round Tanpa Nomor' : ('Round ' . $roundNo)) ?></p>
+                            <?php
+                              $allowedTeamsForRound = PHP_INT_MAX;
+                              if ($roundNo !== 999999 && $roundNo > 1) {
+                                  $prevRoundNo = $roundNo - 1;
+                                  if (!($roundCompletedMap[$prevRoundNo] ?? false)) {
+                                      $allowedTeamsForRound = 0;
+                                  }
+                              }
+                            ?>
+                            <?php foreach ($matches as $mIdx => $game): ?>
+                              <?php
+                                $sa = isset($game['score_a']) && $game['score_a'] !== null ? (int)$game['score_a'] : null;
+                                $sb = isset($game['score_b']) && $game['score_b'] !== null ? (int)$game['score_b'] : null;
+                                $st = ($sa !== null && $sb !== null) ? ($sa + $sb) : 0;
+                                $configuredTotal = isset($game['match_total_points']) && $game['match_total_points'] !== null ? (int)$game['match_total_points'] : 0;
+                                if (!in_array($configuredTotal, PADEL_ALLOWED_TOTAL_POINTS, true) && in_array($st, PADEL_ALLOWED_TOTAL_POINTS, true)) {
+                                    $configuredTotal = $st;
+                                }
+                                $nameA = trim((string)($game['player_a_name'] ?? '')) ?: 'TBD';
+                                $nameB = trim((string)($game['player_b_name'] ?? '')) ?: 'TBD';
+                                $slotA = ($mIdx * 2);
+                                $slotB = ($mIdx * 2) + 1;
+                                $displayA = $nameA;
+                                $displayB = $nameB;
+                                if ($slotA >= $allowedTeamsForRound) {
+                                    $displayA = 'BYE';
+                                }
+                                if ($slotB >= $allowedTeamsForRound) {
+                                    $displayB = 'BYE';
+                                }
+                                if (strtoupper($displayA) === 'TBD') { $displayA = 'BYE'; }
+                                if (strtoupper($displayB) === 'TBD') { $displayB = 'BYE'; }
+                                $isLocked = ($displayA === 'BYE' || $displayB === 'BYE');
+                                if ($isLocked) {
+                                    $sa = null;
+                                    $sb = null;
+                                    $st = 0;
+                                }
+                              ?>
+                              <div class="match-item" data-match-item>
+                                <div class="match-summary">
+                                  <div class="match-box">
+                                    <div class="seed-line"><?= h($displayA) ?></div>
+                                    <div class="seed-line"><?= h($displayB) ?></div>
+                                  </div>
+                                  <div class="match-meta">
+                                    <span class="match-caption"><?= h((string)($game['game_title'] ?? ('Match #' . ((int)($game['match_no'] ?? 0))))) ?> - Total <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'belum set' ?></span>
+                                    <button class="btn ghost small match-toggle" type="button" data-match-toggle aria-expanded="false">Detail / Input Skor</button>
+                                  </div>
+                                </div>
+                                <div class="match-detail" data-match-detail hidden>
+                                  <form method="post" class="score-editor" data-score-editor style="margin-top:6px;">
+                                    <input type="hidden" name="competition_action" value="update_score">
+                                    <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
+                                    <input type="hidden" name="score_total" data-score-total value="<?= $configuredTotal > 0 ? (int)$configuredTotal : '' ?>">
+                                    <span class="score-vs"><?= h($displayA) ?> vs <?= h($displayB) ?></span>
+                                    <span class="score-label" style="grid-column:1 / -1;display:block;color:#173964;font-weight:700;">
+                                      Total: <?= $configuredTotal > 0 ? (int)$configuredTotal . ' poin' : 'Belum dikonfigurasi' ?>
+                                    </span>
+                                    <label class="score-label" for="score_a_<?= (int)$game['id'] ?>">Skor 1</label>
+                                    <input id="score_a_<?= (int)$game['id'] ?>" type="number" name="score_a" data-score-a min="0" value="<?= $sa !== null ? (int)$sa : '' ?>" placeholder="A" <?= $isLocked ? 'disabled' : '' ?>>
+                                    <span>-</span>
+                                    <label class="score-label" for="score_b_<?= (int)$game['id'] ?>">Skor 2</label>
+                                    <input id="score_b_<?= (int)$game['id'] ?>" type="number" name="score_b" data-score-b min="0" value="<?= $sb !== null ? (int)$sb : '' ?>" placeholder="B" <?= $isLocked ? 'disabled' : '' ?>>
+                                    <button class="btn ghost small" type="submit" <?= $isLocked ? 'disabled' : '' ?>>Save</button>
+                                    <div class="live-status" data-live-status aria-live="polite"></div>
+                                  </form>
+                                  <div class="match-actions">
+                                    <form method="post" data-delete-game-form>
+                                      <input type="hidden" name="competition_action" value="delete_game">
+                                      <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
+                                      <button class="btn ghost small" type="submit">Hapus</button>
+                                    </form>
+                                  </div>
+                                </div>
+                              </div>
+                            <?php endforeach; ?>
                           </div>
                         </div>
                       <?php endforeach; ?>
                     </div>
                   </div>
-                <?php endforeach; ?>
-              </div>
-            </div>
-          <?php endif; ?>
-
-          <div class="standing-wrap">
-            <table class="standing-table">
-              <thead>
-                <tr><th>#</th><th>Team</th><th>M</th><th>W</th><th>D</th><th>L</th><th>PF</th><th>PA</th><th>Diff</th><th>Total Poin</th></tr>
-              </thead>
-              <tbody>
-                <?php $rows = $standingsByType[$type] ?? []; ?>
-                <?php if (!$rows): ?>
-                  <tr><td colspan="10">Belum ada skor valid untuk klasemen <?= h($type) ?>.</td></tr>
-                <?php else: ?>
-                  <?php foreach ($rows as $idx => $row): ?>
-                    <?php $diff = (int)($row['pf'] ?? 0) - (int)($row['pa'] ?? 0); ?>
-                    <tr>
-                      <td><?= (int)($idx + 1) ?></td><td><?= h((string)($row['name'] ?? '-')) ?></td><td><?= (int)($row['match'] ?? 0) ?></td>
-                      <td><?= (int)($row['win'] ?? 0) ?></td><td><?= (int)($row['draw'] ?? 0) ?></td><td><?= (int)($row['lose'] ?? 0) ?></td>
-                      <td><?= (int)($row['pf'] ?? 0) ?></td><td><?= (int)($row['pa'] ?? 0) ?></td><td><?= $diff >= 0 ? '+' . $diff : (string)$diff ?></td>
-                      <td><strong><?= (int)($row['point_total'] ?? 0) ?></strong></td>
-                    </tr>
-                  <?php endforeach; ?>
                 <?php endif; ?>
-              </tbody>
-            </table>
+
+                <div class="standing-wrap">
+                  <table class="standing-table">
+                    <thead>
+                      <tr><th>#</th><th>Team</th><th>M</th><th>W</th><th>D</th><th>L</th><th>PF</th><th>PA</th><th>Diff</th><th>Total Poin</th></tr>
+                    </thead>
+                    <tbody>
+                      <?php $rows = $standingsByType[$type] ?? []; ?>
+                      <?php if (!$rows): ?>
+                        <tr><td colspan="10">Belum ada skor valid untuk klasemen <?= h($type) ?>.</td></tr>
+                      <?php else: ?>
+                        <?php foreach ($rows as $idx => $row): ?>
+                          <?php $diff = (int)($row['pf'] ?? 0) - (int)($row['pa'] ?? 0); ?>
+                          <tr>
+                            <td><?= (int)($idx + 1) ?></td><td><?= h((string)($row['name'] ?? '-')) ?></td><td><?= (int)($row['match'] ?? 0) ?></td>
+                            <td><?= (int)($row['win'] ?? 0) ?></td><td><?= (int)($row['draw'] ?? 0) ?></td><td><?= (int)($row['lose'] ?? 0) ?></td>
+                            <td><?= (int)($row['pf'] ?? 0) ?></td><td><?= (int)($row['pa'] ?? 0) ?></td><td><?= $diff >= 0 ? '+' . $diff : (string)$diff ?></td>
+                            <td><strong><?= (int)($row['point_total'] ?? 0) ?></strong></td>
+                          </tr>
+                        <?php endforeach; ?>
+                      <?php endif; ?>
+                    </tbody>
+                  </table>
+                </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
           </div>
-          </div>
-        <?php endforeach; ?>
+        </div>
       </div>
     </section>
   </div>
 </main>
 <script>
 (function () {
-  var activeTypeTarget = 'all';
+  var activeTypeTarget = '';
+  var isTournamentModalOpen = false;
   var toastStack = document.getElementById('toastStack');
   var initialFlashSuccess = <?= json_encode((string)($flash['success'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   var initialFlashError = <?= json_encode((string)($flash['error'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
   function applyTypeFilter(boardRoot, target) {
-    var filterWrap = boardRoot.querySelector('[data-type-filter]');
     var panels = boardRoot.querySelectorAll('[data-type-panel]');
-    if (!filterWrap || !panels.length) return;
-    activeTypeTarget = target || 'all';
-    filterWrap.querySelectorAll('button[data-type-target]').forEach(function (btn) {
-      btn.classList.toggle('active', (btn.getAttribute('data-type-target') || 'all') === activeTypeTarget);
-    });
+    if (!panels.length) return;
+    activeTypeTarget = target || activeTypeTarget || '';
     panels.forEach(function (panel) {
       var type = panel.getAttribute('data-type-panel') || '';
-      panel.style.display = (activeTypeTarget === 'all' || activeTypeTarget === type) ? '' : 'none';
+      panel.style.display = (activeTypeTarget !== '' && activeTypeTarget === type) ? '' : 'none';
     });
+    boardRoot.querySelectorAll('[data-open-type]').forEach(function (card) {
+      var cardType = card.getAttribute('data-open-type') || '';
+      card.classList.toggle('is-active', cardType === activeTypeTarget);
+    });
+  }
+
+  function setTournamentModalState(boardRoot, isOpen, type) {
+    if (!boardRoot) return;
+    var modal = boardRoot.querySelector('[data-tournament-modal]');
+    if (!modal) return;
+    if (isOpen) {
+      if (type) {
+        activeTypeTarget = type;
+      }
+      applyTypeFilter(boardRoot, activeTypeTarget);
+      var titleEl = boardRoot.querySelector('[data-modal-title]');
+      if (titleEl) {
+        titleEl.textContent = (activeTypeTarget ? activeTypeTarget + ' - Detail Tournament' : 'Detail Tournament');
+      }
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      isTournamentModalOpen = true;
+      return;
+    }
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    isTournamentModalOpen = false;
   }
 
   function refreshCompetitionBoard() {
@@ -992,7 +1084,9 @@ render_header([
         if (!newBoard || !currentBoard || !currentBoard.parentNode) return;
         currentBoard.parentNode.replaceChild(newBoard, currentBoard);
         initBoardInteractions(newBoard);
-        applyTypeFilter(newBoard, activeTypeTarget);
+        if (isTournamentModalOpen && activeTypeTarget !== '') {
+          setTournamentModalState(newBoard, true, activeTypeTarget);
+        }
       });
   }
 
@@ -1039,6 +1133,16 @@ render_header([
     if (!form) return;
     var scoreForm = form.closest('[data-score-editor]');
     if (!scoreForm) return;
+    var matchItem = scoreForm.closest('[data-match-item]');
+    if (matchItem) {
+      var detail = matchItem.querySelector('[data-match-detail]');
+      var toggle = matchItem.querySelector('[data-match-toggle]');
+      if (detail) detail.hidden = false;
+      if (toggle) {
+        toggle.setAttribute('aria-expanded', 'true');
+        toggle.textContent = 'Sembunyikan Detail';
+      }
+    }
     var statusEl = scoreForm.querySelector('[data-live-status]');
     if (!statusEl) return;
     statusEl.textContent = message || '';
@@ -1056,14 +1160,38 @@ render_header([
   }
 
   function initBoardInteractions(boardRoot) {
-    var filterWrap = boardRoot.querySelector('[data-type-filter]');
-    if (filterWrap) {
-      filterWrap.querySelectorAll('button[data-type-target]').forEach(function (btn) {
+    boardRoot.querySelectorAll('[data-open-type]').forEach(function (card) {
+      card.addEventListener('click', function () {
+        var type = card.getAttribute('data-open-type') || '';
+        if (!type) return;
+        setTournamentModalState(boardRoot, true, type);
+      });
+    });
+    var modal = boardRoot.querySelector('[data-tournament-modal]');
+    if (modal) {
+      modal.addEventListener('click', function (ev) {
+        if (ev.target === modal) {
+          setTournamentModalState(boardRoot, false);
+        }
+      });
+      modal.querySelectorAll('[data-modal-close]').forEach(function (btn) {
         btn.addEventListener('click', function () {
-          applyTypeFilter(boardRoot, btn.getAttribute('data-type-target') || 'all');
+          setTournamentModalState(boardRoot, false);
         });
       });
     }
+
+    boardRoot.querySelectorAll('[data-match-item]').forEach(function (item) {
+      var toggleBtn = item.querySelector('[data-match-toggle]');
+      var detail = item.querySelector('[data-match-detail]');
+      if (!toggleBtn || !detail) return;
+      toggleBtn.addEventListener('click', function () {
+        var nextOpen = detail.hidden;
+        detail.hidden = !nextOpen;
+        toggleBtn.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+        toggleBtn.textContent = nextOpen ? 'Sembunyikan Detail' : 'Detail / Input Skor';
+      });
+    });
 
     boardRoot.querySelectorAll('[data-score-editor]').forEach(function (form) {
       var totalEl = form.querySelector('[data-score-total]');
@@ -1215,7 +1343,6 @@ render_header([
   var board = document.querySelector('[data-live-board]');
   if (board) {
     initBoardInteractions(board);
-    applyTypeFilter(board, activeTypeTarget);
   }
 
   var createForm = document.querySelector('[data-create-match-form]');
