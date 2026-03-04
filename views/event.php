@@ -463,6 +463,20 @@ if (!$sponsorItems) {
       box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
     }
 
+    .count-status.ended {
+      margin-top: 6px;
+      padding: 10px 20px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      background: linear-gradient(120deg, rgba(48, 53, 63, 0.78), rgba(34, 38, 46, 0.86));
+      font-family: var(--font-display);
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      font-size: clamp(16px, 1.9vw, 24px);
+      line-height: 1.2;
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
+    }
+
     .hero-join {
       --mx: 50%;
       --my: 50%;
@@ -1374,7 +1388,6 @@ if (!$sponsorItems) {
         <p class="count-status" id="countdownStatus"></p>
       </div>
 
-      <button type="button" class="hero-join" data-seq style="--seq-delay: 620ms;" id="ikutYukBtn"><i class="bi bi-arrow-down-circle"></i> Join Us</button>
     </section>
 
     <section class="panel support" id="registerPanel">
@@ -1394,8 +1407,6 @@ if (!$sponsorItems) {
       <?php if ($isAdmin): ?>
         <a class="cta" data-reveal style="--reveal-delay: 240ms;" href="/admin/dashboard"><i class="bi bi-speedometer2"></i> Go To Admin Dashboard</a>
       <?php else: ?>
-        <a class="cta cta-register" data-reveal style="--reveal-delay: 240ms;" href="/register?from=events"><i class="bi bi-person-plus"></i> Click Here To Register</a>
-        <a class="cta" data-reveal style="--reveal-delay: 240ms;" href="/packages"><i class="bi bi-box-seam"></i> Click Here To See Packages</a>
       <?php endif; ?>
     </section>
   </main>
@@ -1712,6 +1723,7 @@ if (!$sponsorItems) {
           labelEl.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Event Start';
           countdownEl.classList.add('is-hidden');
           statusEl.classList.add('live');
+          statusEl.classList.remove('ended');
           statusEl.textContent = 'Let\'s Play';
           return;
         }
@@ -1719,10 +1731,11 @@ if (!$sponsorItems) {
         if (now >= targetEnd) {
           phase = 'ended';
           setCountdown(0);
-          labelEl.innerHTML = '<i class="bi bi-check2-circle"></i> Event Finished';
+          labelEl.innerHTML = '<i class="bi bi-flag-fill"></i> Event Officially Closed';
           countdownEl.classList.add('is-hidden');
           statusEl.classList.remove('live');
-          statusEl.textContent = 'Event has ended. See you at the next Temu Padel.';
+          statusEl.classList.add('ended');
+          statusEl.textContent = 'Event Selesai - Thank You For Joining. See You At The Next Temu Padel.';
           return;
         }
 
@@ -1730,6 +1743,7 @@ if (!$sponsorItems) {
         labelEl.innerHTML = '<i class="bi bi-hourglass-split"></i> Countdown To Event Start';
         countdownEl.classList.remove('is-hidden');
         statusEl.classList.remove('live');
+        statusEl.classList.remove('ended');
         setCountdown(targetStart - now);
         statusEl.textContent = '';
       }
