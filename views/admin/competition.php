@@ -105,7 +105,7 @@ function calculate_round_estimation(int $playerCount, int $courtCount, string $t
 }
 
 function build_competition_label_from_title(string $type, string $title): string {
-    $label = preg_replace('/\s*(?:-|)?\s*R\d+\s*M\d+\s*$/i', '', trim($title));
+    $label = preg_replace('/\s*(?:-|)?\s*(?:R\d+\s*M\d+|Match\s*#\d+)\s*$/i', '', trim($title));
     $label = trim((string)$label);
     return $label !== '' ? $label : $type;
 }
@@ -115,7 +115,7 @@ function is_auto_competition_title(string $type, string $title): bool {
     if ($title === '') {
         return false;
     }
-    return (bool)preg_match('/^' . preg_quote($type, '/') . '\s*R\d+\s*M\d+$/i', $title);
+    return (bool)preg_match('/^' . preg_quote($type, '/') . '\s*(R\d+\s*M\d+|-\s*Match\s*#\d+)$/i', $title);
 }
 
 function competition_ts(string $value): int {
@@ -309,14 +309,16 @@ function build_americano_full_rounds(array $players, int $courtCount): array {
     $partnerLimit = 1;
     $pairingTracker = [];
     $allMatches = [];
-    $logicalRoundNo = 1;
     $matchPerRound = intdiv(count($players), 4);
     if ($matchPerRound <= 0) {
         return [];
     }
     $sesiPerRound = (int)ceil($matchPerRound / max(1, $courtCount));
+    $executionRoundNo = 0;
+    $logicalRoundNo = 0;
 
-    foreach ($partnerRounds as $roundIdx => $partnerPairs) {
+    foreach ($partnerRounds as $partnerPairs) {
+        $logicalRoundNo++;
         $teams = [];
         foreach ($partnerPairs as $pair) {
             $left = trim((string)($pair[0] ?? ''));
@@ -337,24 +339,52 @@ function build_americano_full_rounds(array $players, int $courtCount): array {
         if (!$teams || count($teams) % 2 !== 0) {
             continue;
         }
+        $roundMatches = [];
         for ($i = 0; $i < count($teams); $i += 2) {
             $a = (string)($teams[$i] ?? '');
             $b = (string)($teams[$i + 1] ?? '');
             if ($a === '' || $b === '') {
                 continue;
             }
-            $matchNo = (int)floor($i / 2) + 1;
-            $sessionNo = (int)floor(($matchNo - 1) / $courtCount) + 1;
-            $allMatches[] = [
-                'round_no' => $logicalRoundNo,
-                'session_no' => $sessionNo,
-                'match_no' => $matchNo,
-                'court_no' => (($matchNo - 1) % $courtCount) + 1,
+            $roundMatches[] = [
                 'player_a_name' => $a,
                 'player_b_name' => $b,
             ];
         }
-        $logicalRoundNo++;
+
+        $chunks = array_chunk($roundMatches, $courtCount);
+        foreach ($chunks as $sessionChunk) {
+            $executionRoundNo++;
+            $playingMembers = [];
+            foreach ($sessionChunk as $m) {
+                foreach (split_team_members((string)($m['player_a_name'] ?? '')) as $name) {
+                    $playingMembers[$name] = true;
+                }
+                foreach (split_team_members((string)($m['player_b_name'] ?? '')) as $name) {
+                    $playingMembers[$name] = true;
+                }
+            }
+            $bye = [];
+            foreach ($players as $p) {
+                $name = trim((string)$p);
+                if ($name === '' || isset($playingMembers[$name])) {
+                    continue;
+                }
+                $bye[] = $name;
+            }
+            foreach ($sessionChunk as $idx => $m) {
+                $courtNo = $idx + 1;
+                $allMatches[] = [
+                    'round_no' => $executionRoundNo,
+                    'session_no' => $logicalRoundNo,
+                    'match_no' => $courtNo,
+                    'court_no' => $courtNo,
+                    'player_a_name' => (string)($m['player_a_name'] ?? ''),
+                    'player_b_name' => (string)($m['player_b_name'] ?? ''),
+                    'notes' => 'logical_round=' . $logicalRoundNo . ';bye:' . implode(', ', $bye),
+                ];
+            }
+        }
     }
 
     // Validate schedule size: logical rounds * matches per round
@@ -368,7 +398,7 @@ function build_americano_full_rounds(array $players, int $courtCount): array {
         'logical_rounds' => count($partnerRounds),
         'match_per_round' => $matchPerRound,
         'sesi_per_round' => $sesiPerRound,
-        'total_sesi' => count($partnerRounds) * $sesiPerRound,
+        'total_sesi' => $executionRoundNo,
         'pairing_tracker' => $pairingTracker,
         'matches' => $allMatches,
     ];
@@ -376,7 +406,6 @@ function build_americano_full_rounds(array $players, int $courtCount): array {
 
 function build_standings_from_games(array $gamesRows): array {
     $table = [];
-    $headToHead = [];
     foreach ($gamesRows as $row) {
         $teamA = trim((string)($row['player_a_name'] ?? ''));
         $teamB = trim((string)($row['player_b_name'] ?? ''));
@@ -389,36 +418,57 @@ function build_standings_from_games(array $gamesRows): array {
         }
         foreach ($membersA as $name) {
             if (!isset($table[$name])) {
-                $table[$name] = ['name' => $name, 'point_total' => 0, 'point_diff' => 0, 'played' => 0];
+                $table[$name] = [
+                    'name' => $name,
+                    'point_total' => 0,
+                    'point_diff' => 0,
+                    'played' => 0,
+                    'win' => 0,
+                    'loss' => 0,
+                    'tie' => 0,
+                ];
             }
             $table[$name]['point_total'] += $sa;
             $table[$name]['point_diff'] += ($sa - $sb);
             $table[$name]['played']++;
+            if ($sa > $sb) {
+                $table[$name]['win']++;
+            } elseif ($sa < $sb) {
+                $table[$name]['loss']++;
+            } else {
+                $table[$name]['tie']++;
+            }
         }
         foreach ($membersB as $name) {
             if (!isset($table[$name])) {
-                $table[$name] = ['name' => $name, 'point_total' => 0, 'point_diff' => 0, 'played' => 0];
+                $table[$name] = [
+                    'name' => $name,
+                    'point_total' => 0,
+                    'point_diff' => 0,
+                    'played' => 0,
+                    'win' => 0,
+                    'loss' => 0,
+                    'tie' => 0,
+                ];
             }
             $table[$name]['point_total'] += $sb;
             $table[$name]['point_diff'] += ($sb - $sa);
             $table[$name]['played']++;
-        }
-        foreach ($membersA as $pa) {
-            foreach ($membersB as $pb) {
-                if (!isset($headToHead[$pa])) $headToHead[$pa] = [];
-                if (!isset($headToHead[$pb])) $headToHead[$pb] = [];
-                $headToHead[$pa][$pb] = (int)($headToHead[$pa][$pb] ?? 0) + ($sa - $sb);
-                $headToHead[$pb][$pa] = (int)($headToHead[$pb][$pa] ?? 0) + ($sb - $sa);
+            if ($sb > $sa) {
+                $table[$name]['win']++;
+            } elseif ($sb < $sa) {
+                $table[$name]['loss']++;
+            } else {
+                $table[$name]['tie']++;
             }
         }
     }
 
     $rows = array_values($table);
-    usort($rows, static function (array $x, array $y) use ($headToHead): int {
+    usort($rows, static function (array $x, array $y): int {
         if ((int)$x['point_total'] !== (int)$y['point_total']) return (int)$y['point_total'] <=> (int)$x['point_total'];
         if ((int)$x['point_diff'] !== (int)$y['point_diff']) return (int)$y['point_diff'] <=> (int)$x['point_diff'];
-        $hx = (int)($headToHead[$x['name']][$y['name']] ?? 0);
-        if ($hx !== 0) return $hx > 0 ? -1 : 1;
+        if ((int)$x['win'] !== (int)$y['win']) return (int)$y['win'] <=> (int)$x['win'];
         return strcmp((string)$x['name'], (string)$y['name']);
     });
 
@@ -852,6 +902,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'round_synced' => $roundSynced,
             ]);
         }
+    } elseif ($action === 'delete_tournament') {
+        $rawIds = trim((string)($_POST['game_ids'] ?? ''));
+        if ($rawIds === '') {
+            $flash['error'] = 'Data game tidak valid.';
+        } else {
+            $parts = preg_split('/\s*,\s*/', $rawIds) ?: [];
+            $ids = [];
+            foreach ($parts as $part) {
+                if ($part !== '' && ctype_digit($part)) {
+                    $idVal = (int)$part;
+                    if ($idVal > 0) {
+                        $ids[$idVal] = true;
+                    }
+                }
+            }
+            $ids = array_keys($ids);
+            if (!$ids) {
+                $flash['error'] = 'Data game tidak valid.';
+            } else {
+                try {
+                    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+                    $stmt = $db->prepare("DELETE FROM competition_games WHERE id IN ($placeholders)");
+                    $stmt->execute($ids);
+                    $deleted = (int)$stmt->rowCount();
+                    $flash[$deleted > 0 ? 'success' : 'error'] = $deleted > 0
+                        ? ('Berhasil menghapus 1 game (' . $deleted . ' match).')
+                        : 'Game tidak ditemukan.';
+                } catch (Throwable $e) {
+                    $flash['error'] = 'Gagal menghapus game.';
+                }
+            }
+        }
     } elseif ($action === 'delete_game') {
         $gameId = (int)($_POST['game_id'] ?? 0);
         if ($gameId <= 0) {
@@ -917,7 +999,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $insert->execute([
                                 null, $type, $title, $roundNo, $sessionNo, $matchNo, $courtNo, $courtCount, $matchTotalPoints,
                                 null, (string)($row['player_a_name'] ?? ''), null, (string)($row['player_b_name'] ?? ''),
-                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, 'mode_cycle=single',
+                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, (string)($row['notes'] ?? 'mode_cycle=single'),
                                 $adminId > 0 ? $adminId : null, date('Y-m-d H:i:s'),
                             ]);
                             $created++;
@@ -977,7 +1059,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $games = [];
 try {
     $games = $db->query(
-        "SELECT id, game_title, round_no, session_no, match_no, court_no, court_count, match_total_points, game_date, created_at, competition_type,
+        "SELECT id, game_title, round_no, session_no, match_no, court_no, court_count, match_total_points, game_date, created_at, competition_type, notes,
                 player_a_name, player_b_name, score_a, score_b
          FROM competition_games
          ORDER BY
@@ -1215,6 +1297,7 @@ $extraHead = <<<HTML
   .tournament-name{font-size:20px;line-height:1.1;color:#0f294d;font-weight:800;letter-spacing:-.3px}
   .tournament-meta{margin-top:6px;font-size:13px;font-weight:700;color:#1c426e}
   .tournament-updated{margin-top:5px;font-size:11px;color:#5a6b86;font-weight:700;text-transform:uppercase;letter-spacing:.55px}
+  .tournament-card-actions{margin-top:10px;display:flex;justify-content:flex-end}
   .tour-pagination{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:14px}
   .tour-page-link,.tour-page-dots{min-width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;font-size:13px;font-weight:800}
   .tour-page-link{border:1px solid #d6dee9;background:#fff;color:#213a62;text-decoration:none}
@@ -1321,11 +1404,18 @@ render_header([
               $playerCount = count((array)($tournament['players'] ?? []));
               $updatedAt = trim((string)($tournament['updated_at'] ?? ''));
             ?>
-            <button type="button" class="tournament-card" data-open-tournament="<?= h($tourKey) ?>" data-game-type="<?= h($type) ?>">
+            <div class="tournament-card" data-open-tournament="<?= h($tourKey) ?>" data-game-type="<?= h($type) ?>" role="button" tabindex="0" aria-label="Buka detail <?= h($label) ?>">
               <div class="tournament-name"><?= h($label) ?></div>
               <div class="tournament-meta"><?= (int)$playerCount ?> players</div>
               <div class="tournament-updated">Updated <?= $updatedAt !== '' ? h(date('d M Y H:i', strtotime($updatedAt))) : '-' ?></div>
-            </button>
+              <div class="tournament-card-actions">
+                <form method="post" data-delete-tournament-form>
+                  <input type="hidden" name="competition_action" value="delete_tournament">
+                  <input type="hidden" name="game_ids" value="<?= h(implode(',', array_map(static function (array $g): int { return (int)($g['id'] ?? 0); }, $typeGames))) ?>">
+                  <button class="btn ghost small" type="submit">Hapus Game</button>
+                </form>
+              </div>
+            </div>
           <?php endforeach; ?>
           <?php if (!$hasTournament): ?>
             <p class="admin-sub" style="margin:0;">Belum ada turnamen.</p>
@@ -1453,6 +1543,11 @@ render_header([
                                 $sb = isset($game['score_b']) && $game['score_b'] !== null ? (int)$game['score_b'] : null;
                                 $st = ($sa !== null && $sb !== null) ? ($sa + $sb) : 0;
                                 $configuredTotal = isset($game['match_total_points']) && $game['match_total_points'] !== null ? (int)$game['match_total_points'] : 0;
+                                $notesRaw = trim((string)($game['notes'] ?? ''));
+                                $byeInfo = '';
+                                if (preg_match('/(?:^|;)bye:\s*(.+)$/i', $notesRaw, $mBye)) {
+                                    $byeInfo = trim((string)($mBye[1] ?? ''));
+                                }
                                 if (!in_array($configuredTotal, PADEL_ALLOWED_TOTAL_POINTS, true) && in_array($st, PADEL_ALLOWED_TOTAL_POINTS, true)) {
                                     $configuredTotal = $st;
                                 }
@@ -1509,6 +1604,11 @@ render_header([
                                     <div class="seed-line"><?= h($displayB) ?></div>
                                   </div>
                                 </div>
+                                <?php if ($byeInfo !== ''): ?>
+                                  <div class="match-meta" style="margin-top:8px;">
+                                    <span class="match-caption">Istirahat: <?= h($byeInfo) ?></span>
+                                  </div>
+                                <?php endif; ?>
                                 <div class="live-status" data-inline-score-status aria-live="polite"></div>
                                 <div class="match-actions">
                                   <form method="post" data-delete-game-form>
@@ -1573,7 +1673,7 @@ render_header([
                 <p class="note" id="courtEstimatorText">
                   Isi jumlah court untuk hitung ronde logika vs sesi eksekusi. Jika court kurang, sistem otomatis pecah jadi beberapa sesi per ronde.
                 </p>
-                <p class="note">Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Leaderboard diurutkan dari total poin, lalu selisih poin, lalu head-to-head. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
+                <p class="note">Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Leaderboard diurutkan dari total poin, lalu selisih poin. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
                 <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
               </form>
             </div>
@@ -1823,6 +1923,13 @@ render_header([
         if (!key) return;
         setTournamentModalState(boardRoot, true, key);
       });
+      card.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+        ev.preventDefault();
+        var key = card.getAttribute('data-open-tournament') || '';
+        if (!key) return;
+        setTournamentModalState(boardRoot, true, key);
+      });
     });
     var modal = boardRoot.querySelector('[data-tournament-modal]');
     if (modal) {
@@ -1959,6 +2066,33 @@ render_header([
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         if (!window.confirm('Hapus game ini?')) return;
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        postCompetitionForm(form)
+          .then(function (data) {
+            if (!data || !data.ok) {
+              throw new Error((data && data.message) ? data.message : 'Gagal menghapus game.');
+            }
+            showToast(data.message || 'Game berhasil dihapus.', 'success', 4500);
+            return refreshCompetitionBoard();
+          })
+          .catch(function (error) {
+            showToast(error && error.message ? error.message : 'Terjadi kesalahan saat menghapus game.', 'error', 5000);
+          })
+          .finally(function () {
+            if (btn) btn.disabled = false;
+          });
+      });
+    });
+
+    boardRoot.querySelectorAll('[data-delete-tournament-form]').forEach(function (form) {
+      form.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+      });
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!window.confirm('Hapus semua match di game ini?')) return;
         var btn = form.querySelector('button[type="submit"]');
         if (btn) btn.disabled = true;
         postCompetitionForm(form)
