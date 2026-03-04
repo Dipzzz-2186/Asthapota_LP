@@ -208,16 +208,23 @@ function build_ranking_points(PDO $db, string $competitionType): array {
     return $points;
 }
 
-function build_player_ranking_stats(PDO $db, string $competitionType): array {
+function build_player_ranking_stats(PDO $db, string $competitionType, string $competitionLabel = ''): array {
     $stats = [];
+    $competitionLabel = trim($competitionLabel);
     try {
         $stmt = $db->prepare(
-            "SELECT player_a_name, player_b_name, score_a, score_b
+            "SELECT game_title, player_a_name, player_b_name, score_a, score_b
              FROM competition_games
              WHERE competition_type = ?"
         );
         $stmt->execute([$competitionType]);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if ($competitionLabel !== '') {
+                $rowLabel = build_competition_label_from_title($competitionType, (string)($row['game_title'] ?? ''));
+                if (strcasecmp($rowLabel, $competitionLabel) !== 0) {
+                    continue;
+                }
+            }
             $teamA = trim((string)($row['player_a_name'] ?? ''));
             $teamB = trim((string)($row['player_b_name'] ?? ''));
             $membersA = split_team_members($teamA);
@@ -249,6 +256,21 @@ function build_player_ranking_stats(PDO $db, string $competitionType): array {
         $stats = [];
     }
     return $stats;
+}
+
+function filter_rows_by_competition_label(array $rows, string $type, string $label): array {
+    $label = trim($label);
+    if ($label === '') {
+        return $rows;
+    }
+    $filtered = [];
+    foreach ($rows as $row) {
+        $rowLabel = build_competition_label_from_title($type, (string)($row['game_title'] ?? ''));
+        if (strcasecmp($rowLabel, $label) === 0) {
+            $filtered[] = $row;
+        }
+    }
+    return $filtered;
 }
 
 function build_round_robin(array $players): array {
@@ -404,8 +426,25 @@ function build_americano_full_rounds(array $players, int $courtCount): array {
     ];
 }
 
-function build_standings_from_games(array $gamesRows): array {
+function build_standings_from_games(array $gamesRows, array $seedPlayers = []): array {
     $table = [];
+    foreach ($seedPlayers as $seedNameRaw) {
+        $seedName = trim((string)$seedNameRaw);
+        if ($seedName === '') {
+            continue;
+        }
+        if (!isset($table[$seedName])) {
+            $table[$seedName] = [
+                'name' => $seedName,
+                'point_total' => 0,
+                'point_diff' => 0,
+                'played' => 0,
+                'win' => 0,
+                'loss' => 0,
+                'tie' => 0,
+            ];
+        }
+    }
     foreach ($gamesRows as $row) {
         $teamA = trim((string)($row['player_a_name'] ?? ''));
         $teamB = trim((string)($row['player_b_name'] ?? ''));
@@ -557,19 +596,280 @@ function is_round_completed(array $rows): bool {
     return true;
 }
 
-function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int $adminId): array {
+function build_session_bye_notes(
+    array $pairs,
+    int $courtCount,
+    array $members,
+    string $baseNotes = 'mode_cycle=single',
+    int $baseRoundNo = 1,
+    bool $spreadByRound = false
+): array {
+    $courtCount = normalize_court_count($courtCount);
+    $members = array_values(array_unique(array_filter(array_map(static function ($name): string {
+        return trim((string)$name);
+    }, $members), static function (string $name): bool {
+        return $name !== '';
+    })));
+
+    $rows = [];
+    foreach ($pairs as $idx => $pair) {
+        if ($spreadByRound) {
+            $roundNo = $baseRoundNo + (int)floor($idx / $courtCount);
+            $matchNo = (($idx % $courtCount) + 1);
+            $sessionNo = 1;
+            $courtNo = $matchNo;
+        } else {
+            $roundNo = null;
+            $matchNo = $idx + 1;
+            $sessionNo = (int)floor(($matchNo - 1) / $courtCount) + 1;
+            $courtNo = (($idx % $courtCount) + 1);
+        }
+        $rows[] = [
+            'round_no' => $roundNo,
+            'match_no' => $matchNo,
+            'session_no' => $sessionNo,
+            'court_no' => $courtNo,
+            'player_a_name' => (string)($pair[0] ?? ''),
+            'player_b_name' => (string)($pair[1] ?? ''),
+            'notes' => $baseNotes,
+        ];
+    }
+    if (!$rows || !$members) {
+        return $rows;
+    }
+
+    $sessionPlayers = [];
+    foreach ($rows as $row) {
+        $groupKey = $spreadByRound
+            ? ('r' . (int)($row['round_no'] ?? 0))
+            : ('s' . (int)($row['session_no'] ?? 1));
+        if (!isset($sessionPlayers[$groupKey])) {
+            $sessionPlayers[$groupKey] = [];
+        }
+        foreach (split_team_members((string)($row['player_a_name'] ?? '')) as $name) {
+            $sessionPlayers[$groupKey][$name] = true;
+        }
+        foreach (split_team_members((string)($row['player_b_name'] ?? '')) as $name) {
+            $sessionPlayers[$groupKey][$name] = true;
+        }
+    }
+
+    foreach ($rows as $idx => $row) {
+        $groupKey = $spreadByRound
+            ? ('r' . (int)($row['round_no'] ?? 0))
+            : ('s' . (int)($row['session_no'] ?? 1));
+        $playingMembers = $sessionPlayers[$groupKey] ?? [];
+        $bye = [];
+        foreach ($members as $name) {
+            if (!isset($playingMembers[$name])) {
+                $bye[] = $name;
+            }
+        }
+        $notes = trim((string)($row['notes'] ?? $baseNotes));
+        $notes = preg_replace('/(?:^|;)bye:\s*[^;]*/i', '', $notes ?? '');
+        $notes = trim((string)$notes, '; ');
+        if ($bye) {
+            $byeNote = 'bye:' . implode(', ', $bye);
+            $notes = $notes !== '' ? ($notes . ';' . $byeNote) : $byeNote;
+        }
+        $rows[$idx]['notes'] = $notes !== '' ? $notes : $baseNotes;
+    }
+
+    return $rows;
+}
+
+function is_previous_round_completed(PDO $db, string $type, int $roundNo, string $label = ''): bool {
+    if ($roundNo <= 1) {
+        return true;
+    }
+    $prevRound = $roundNo - 1;
+    $stmt = $db->prepare(
+        "SELECT game_title, score_a, score_b
+         FROM competition_games
+         WHERE competition_type = ? AND round_no = ?
+         ORDER BY COALESCE(session_no, 1) ASC, match_no ASC, id ASC"
+    );
+    $stmt->execute([$type, $prevRound]);
+    $rows = filter_rows_by_competition_label($stmt->fetchAll(PDO::FETCH_ASSOC), $type, $label);
+    return is_round_completed($rows);
+}
+
+function extract_bye_members_from_notes(string $notes): array {
+    $notes = trim($notes);
+    if ($notes === '') {
+        return [];
+    }
+    if (!preg_match('/(?:^|;)bye:\s*([^;]+)/i', $notes, $m)) {
+        return [];
+    }
+    $raw = trim((string)($m[1] ?? ''));
+    if ($raw === '') {
+        return [];
+    }
+    $parts = preg_split('/\s*,\s*/', $raw) ?: [];
+    $members = [];
+    foreach ($parts as $part) {
+        $name = trim((string)$part);
+        if ($name !== '') {
+            $members[] = $name;
+        }
+    }
+    return array_values(array_unique($members));
+}
+
+function build_mexicano_pairs_for_round(array $orderedMembers, int $courtCount): array {
+    $courtCount = normalize_court_count($courtCount);
+    $orderedMembers = array_values(array_unique(array_filter(array_map(static function ($name): string {
+        return trim((string)$name);
+    }, $orderedMembers), static function (string $name): bool {
+        return $name !== '';
+    })));
+    if (count($orderedMembers) < 4) {
+        return [];
+    }
+    $maxPlayers = intdiv(count($orderedMembers), 4) * 4;
+    if ($maxPlayers < 4) {
+        return [];
+    }
+    $active = array_slice($orderedMembers, 0, $maxPlayers);
+    $pairs = [];
+    for ($i = 0; $i < count($active); $i += 4) {
+        $chunk = array_slice($active, $i, 4);
+        if (count($chunk) < 4) {
+            continue;
+        }
+        // Mexicano format: seed 1&4 vs 2&3.
+        $pairs[] = [
+            $chunk[0] . ' & ' . $chunk[3],
+            $chunk[1] . ' & ' . $chunk[2],
+        ];
+    }
+    return $pairs;
+}
+
+function build_random_mexicano_pairs(array $members, int $courtCount): array {
+    $courtCount = normalize_court_count($courtCount);
+    $members = array_values(array_unique(array_filter(array_map(static function ($name): string {
+        return trim((string)$name);
+    }, $members), static function (string $name): bool {
+        return $name !== '';
+    })));
+    if (count($members) < 4) {
+        return [];
+    }
+    shuffle($members);
+    $maxPlayers = intdiv(count($members), 4) * 4;
+    if ($maxPlayers < 4) {
+        return [];
+    }
+    $active = array_slice($members, 0, $maxPlayers);
+    shuffle($active);
+    $teams = build_teams_from_players($active);
+    $pairs = build_pairs_from_teams($teams);
+    $cleanPairs = [];
+    foreach ($pairs as $pair) {
+        $a = trim((string)($pair[0] ?? ''));
+        $b = trim((string)($pair[1] ?? ''));
+        if ($a === '' || $b === '' || strtoupper($a) === 'BYE' || strtoupper($b) === 'BYE') {
+            continue;
+        }
+        $cleanPairs[] = [$a, $b];
+    }
+    return $cleanPairs;
+}
+
+function fetch_competition_member_stats(PDO $db, string $type, string $label): array {
+    $members = [];
+    $played = [];
+    try {
+        $stmt = $db->prepare(
+            "SELECT game_title, player_a_name, player_b_name, score_a, score_b, notes
+             FROM competition_games
+             WHERE competition_type = ?"
+        );
+        $stmt->execute([$type]);
+        $rows = filter_rows_by_competition_label($stmt->fetchAll(PDO::FETCH_ASSOC), $type, $label);
+        foreach ($rows as $row) {
+            $roundMembers = array_merge(
+                split_team_members((string)($row['player_a_name'] ?? '')),
+                split_team_members((string)($row['player_b_name'] ?? '')),
+                extract_bye_members_from_notes((string)($row['notes'] ?? ''))
+            );
+            foreach ($roundMembers as $nameRaw) {
+                $name = trim((string)$nameRaw);
+                if ($name === '') {
+                    continue;
+                }
+                $members[$name] = true;
+            }
+            if (has_valid_game_score($row)) {
+                foreach (split_team_members((string)($row['player_a_name'] ?? '')) as $nameRaw) {
+                    $name = trim((string)$nameRaw);
+                    if ($name === '') {
+                        continue;
+                    }
+                    $played[$name] = (int)($played[$name] ?? 0) + 1;
+                }
+                foreach (split_team_members((string)($row['player_b_name'] ?? '')) as $nameRaw) {
+                    $name = trim((string)$nameRaw);
+                    if ($name === '') {
+                        continue;
+                    }
+                    $played[$name] = (int)($played[$name] ?? 0) + 1;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+    }
+    return [
+        'members' => array_keys($members),
+        'played' => $played,
+    ];
+}
+
+function select_mexicano_active_players(array $members, array $playedCounts, int $courtCount): array {
+    $courtCount = normalize_court_count($courtCount);
+    $members = array_values(array_unique(array_filter(array_map(static function ($name): string {
+        return trim((string)$name);
+    }, $members), static function (string $name): bool {
+        return $name !== '';
+    })));
+    $maxPlayers = intdiv(count($members), 4) * 4;
+    if ($maxPlayers < 4) {
+        return ['players' => [], 'mode' => 'ranking'];
+    }
+
+    $unplayed = [];
+    $others = [];
+    foreach ($members as $name) {
+        if (((int)($playedCounts[$name] ?? 0)) <= 0) {
+            $unplayed[] = $name;
+        } else {
+            $others[] = $name;
+        }
+    }
+    if ($unplayed) {
+        shuffle($unplayed);
+        shuffle($others);
+        $active = array_slice(array_merge($unplayed, $others), 0, $maxPlayers);
+        return ['players' => $active, 'mode' => 'random'];
+    }
+    return ['players' => array_slice($members, 0, $maxPlayers), 'mode' => 'ranking'];
+}
+
+function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int $adminId, string $label = ''): array {
     if ($sourceRound <= 0) {
         return [0, 0];
     }
 
     $fetchSource = $db->prepare(
-        "SELECT id, session_no, match_no, court_no, court_count, player_a_name, player_b_name, score_a, score_b, match_total_points
+        "SELECT id, game_title, session_no, match_no, court_no, court_count, player_a_name, player_b_name, score_a, score_b, match_total_points, notes
          FROM competition_games
          WHERE competition_type = ? AND round_no = ?
          ORDER BY COALESCE(session_no, 1) ASC, match_no ASC, id ASC"
     );
     $fetchSource->execute([$type, $sourceRound]);
-    $rows = $fetchSource->fetchAll(PDO::FETCH_ASSOC);
+    $rows = filter_rows_by_competition_label($fetchSource->fetchAll(PDO::FETCH_ASSOC), $type, $label);
     if (!$rows) {
         return [0, 0];
     }
@@ -629,6 +929,9 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
         }
     }
 
+    $baseTitle = trim((string)($rows[0]['game_title'] ?? ''));
+    $label = trim($label) !== '' ? trim($label) : build_competition_label_from_title($type, $baseTitle);
+
     if ($type === 'Americano') {
         $members = [];
         foreach ($completedTeams as $teamName) {
@@ -641,51 +944,36 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
         $nextTeams = build_teams_from_players($members);
         shuffle($nextTeams);
     } else {
-        $memberPool = [];
-        foreach ($allTeams as $teamName) {
-            foreach (split_team_members($teamName) as $member) {
-                $memberPool[] = $member;
-            }
-        }
-        $memberPool = array_values(array_unique($memberPool));
+        $memberStats = fetch_competition_member_stats($db, 'Mexicano', $label);
+        $memberPool = array_values((array)($memberStats['members'] ?? []));
+        $playedCounts = (array)($memberStats['played'] ?? []);
         if (count($memberPool) < 4) {
             return [0, 0];
         }
-        $ranking = build_player_ranking_stats($db, 'Mexicano');
-        usort($memberPool, static function (string $x, string $y) use ($ranking): int {
-            $px = (int)($ranking[$x]['point_total'] ?? 0);
-            $py = (int)($ranking[$y]['point_total'] ?? 0);
-            if ($px !== $py) {
-                return $py <=> $px;
-            }
-            $dx = (int)($ranking[$x]['point_diff'] ?? 0);
-            $dy = (int)($ranking[$y]['point_diff'] ?? 0);
-            if ($dx !== $dy) {
-                return $dy <=> $dx;
-            }
-            return strcmp($x, $y);
-        });
-
-        $pairs = [];
-        $totalMembers = count($memberPool);
-        $fullGroups = intdiv($totalMembers, 4);
-        for ($group = 0; $group < $fullGroups; $group++) {
-            $offset = $group * 4;
-            $chunk = array_slice($memberPool, $offset, 4);
-            if (count($chunk) < 4) {
-                continue;
-            }
-            // Mexicano round pairing: ranking 1&3 vs 2&4 (per group of 4 players).
-            $teamA = $chunk[0] . ' & ' . $chunk[2];
-            $teamB = $chunk[1] . ' & ' . $chunk[3];
-            $pairs[] = [$teamA, $teamB];
+        $selection = select_mexicano_active_players($memberPool, $playedCounts, $configuredCourtCount);
+        $activePlayers = array_values((array)($selection['players'] ?? []));
+        $mode = (string)($selection['mode'] ?? 'ranking');
+        if (count($activePlayers) < 4) {
+            return [0, 0];
         }
-        $leftovers = array_slice($memberPool, $fullGroups * 4);
-        if ($leftovers) {
-            $leftoverTeams = build_teams_from_players($leftovers);
-            foreach (build_pairs_from_teams($leftoverTeams) as $leftoverPair) {
-                $pairs[] = $leftoverPair;
-            }
+        if ($mode === 'random') {
+            $pairs = build_random_mexicano_pairs($activePlayers, $configuredCourtCount);
+        } else {
+            $ranking = build_player_ranking_stats($db, 'Mexicano', $label);
+            usort($activePlayers, static function (string $x, string $y) use ($ranking): int {
+                $px = (int)($ranking[$x]['point_total'] ?? 0);
+                $py = (int)($ranking[$y]['point_total'] ?? 0);
+                if ($px !== $py) {
+                    return $py <=> $px;
+                }
+                $dx = (int)($ranking[$x]['point_diff'] ?? 0);
+                $dy = (int)($ranking[$y]['point_diff'] ?? 0);
+                if ($dx !== $dy) {
+                    return $dy <=> $dx;
+                }
+                return strcmp($x, $y);
+            });
+            $pairs = build_mexicano_pairs_for_round($activePlayers, $configuredCourtCount);
         }
         if (!$pairs) {
             return [0, 0];
@@ -702,15 +990,6 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
     }
 
     $nextRound = $sourceRound + 1;
-    $fetchExisting = $db->prepare(
-        "SELECT id, session_no, match_no, score_a, score_b
-         FROM competition_games
-         WHERE competition_type = ? AND round_no = ?
-         ORDER BY COALESCE(session_no, 1) ASC, match_no ASC, id ASC"
-    );
-    $fetchExisting->execute([$type, $nextRound]);
-    $existingRows = $fetchExisting->fetchAll(PDO::FETCH_ASSOC);
-
     $insert = $db->prepare(
         "INSERT INTO competition_games (
             package_id, competition_type, game_title, round_no, session_no, match_no, court_no, court_count, match_total_points,
@@ -718,6 +997,89 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
             score_a, score_b, game_date, notes, created_by_admin_id, created_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
+
+    $memberUniverse = [];
+    if ($type === 'Mexicano') {
+        $memberStats = fetch_competition_member_stats($db, 'Mexicano', $label);
+        $memberUniverse = array_values((array)($memberStats['members'] ?? []));
+    } else {
+        foreach ($allTeams as $teamName) {
+            foreach (split_team_members($teamName) as $member) {
+                $memberUniverse[] = $member;
+            }
+        }
+        $memberUniverse = array_values(array_unique($memberUniverse));
+    }
+
+    if ($type === 'Mexicano') {
+        // Freeze a full Mexicano batch from one ranking snapshot.
+        // With 1 court this becomes 1 match per round; with N courts it becomes N matches per round.
+        $nextRoundExistsStmt = $db->prepare(
+            "SELECT id, game_title
+             FROM competition_games
+             WHERE competition_type = ? AND round_no = ?
+             ORDER BY id ASC"
+        );
+        $nextRoundExistsStmt->execute([$type, $nextRound]);
+        $nextRoundRows = filter_rows_by_competition_label($nextRoundExistsStmt->fetchAll(PDO::FETCH_ASSOC), $type, $label);
+        if ($nextRoundRows) {
+            return [0, 0];
+        }
+
+        $scheduledRows = build_session_bye_notes(
+            $pairs,
+            $configuredCourtCount,
+            $memberUniverse,
+            'mode_cycle=single',
+            $nextRound,
+            true
+        );
+        $created = 0;
+        foreach ($scheduledRows as $idx => $slot) {
+            $roundNo = (int)($slot['round_no'] ?? ($nextRound + (int)floor($idx / max(1, $configuredCourtCount))));
+            $matchNo = (int)($slot['match_no'] ?? (($idx % max(1, $configuredCourtCount)) + 1));
+            $sessionNo = (int)($slot['session_no'] ?? 1);
+            $courtNo = (int)($slot['court_no'] ?? $matchNo);
+            $title = $label . ' - R' . $roundNo . ' M' . $matchNo;
+            $a = (string)($slot['player_a_name'] ?? '');
+            $b = (string)($slot['player_b_name'] ?? '');
+            $notes = (string)($slot['notes'] ?? 'mode_cycle=single');
+
+            $insert->execute([
+                null,
+                $type,
+                $title,
+                $roundNo,
+                $sessionNo,
+                $matchNo,
+                $courtNo,
+                $configuredCourtCount,
+                $configuredTotal,
+                null,
+                $a,
+                null,
+                $b,
+                null,
+                null,
+                null,
+                $notes,
+                $adminId > 0 ? $adminId : null,
+                date('Y-m-d H:i:s'),
+            ]);
+            $created++;
+        }
+        return [$created, 0];
+    }
+
+    $scheduledRows = build_session_bye_notes($pairs, $configuredCourtCount, $memberUniverse, 'mode_cycle=single');
+    $fetchExisting = $db->prepare(
+        "SELECT id, game_title, session_no, match_no, score_a, score_b
+         FROM competition_games
+         WHERE competition_type = ? AND round_no = ?
+         ORDER BY COALESCE(session_no, 1) ASC, match_no ASC, id ASC"
+    );
+    $fetchExisting->execute([$type, $nextRound]);
+    $existingRows = filter_rows_by_competition_label($fetchExisting->fetchAll(PDO::FETCH_ASSOC), $type, $label);
     $update = $db->prepare(
         "UPDATE competition_games
          SET game_title = ?, session_no = ?, court_no = ?, court_count = ?, match_total_points = ?, player_a_name = ?, player_b_name = ?
@@ -730,13 +1092,14 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
 
     $created = 0;
     $updated = 0;
-    foreach ($pairs as $idx => $pair) {
-        $matchNo = $idx + 1;
-        $sessionNo = (int)floor(($matchNo - 1) / $configuredCourtCount) + 1;
-        $courtNo = (($idx % $configuredCourtCount) + 1);
-        $title = $type . ' R' . $nextRound . ' M' . $matchNo;
-        $a = (string)$pair[0];
-        $b = (string)$pair[1];
+    foreach ($scheduledRows as $idx => $slot) {
+        $matchNo = (int)($slot['match_no'] ?? ($idx + 1));
+        $sessionNo = (int)($slot['session_no'] ?? 1);
+        $courtNo = (int)($slot['court_no'] ?? (($idx % $configuredCourtCount) + 1));
+        $title = $label . ' - R' . $nextRound . ' M' . $matchNo;
+        $a = (string)($slot['player_a_name'] ?? '');
+        $b = (string)($slot['player_b_name'] ?? '');
+        $notes = (string)($slot['notes'] ?? 'mode_cycle=single');
 
         if (isset($existingRows[$idx])) {
             $row = $existingRows[$idx];
@@ -765,7 +1128,7 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
             null,
             null,
             null,
-            null,
+            $notes,
             $adminId > 0 ? $adminId : null,
             date('Y-m-d H:i:s'),
         ]);
@@ -773,11 +1136,60 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
     }
 
     // Remove leftover empty rows when the new pairing list is shorter.
-    for ($i = count($pairs); $i < count($existingRows); $i++) {
+    for ($i = count($scheduledRows); $i < count($existingRows); $i++) {
         $deleteRow->execute([(int)$existingRows[$i]['id']]);
     }
 
     return [$created, $updated];
+}
+
+function auto_sync_mexicano_rounds(PDO $db, int $adminId): void {
+    try {
+        $stmt = $db->query(
+            "SELECT game_title, round_no, score_a, score_b
+             FROM competition_games
+             WHERE competition_type = 'Mexicano'
+             ORDER BY COALESCE(round_no, 0) ASC, COALESCE(session_no, 1) ASC, match_no ASC, id ASC"
+        );
+        $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Throwable $e) {
+        return;
+    }
+    if (!$rows) {
+        return;
+    }
+
+    $byLabel = [];
+    foreach ($rows as $row) {
+        $roundNo = (int)($row['round_no'] ?? 0);
+        if ($roundNo <= 0) {
+            continue;
+        }
+        $label = build_competition_label_from_title('Mexicano', (string)($row['game_title'] ?? ''));
+        if ($label === '') {
+            $label = 'Mexicano';
+        }
+        if (!isset($byLabel[$label])) {
+            $byLabel[$label] = [];
+        }
+        if (!isset($byLabel[$label][$roundNo])) {
+            $byLabel[$label][$roundNo] = [];
+        }
+        $byLabel[$label][$roundNo][] = $row;
+    }
+
+    foreach ($byLabel as $label => $roundMap) {
+        if (!$roundMap) {
+            continue;
+        }
+        krsort($roundMap, SORT_NUMERIC);
+        $latestRound = (int)array_key_first($roundMap);
+        $latestRows = (array)($roundMap[$latestRound] ?? []);
+        if (!$latestRows || !is_round_completed($latestRows)) {
+            continue;
+        }
+        sync_next_round_from_round($db, 'Mexicano', $latestRound, $adminId, (string)$label);
+    }
 }
 
 
@@ -789,6 +1201,8 @@ if (isset($_SESSION['competition_flash']) && is_array($_SESSION['competition_fla
     $flash['error'] = (string)($_SESSION['competition_flash']['error'] ?? '');
     unset($_SESSION['competition_flash']);
 }
+
+auto_sync_mexicano_rounds($db, (int)($_SESSION['admin_id'] ?? 0));
 
 try {
     $db->exec(
@@ -859,6 +1273,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         [$scoreA, $scoreB, $selectedTotal, $parseError] = parse_score_request($_POST);
         $roundSynced = false;
         $configuredTotal = null;
+        $savedType = '';
+        $savedRound = 0;
+        $savedLabel = '';
         if ($gameId <= 0) {
             $flash['error'] = 'ID game tidak valid.';
         } elseif ($parseError !== '') {
@@ -872,20 +1289,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($scoreError !== '') {
                 $flash['error'] = $scoreError;
             }
+            if ($flash['error'] === '') {
+                $typeStmt = $db->prepare('SELECT competition_type, round_no, game_title FROM competition_games WHERE id = ? LIMIT 1');
+                $typeStmt->execute([$gameId]);
+                $savedGame = $typeStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                $savedType = normalize_competition_type((string)($savedGame['competition_type'] ?? ''));
+                $savedRound = (int)($savedGame['round_no'] ?? 0);
+                $savedLabel = build_competition_label_from_title($savedType, (string)($savedGame['game_title'] ?? ''));
+                if ($savedType === '') {
+                    $flash['error'] = 'Game tidak ditemukan.';
+                } elseif ($savedType === 'Mexicano' && !is_previous_round_completed($db, $savedType, $savedRound, $savedLabel)) {
+                    $flash['error'] = 'Round ' . $savedRound . ' belum bisa diinput sebelum Round ' . ($savedRound - 1) . ' selesai.';
+                }
+            }
         }
         if ($flash['error'] === '') {
             try {
                 $db->prepare('UPDATE competition_games SET score_a = ?, score_b = ? WHERE id = ?')
                     ->execute([$scoreA, $scoreB, $gameId]);
                 $flash['success'] = 'Skor game berhasil diperbarui.';
-
-                $typeStmt = $db->prepare('SELECT competition_type, round_no FROM competition_games WHERE id = ? LIMIT 1');
-                $typeStmt->execute([$gameId]);
-                $savedGame = $typeStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-                $savedType = normalize_competition_type((string)($savedGame['competition_type'] ?? ''));
-                $savedRound = (int)($savedGame['round_no'] ?? 0);
                 if ($savedType === 'Mexicano') {
-                    [$nextCreated, $nextUpdated] = sync_next_round_from_round($db, $savedType, $savedRound, (int)($_SESSION['admin_id'] ?? 0));
+                    [$nextCreated, $nextUpdated] = sync_next_round_from_round($db, $savedType, $savedRound, (int)($_SESSION['admin_id'] ?? 0), $savedLabel);
                     if ($nextCreated > 0 || $nextUpdated > 0) {
                         $roundSynced = true;
                         $flash['success'] .= ' Round berikutnya disinkronkan otomatis.';
@@ -1010,29 +1434,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             . (int)($schedule['total_sesi'] ?? 0) . ' sesi, '
                             . $created . ' match.';
                     } else {
-                        // Mexicano starts from round 1 and grows by ranking after each completed round.
-                        $teams = build_teams_from_players($attendees);
-                        $pairs = build_pairs_from_teams($teams);
+                        // Mexicano starts with random pairing snapshot, then follows ranking snapshot after each batch completes.
+                        $pairs = build_random_mexicano_pairs($attendees, $courtCount);
                         if (!$pairs) {
                             throw new RuntimeException('Gagal membentuk bagan Mexicano.');
                         }
-                        $roundNo = 1;
-                        foreach ($pairs as $mIdx => $pair) {
-                            $matchNo = $mIdx + 1;
-                            $sessionNo = (int)floor(($matchNo - 1) / $courtCount) + 1;
-                            $courtNo = (($mIdx % $courtCount) + 1);
+                        $scheduledRows = build_session_bye_notes($pairs, $courtCount, $attendees, 'mode_cycle=single', 1, true);
+                        foreach ($scheduledRows as $mIdx => $slot) {
+                            $roundNo = (int)($slot['round_no'] ?? 1);
+                            $matchNo = (int)($slot['match_no'] ?? (($mIdx % max(1, $courtCount)) + 1));
+                            $sessionNo = (int)($slot['session_no'] ?? 1);
+                            $courtNo = (int)($slot['court_no'] ?? $matchNo);
                             $title = $label . ' - R' . $roundNo . ' M' . $matchNo;
                             $insert->execute([
                                 null, $type, $title, $roundNo, $sessionNo, $matchNo, $courtNo, $courtCount, $matchTotalPoints,
-                                null, (string)$pair[0], null, (string)$pair[1],
-                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, 'mode_cycle=single',
+                                null, (string)($slot['player_a_name'] ?? ''), null, (string)($slot['player_b_name'] ?? ''),
+                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, (string)($slot['notes'] ?? 'mode_cycle=single'),
                                 $adminId > 0 ? $adminId : null, date('Y-m-d H:i:s'),
                             ]);
                             $created++;
                         }
                         $estimation = calculate_round_estimation(count($attendees), $courtCount, $type);
                         $wavesPerRound = (int)($estimation['waves_per_logical_round'] ?? 0);
-                        $flash['success'] = 'Berhasil generate Round 1 Mexicano (' . $created . ' match) di ' . $courtCount . ' court. Per ronde butuh ' . max(1, $wavesPerRound) . ' wave.';
+                        $flash['success'] = 'Berhasil generate batch awal Mexicano (' . $created . ' match) di ' . $courtCount . ' court. Per ronde butuh ' . max(1, $wavesPerRound) . ' wave.';
                     }
                 } catch (Throwable $e) {
                     $flash['error'] = 'Gagal menambahkan jadwal competition.';
@@ -1133,6 +1557,13 @@ foreach ($gamesByIdAsc as $row) {
         }
         $tournaments[$key]['players'][$nameKey] = trim((string)$member);
     }
+    foreach (extract_bye_members_from_notes((string)($row['notes'] ?? '')) as $byeMember) {
+        $nameKey = strtolower(trim((string)$byeMember));
+        if ($nameKey === '' || $nameKey === 'bye' || $nameKey === 'tbd') {
+            continue;
+        }
+        $tournaments[$key]['players'][$nameKey] = trim((string)$byeMember);
+    }
 }
 
 foreach ($tournaments as $key => $tournament) {
@@ -1168,7 +1599,8 @@ foreach ($tournaments as $key => $tournament) {
         $rounds[$roundNo][] = $row;
     }
     ksort($rounds, SORT_NUMERIC);
-    $standingRows = build_standings_from_games($gamesRows);
+    $seedPlayers = array_values((array)($tournament['players'] ?? []));
+    $standingRows = build_standings_from_games($gamesRows, $seedPlayers);
 
     $tournaments[$key]['games'] = $gamesRows;
     $tournaments[$key]['rounds'] = $rounds;
