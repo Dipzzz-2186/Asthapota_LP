@@ -912,7 +912,7 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
             $courtNo = (int)($row['court_no'] ?? 0);
             $courtLabel = ($courtNo >= 1 && $courtNo <= 6) ? ('Court ' . $courtNo) : '-';
             $checkedInRaw = trim((string)($row['checked_in_at'] ?? ''));
-            $checkedInTime = '-';
+            $checkedInTime = 'Belum Hadir';
             if ($checkedInRaw !== '') {
                 $checkedInTs = strtotime($checkedInRaw);
                 if ($checkedInTs !== false) {
@@ -1026,7 +1026,19 @@ $acceptedSummaryStmt = $db->prepare("SELECT
         FROM order_attendees oa
         JOIN orders o2 ON o2.id = oa.order_id
         WHERE o2.status = 'accepted'
-    ) AS total_attendees
+    ) AS total_attendees,
+    (
+        SELECT COUNT(*)
+        FROM order_attendees oa
+        JOIN orders o2 ON o2.id = oa.order_id
+        WHERE o2.status = 'accepted' AND oa.checked_in_at IS NOT NULL
+    ) AS arrived_attendees,
+    (
+        SELECT COUNT(*)
+        FROM order_attendees oa
+        JOIN orders o2 ON o2.id = oa.order_id
+        WHERE o2.status = 'accepted' AND oa.checked_in_at IS NULL
+    ) AS not_arrived_attendees
     FROM orders o
     JOIN users u ON u.id = o.user_id
     WHERE o.status = 'accepted'");
@@ -1036,6 +1048,8 @@ $acceptedSummary = $acceptedSummaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 $totalOrders = (int)($acceptedSummary['accepted_orders'] ?? 0);
 $totalRevenue = (int)($acceptedSummary['total_revenue'] ?? 0);
 $totalAttendees = (int)($acceptedSummary['total_attendees'] ?? 0);
+$totalArrivedAttendees = (int)($acceptedSummary['arrived_attendees'] ?? 0);
+$totalNotArrivedAttendees = (int)($acceptedSummary['not_arrived_attendees'] ?? max(0, $totalAttendees - $totalArrivedAttendees));
 
 $packageSalesMap = [];
 foreach ($packages as $pkg) {
@@ -1377,7 +1391,8 @@ $extraHead = <<<'HTML'
   }
   @media (min-width: 1201px) {
     .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .stat-card--revenue-top { grid-column: span 2; }
+    .stat-card--revenue-top,
+    .stat-card--span-2 { grid-column: span 2; }
   }
   .court-summary {
     margin-bottom: 16px;
@@ -2970,7 +2985,8 @@ $extraHead = <<<'HTML'
     }
 
     .stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-    .stat-card--revenue-top {
+    .stat-card--revenue-top,
+    .stat-card--span-2 {
       grid-column: 1 / -1;
       min-height: 118px;
     }
@@ -3139,6 +3155,26 @@ render_header([
         <a class="stat-card stat-card-link<?= $isAttendeeCardActive ? ' is-active' : '' ?>" href="<?= h($attendeeCardHref) ?>">
           <div class="stat-label"><i class="bi bi-people"></i> Total Attendee Accepted</div>
           <div class="stat-value"><?= (int)$totalAttendees ?></div>
+        </a>
+        <?php
+          $arrivedCardParams = $cardFilterBaseParams;
+          $arrivedCardParams['arrival'] = 'arrived';
+          $arrivedCardHref = '/admin/dashboard?' . http_build_query($arrivedCardParams);
+          $isArrivedCardActive = $selectedArrival === 'arrived';
+        ?>
+        <a class="stat-card stat-card-link stat-card--span-2<?= $isArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($arrivedCardHref) ?>">
+          <div class="stat-label"><i class="bi bi-person-check"></i> Attendee Hadir</div>
+          <div class="stat-value"><?= (int)$totalArrivedAttendees ?></div>
+        </a>
+        <?php
+          $notArrivedCardParams = $cardFilterBaseParams;
+          $notArrivedCardParams['arrival'] = 'not_arrived';
+          $notArrivedCardHref = '/admin/dashboard?' . http_build_query($notArrivedCardParams);
+          $isNotArrivedCardActive = $selectedArrival === 'not_arrived';
+        ?>
+        <a class="stat-card stat-card-link stat-card--span-2<?= $isNotArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($notArrivedCardHref) ?>">
+          <div class="stat-label"><i class="bi bi-person-x"></i> Attendee Belum Hadir</div>
+          <div class="stat-value"><?= (int)$totalNotArrivedAttendees ?></div>
         </a>
         <?php foreach ($packageSalesStats as $packageStat): ?>
           <?php
