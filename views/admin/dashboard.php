@@ -1395,6 +1395,9 @@ $extraHead = <<<'HTML'
   }
   @media (min-width: 1201px) {
     .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .stat-grid--arrival { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .stat-grid--arrival .stat-card--arrived { grid-column: 1 / span 2; }
+    .stat-grid--arrival .stat-card--not-arrived { grid-column: 3 / span 2; }
     .stat-card--revenue-top,
     .stat-card--span-2 { grid-column: span 2; }
   }
@@ -3205,11 +3208,11 @@ render_header([
         $isNotArrivedCardActive = $selectedArrival === 'not_arrived';
       ?>
       <div class="stat-grid stat-grid--arrival">
-        <a class="stat-card stat-card-link<?= $isArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($arrivedCardHref) ?>">
+        <a class="stat-card stat-card--arrived stat-card-link<?= $isArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($arrivedCardHref) ?>">
           <div class="stat-label"><i class="bi bi-person-check"></i> Attendee Hadir</div>
           <div class="stat-value"><?= (int)$totalArrivedAttendees ?></div>
         </a>
-        <a class="stat-card stat-card-link<?= $isNotArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($notArrivedCardHref) ?>">
+        <a class="stat-card stat-card--not-arrived stat-card-link<?= $isNotArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($notArrivedCardHref) ?>">
           <div class="stat-label"><i class="bi bi-person-x"></i> Attendee Belum Hadir</div>
           <div class="stat-value"><?= (int)$totalNotArrivedAttendees ?></div>
         </a>
