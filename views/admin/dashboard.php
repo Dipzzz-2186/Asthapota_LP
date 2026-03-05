@@ -3354,12 +3354,16 @@ render_header([
       <!-- -------------------------------------------------------
            DESKTOP: Standard Table (hidden on mobile via CSS)
       ------------------------------------------------------- -->
+      <?php $isArrivalMode = ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived'); ?>
       <div class="table-wrap">
         <table class="admin-table">
           <thead>
             <tr>
               <th><i class="bi bi-fingerprint"></i> ID</th>
-              <th><i class="bi bi-person"></i> <?= ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived') ? 'Attendee' : 'User' ?></th>
+              <th><i class="bi bi-person"></i> <?= $isArrivalMode ? 'Attendee' : 'User' ?></th>
+              <?php if ($isArrivalMode): ?>
+                <th><i class="bi bi-person-badge"></i> Pemilik Order</th>
+              <?php endif; ?>
               <th><i class="bi bi-telephone"></i> Contact</th>
               <th><i class="bi bi-box"></i> Packages</th>
               <th><i class="bi bi-cash"></i> Total</th>
@@ -3371,7 +3375,7 @@ render_header([
           </thead>
           <tbody>
             <?php if (!$orders): ?>
-              <tr><td colspan="9" class="table-empty"><div class="empty-state"><i class="bi bi-inbox"></i> Belum ada order</div></td></tr>
+              <tr><td colspan="<?= $isArrivalMode ? '10' : '9' ?>" class="table-empty"><div class="empty-state"><i class="bi bi-inbox"></i> Belum ada order</div></td></tr>
             <?php endif; ?>
             <?php foreach ($orders as $o):
               $detailOrderId = (int)$o['id'];
@@ -3384,7 +3388,7 @@ render_header([
               $notArrivedCount = max(0, $attendeeTotalCount - $arrivedCount);
               $arrivalNameLabel = '';
               $arrivalNameList = [];
-              if ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived') {
+              if ($isArrivalMode) {
                 $arrivalNameLabel = $selectedArrival === 'arrived' ? 'Nama Hadir' : 'Nama Belum Datang';
                 foreach (($orderAttendeeMap[$detailOrderId] ?? []) as $attendeeRow) {
                   $attendeeName = trim((string)($attendeeRow['attendee_name'] ?? ''));
@@ -3414,7 +3418,7 @@ render_header([
               <tr>
                 <td><strong style="font-size:13.5px;letter-spacing:-0.3px;"><?= (int)$o['id'] ?></strong></td>
                 <td>
-                  <?php if ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived'): ?>
+                  <?php if ($isArrivalMode): ?>
                     <?php if ($arrivalNameList): ?>
                       <?php foreach ($arrivalNameList as $attendeeName): ?>
                         <div style="font-size:13px;font-weight:700;line-height:1.45;">- <?= h($attendeeName) ?></div>
@@ -3426,6 +3430,9 @@ render_header([
                     <strong style="font-size:13px;"><?= h($o['full_name']) ?></strong>
                   <?php endif; ?>
                 </td>
+                <?php if ($isArrivalMode): ?>
+                  <td><strong style="font-size:13px;"><?= h($o['full_name']) ?></strong></td>
+                <?php endif; ?>
                 <td class="admin-contact">
                   <div class="admin-contact-line"><i class="bi bi-telephone"></i><span class="contact-value"><?= h($o['phone']) ?></span></div>
                   <div class="admin-contact-line"><i class="bi bi-envelope"></i><span class="contact-value"><?= h($o['email']) ?></span></div>
@@ -3489,7 +3496,7 @@ render_header([
           $notArrivedCount = max(0, $attendeeTotalCount - $arrivedCount);
           $arrivalNameLabel = '';
           $arrivalNameList = [];
-          if ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived') {
+          if ($isArrivalMode) {
             $arrivalNameLabel = $selectedArrival === 'arrived' ? 'Nama Hadir' : 'Nama Belum Datang';
             foreach (($orderAttendeeMap[$detailOrderId] ?? []) as $attendeeRow) {
               $attendeeName = trim((string)($attendeeRow['attendee_name'] ?? ''));
@@ -3537,7 +3544,7 @@ render_header([
             <div class="order-card-body">
               <!-- User info -->
               <div>
-                <?php if ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived'): ?>
+                <?php if ($isArrivalMode): ?>
                   <div class="order-card-name" style="font-size:12px;color:var(--muted);font-weight:700;"><?= h($arrivalNameLabel) ?></div>
                   <?php if ($arrivalNameList): ?>
                     <div class="order-card-name" style="font-size:15px;line-height:1.45;">
@@ -3548,6 +3555,10 @@ render_header([
                   <?php else: ?>
                     <div class="order-card-name" style="font-size:14px;color:var(--muted);">-</div>
                   <?php endif; ?>
+                  <div class="order-card-row" style="margin-top:8px;">
+                    <div class="order-card-label">Pemilik Order</div>
+                    <div class="order-card-value" style="font-size:13px;font-weight:700;color:var(--text);"><?= h($o['full_name']) ?></div>
+                  </div>
                 <?php else: ?>
                   <div class="order-card-name"><?= h($o['full_name']) ?></div>
                 <?php endif; ?>
