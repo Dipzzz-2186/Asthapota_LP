@@ -514,6 +514,28 @@ function build_standings_from_games(array $gamesRows, array $seedPlayers = []): 
     return $rows;
 }
 
+function sort_mexicano_members_by_ranking(array $members, array $rankingStats): array {
+    $members = array_values(array_unique(array_filter(array_map(static function ($name): string {
+        return trim((string)$name);
+    }, $members), static function (string $name): bool {
+        return $name !== '';
+    })));
+    usort($members, static function (string $x, string $y) use ($rankingStats): int {
+        $px = (int)($rankingStats[$x]['point_total'] ?? 0);
+        $py = (int)($rankingStats[$y]['point_total'] ?? 0);
+        if ($px !== $py) {
+            return $py <=> $px;
+        }
+        $dx = (int)($rankingStats[$x]['point_diff'] ?? 0);
+        $dy = (int)($rankingStats[$y]['point_diff'] ?? 0);
+        if ($dx !== $dy) {
+            return $dy <=> $dx;
+        }
+        return strcmp($x, $y);
+    });
+    return $members;
+}
+
 function build_teams_from_players(array $players): array {
     $players = array_values(array_filter(array_map(static function ($name): string {
         return trim((string)$name);
@@ -747,37 +769,6 @@ function build_mexicano_pairs_for_round(array $orderedMembers, int $courtCount):
     return $pairs;
 }
 
-function build_random_mexicano_pairs(array $members, int $courtCount): array {
-    $courtCount = normalize_court_count($courtCount);
-    $members = array_values(array_unique(array_filter(array_map(static function ($name): string {
-        return trim((string)$name);
-    }, $members), static function (string $name): bool {
-        return $name !== '';
-    })));
-    if (count($members) < 4) {
-        return [];
-    }
-    shuffle($members);
-    $maxPlayers = intdiv(count($members), 4) * 4;
-    if ($maxPlayers < 4) {
-        return [];
-    }
-    $active = array_slice($members, 0, $maxPlayers);
-    shuffle($active);
-    $teams = build_teams_from_players($active);
-    $pairs = build_pairs_from_teams($teams);
-    $cleanPairs = [];
-    foreach ($pairs as $pair) {
-        $a = trim((string)($pair[0] ?? ''));
-        $b = trim((string)($pair[1] ?? ''));
-        if ($a === '' || $b === '' || strtoupper($a) === 'BYE' || strtoupper($b) === 'BYE') {
-            continue;
-        }
-        $cleanPairs[] = [$a, $b];
-    }
-    return $cleanPairs;
-}
-
 function fetch_competition_member_stats(PDO $db, string $type, string $label): array {
     $members = [];
     $played = [];
@@ -827,7 +818,7 @@ function fetch_competition_member_stats(PDO $db, string $type, string $label): a
     ];
 }
 
-function select_mexicano_active_players(array $members, array $playedCounts, int $courtCount): array {
+function select_mexicano_active_players(array $members, array $playedCounts, int $courtCount, array $rankingStats = []): array {
     $courtCount = normalize_court_count($courtCount);
     $members = array_values(array_unique(array_filter(array_map(static function ($name): string {
         return trim((string)$name);
@@ -838,23 +829,8 @@ function select_mexicano_active_players(array $members, array $playedCounts, int
     if ($maxPlayers < 4) {
         return ['players' => [], 'mode' => 'ranking'];
     }
-
-    $unplayed = [];
-    $others = [];
-    foreach ($members as $name) {
-        if (((int)($playedCounts[$name] ?? 0)) <= 0) {
-            $unplayed[] = $name;
-        } else {
-            $others[] = $name;
-        }
-    }
-    if ($unplayed) {
-        shuffle($unplayed);
-        shuffle($others);
-        $active = array_slice(array_merge($unplayed, $others), 0, $maxPlayers);
-        return ['players' => $active, 'mode' => 'random'];
-    }
-    return ['players' => array_slice($members, 0, $maxPlayers), 'mode' => 'ranking'];
+    $orderedMembers = sort_mexicano_members_by_ranking($members, $rankingStats);
+    return ['players' => array_slice($orderedMembers, 0, $maxPlayers), 'mode' => 'ranking'];
 }
 
 function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int $adminId, string $label = ''): array {
@@ -947,34 +923,16 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
         $memberStats = fetch_competition_member_stats($db, 'Mexicano', $label);
         $memberPool = array_values((array)($memberStats['members'] ?? []));
         $playedCounts = (array)($memberStats['played'] ?? []);
+        $ranking = build_player_ranking_stats($db, 'Mexicano', $label);
         if (count($memberPool) < 4) {
             return [0, 0];
         }
-        $selection = select_mexicano_active_players($memberPool, $playedCounts, $configuredCourtCount);
+        $selection = select_mexicano_active_players($memberPool, $playedCounts, $configuredCourtCount, $ranking);
         $activePlayers = array_values((array)($selection['players'] ?? []));
-        $mode = (string)($selection['mode'] ?? 'ranking');
         if (count($activePlayers) < 4) {
             return [0, 0];
         }
-        if ($mode === 'random') {
-            $pairs = build_random_mexicano_pairs($activePlayers, $configuredCourtCount);
-        } else {
-            $ranking = build_player_ranking_stats($db, 'Mexicano', $label);
-            usort($activePlayers, static function (string $x, string $y) use ($ranking): int {
-                $px = (int)($ranking[$x]['point_total'] ?? 0);
-                $py = (int)($ranking[$y]['point_total'] ?? 0);
-                if ($px !== $py) {
-                    return $py <=> $px;
-                }
-                $dx = (int)($ranking[$x]['point_diff'] ?? 0);
-                $dy = (int)($ranking[$y]['point_diff'] ?? 0);
-                if ($dx !== $dy) {
-                    return $dy <=> $dx;
-                }
-                return strcmp($x, $y);
-            });
-            $pairs = build_mexicano_pairs_for_round($activePlayers, $configuredCourtCount);
-        }
+        $pairs = build_mexicano_pairs_for_round($activePlayers, $configuredCourtCount);
         if (!$pairs) {
             return [0, 0];
         }
@@ -1398,7 +1356,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($courtCount > intdiv(count($attendees), 4)) {
                 $flash['error'] = 'Jumlah court terlalu banyak untuk total pemain. Maksimal court aktif: ' . (int)intdiv(count($attendees), 4) . '.';
             } else {
-                shuffle($attendees);
                 try {
                     $insert = $db->prepare(
                         'INSERT INTO competition_games (
@@ -1410,6 +1367,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $created = 0;
                     $label = $titlePrefix !== '' ? $titlePrefix : $type;
                     if ($type === 'Americano') {
+                        shuffle($attendees);
                         $schedule = build_americano_full_rounds($attendees, $courtCount);
                         if (!$schedule || empty($schedule['matches'])) {
                             throw new RuntimeException('Gagal menyusun jadwal Americano.');
@@ -1434,8 +1392,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             . (int)($schedule['total_sesi'] ?? 0) . ' sesi, '
                             . $created . ' match.';
                     } else {
-                        // Mexicano starts with random pairing snapshot, then follows ranking snapshot after each batch completes.
-                        $pairs = build_random_mexicano_pairs($attendees, $courtCount);
+                        // Mexicano Round 1 starts from random order, then next rounds follow ranking.
+                        $roundOneOrder = $attendees;
+                        shuffle($roundOneOrder);
+                        $pairs = build_mexicano_pairs_for_round($roundOneOrder, $courtCount);
                         if (!$pairs) {
                             throw new RuntimeException('Gagal membentuk bagan Mexicano.');
                         }
