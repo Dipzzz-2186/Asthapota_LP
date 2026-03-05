@@ -826,7 +826,9 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
     if ($exportType === 'attendee') {
         $exportSql = "SELECT
             oa.attendee_name,
-            u.full_name AS orderer_name
+            u.full_name AS orderer_name,
+            oa.court_no,
+            oa.checked_in_at
             FROM order_attendees oa
             JOIN orders o ON o.id = oa.order_id
             JOIN users u ON u.id = o.user_id" . $exportWhereSql . "
@@ -881,9 +883,13 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
     if ($exportType === 'attendee') {
         echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="120"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="110"/>';
         echo '<Row>';
         echo $xmlCell('Nama Attendee', 'String', 'Header');
         echo $xmlCell('Nama Pengorder', 'String', 'Header');
+        echo $xmlCell('Main di Court', 'String', 'Header');
+        echo $xmlCell('Hadir Jam', 'String', 'Header');
         echo '</Row>';
 
         foreach ($exportRows as $row) {
@@ -891,9 +897,19 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
             if ($attendeeName === '') {
                 continue;
             }
+            $courtNo = (int)($row['court_no'] ?? 0);
+            $courtLabel = ($courtNo >= 1 && $courtNo <= 6) ? ('Court ' . $courtNo) : '-';
+            $checkedInRaw = trim((string)($row['checked_in_at'] ?? ''));
+            $checkedInTime = '-';
+            if ($checkedInRaw !== '') {
+                $checkedInTs = strtotime($checkedInRaw);
+                $checkedInTime = $checkedInTs !== false ? date('H:i', $checkedInTs) : $checkedInRaw;
+            }
             echo '<Row>';
             echo $xmlCell($attendeeName, 'String', 'Text');
             echo $xmlCell($sanitizeCell((string)($row['orderer_name'] ?? '')), 'String', 'Text');
+            echo $xmlCell($courtLabel, 'String', 'Text');
+            echo $xmlCell($checkedInTime, 'String', 'Text');
             echo '</Row>';
         }
     } else {
