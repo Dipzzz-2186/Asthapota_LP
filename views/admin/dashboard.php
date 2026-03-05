@@ -827,14 +827,17 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
         $exportSql = "SELECT
             oa.attendee_name,
             u.full_name AS orderer_name,
+            oa.gender,
+            p.name AS package_name,
             oa.court_no,
             oa.checked_in_at
             FROM order_attendees oa
             JOIN orders o ON o.id = oa.order_id
-            JOIN users u ON u.id = o.user_id" . $exportWhereSql . "
+            JOIN users u ON u.id = o.user_id
+            LEFT JOIN packages p ON p.id = oa.package_id" . $exportWhereSql . "
             AND TRIM(oa.attendee_name) <> ''
             AND LOWER(TRIM(oa.attendee_name)) <> LOWER(TRIM(u.full_name))
-            ORDER BY LOWER(TRIM(u.full_name)) ASC, LOWER(TRIM(oa.attendee_name)) ASC, oa.id ASC";
+            ORDER BY o.id ASC, oa.id ASC";
     } else {
         $exportSql = "SELECT
             o.id,
@@ -877,21 +880,30 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
     echo '<Style ss:ID="Header"><Font ss:Bold="1"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Interior ss:Color="#DCE6F1" ss:Pattern="Solid"/></Style>';
     echo '<Style ss:ID="Text"><NumberFormat ss:Format="@"/></Style>';
     echo '<Style ss:ID="Number"><NumberFormat ss:Format="0"/></Style>';
+    echo '<Style ss:ID="CenterText"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><NumberFormat ss:Format="@"/></Style>';
+    echo '<Style ss:ID="CenterNumber"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><NumberFormat ss:Format="0"/></Style>';
     echo '</Styles>';
     echo '<Worksheet ss:Name="' . ($exportType === 'attendee' ? 'Attendees' : 'Orders') . '">';
     echo '<Table>';
     if ($exportType === 'attendee') {
+        echo '<Column ss:AutoFitWidth="1" ss:Width="45"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="90"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="150"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="120"/>';
-        echo '<Column ss:AutoFitWidth="1" ss:Width="110"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="210"/>';
         echo '<Row>';
-        echo $xmlCell('Nama Attendee', 'String', 'Header');
+        echo $xmlCell('No', 'String', 'Header');
         echo $xmlCell('Nama Pengorder', 'String', 'Header');
+        echo $xmlCell('Nama Attendee', 'String', 'Header');
+        echo $xmlCell('Gender', 'String', 'Header');
+        echo $xmlCell('Package', 'String', 'Header');
         echo $xmlCell('Main di Court', 'String', 'Header');
-        echo $xmlCell('Hadir Jam', 'String', 'Header');
+        echo $xmlCell('Hadir (Hari, Tanggal & Jam)', 'String', 'Header');
         echo '</Row>';
 
+        $rowNo = 1;
         foreach ($exportRows as $row) {
             $attendeeName = $sanitizeCell((string)($row['attendee_name'] ?? ''));
             if ($attendeeName === '') {
@@ -903,27 +915,47 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
             $checkedInTime = '-';
             if ($checkedInRaw !== '') {
                 $checkedInTs = strtotime($checkedInRaw);
-                $checkedInTime = $checkedInTs !== false ? date('H:i', $checkedInTs) : $checkedInRaw;
+                if ($checkedInTs !== false) {
+                    $dayNameMap = [
+                        'Sunday' => 'Minggu',
+                        'Monday' => 'Senin',
+                        'Tuesday' => 'Selasa',
+                        'Wednesday' => 'Rabu',
+                        'Thursday' => 'Kamis',
+                        'Friday' => 'Jumat',
+                        'Saturday' => 'Sabtu',
+                    ];
+                    $dayName = $dayNameMap[date('l', $checkedInTs)] ?? date('l', $checkedInTs);
+                    $checkedInTime = $dayName . ', ' . date('d-m-Y H:i', $checkedInTs);
+                } else {
+                    $checkedInTime = $checkedInRaw;
+                }
             }
             echo '<Row>';
-            echo $xmlCell($attendeeName, 'String', 'Text');
+            echo $xmlCell((string)$rowNo, 'Number', 'CenterNumber');
             echo $xmlCell($sanitizeCell((string)($row['orderer_name'] ?? '')), 'String', 'Text');
+            echo $xmlCell($attendeeName, 'String', 'Text');
+            echo $xmlCell($sanitizeCell((string)($row['gender'] ?? '-')), 'String', 'Text');
+            echo $xmlCell($sanitizeCell((string)($row['package_name'] ?? '-')), 'String', 'Text');
             echo $xmlCell($courtLabel, 'String', 'Text');
             echo $xmlCell($checkedInTime, 'String', 'Text');
             echo '</Row>';
+            $rowNo++;
         }
     } else {
+        echo '<Column ss:AutoFitWidth="1" ss:Width="45"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="70"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="170"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="110"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="120"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="280"/>';
-        echo '<Column ss:AutoFitWidth="1" ss:Width="95"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="140"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="210"/>';
         echo '<Column ss:AutoFitWidth="1" ss:Width="80"/>';
 
         echo '<Row>';
+        echo $xmlCell('No', 'String', 'Header');
         echo $xmlCell('Order ID', 'String', 'Header');
         echo $xmlCell('Nama', 'String', 'Header');
         echo $xmlCell('No. HP', 'String', 'Header');
@@ -935,18 +967,47 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
         echo $xmlCell('Status', 'String', 'Header');
         echo '</Row>';
 
+        $rowNo = 1;
         foreach ($exportRows as $row) {
+            $instagramRaw = trim((string)($row['instagram'] ?? ''));
+            if ($instagramRaw !== '' && $instagramRaw !== '-' && strpos($instagramRaw, '@') !== 0) {
+                $instagramRaw = '@' . ltrim($instagramRaw, '@');
+            }
+            $instagramCell = str_replace(["\r", "\n", "\t"], [' ', ' ', ' '], $instagramRaw);
+            $createdRaw = trim((string)($row['created_at'] ?? ''));
+            $createdLabel = '-';
+            if ($createdRaw !== '') {
+                $createdTs = strtotime($createdRaw);
+                if ($createdTs !== false) {
+                    $dayNameMap = [
+                        'Sunday' => 'Minggu',
+                        'Monday' => 'Senin',
+                        'Tuesday' => 'Selasa',
+                        'Wednesday' => 'Rabu',
+                        'Thursday' => 'Kamis',
+                        'Friday' => 'Jumat',
+                        'Saturday' => 'Sabtu',
+                    ];
+                    $dayName = $dayNameMap[date('l', $createdTs)] ?? date('l', $createdTs);
+                    $createdLabel = $dayName . ', ' . date('d-m-Y H:i', $createdTs);
+                } else {
+                    $createdLabel = $createdRaw;
+                }
+            }
+            $totalLabel = 'Rp ' . number_format((int)($row['total'] ?? 0), 0, ',', '.');
             echo '<Row>';
-            echo $xmlCell($sanitizeCell((string)($row['id'] ?? '')), 'String', 'Text');
+            echo $xmlCell((string)$rowNo, 'Number', 'CenterNumber');
+            echo $xmlCell($sanitizeCell((string)($row['id'] ?? '')), 'String', 'CenterText');
             echo $xmlCell($sanitizeCell((string)($row['full_name'] ?? '')), 'String', 'Text');
             echo $xmlCell($sanitizeCell((string)($row['phone'] ?? '')), 'String', 'Text');
             echo $xmlCell($sanitizeCell((string)($row['email'] ?? '')), 'String', 'Text');
-            echo $xmlCell($sanitizeCell((string)($row['instagram'] ?? '')), 'String', 'Text');
+            echo $xmlCell($instagramCell, 'String', 'Text');
             echo $xmlCell($sanitizeCell((string)($row['items'] ?? '')), 'String', 'Text');
-            echo $xmlCell((string)((int)($row['total'] ?? 0)), 'Number', 'Number');
-            echo $xmlCell($sanitizeCell((string)($row['created_at'] ?? '')), 'String', 'Text');
+            echo $xmlCell($sanitizeCell($totalLabel), 'String', 'Text');
+            echo $xmlCell($sanitizeCell($createdLabel), 'String', 'Text');
             echo $xmlCell('accepted', 'String', 'Text');
             echo '</Row>';
+            $rowNo++;
         }
     }
 
