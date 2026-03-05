@@ -786,6 +786,8 @@ if ($selectedArrival === 'arrived') {
 $whereSql = ' WHERE ' . implode(' AND ', $whereParts);
 
 if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
+    $exportTypeRaw = strtolower(trim((string)($_GET['export_type'] ?? 'order')));
+    $exportType = in_array($exportTypeRaw, ['order', 'attendee'], true) ? $exportTypeRaw : 'order';
     $exportWhereParts = ["o.status = 'accepted'"];
     $exportParams = [];
     if ($selectedOrderId > 0) { $exportWhereParts[] = "o.id = ?"; $exportParams[] = $selectedOrderId; }
@@ -805,28 +807,6 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
     }
     $exportWhereSql = ' WHERE ' . implode(' AND ', $exportWhereParts);
 
-    $exportSql = "SELECT
-        o.id,
-        u.full_name,
-        u.phone,
-        u.email,
-        u.instagram,
-        o.total,
-        o.created_at,
-        COALESCE((
-            SELECT GROUP_CONCAT(CONCAT(p.name, ' x', oi.qty) SEPARATOR ', ')
-            FROM order_items oi
-            JOIN packages p ON p.id = oi.package_id
-            WHERE oi.order_id = o.id
-        ), '') AS items
-        FROM orders o
-        JOIN users u ON u.id = o.user_id" . $exportWhereSql . "
-        ORDER BY o.created_at DESC, o.id DESC";
-
-    $exportStmt = $db->prepare($exportSql);
-    $exportStmt->execute($exportParams);
-    $exportRows = $exportStmt->fetchAll(PDO::FETCH_ASSOC);
-
     $sanitizeCell = static function ($value): string {
         $text = trim((string)$value);
         $text = str_replace(["\r", "\n", "\t"], [' ', ' ', ' '], $text);
@@ -843,7 +823,41 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
         return '<Cell' . $styleAttr . '><Data ss:Type="' . $type . '">' . $escapeXml($value) . '</Data></Cell>';
     };
 
-    $fileName = 'Order_report-' . date('Ymd-His') . '.xls';
+    if ($exportType === 'attendee') {
+        $exportSql = "SELECT
+            oa.attendee_name,
+            u.full_name AS orderer_name
+            FROM order_attendees oa
+            JOIN orders o ON o.id = oa.order_id
+            JOIN users u ON u.id = o.user_id" . $exportWhereSql . "
+            AND TRIM(oa.attendee_name) <> ''
+            AND LOWER(TRIM(oa.attendee_name)) <> LOWER(TRIM(u.full_name))
+            ORDER BY LOWER(TRIM(u.full_name)) ASC, LOWER(TRIM(oa.attendee_name)) ASC, oa.id ASC";
+    } else {
+        $exportSql = "SELECT
+            o.id,
+            u.full_name,
+            u.phone,
+            u.email,
+            u.instagram,
+            o.total,
+            o.created_at,
+            COALESCE((
+                SELECT GROUP_CONCAT(CONCAT(p.name, ' x', oi.qty) SEPARATOR ', ')
+                FROM order_items oi
+                JOIN packages p ON p.id = oi.package_id
+                WHERE oi.order_id = o.id
+            ), '') AS items
+            FROM orders o
+            JOIN users u ON u.id = o.user_id" . $exportWhereSql . "
+            ORDER BY o.created_at DESC, o.id DESC";
+    }
+
+    $exportStmt = $db->prepare($exportSql);
+    $exportStmt->execute($exportParams);
+    $exportRows = $exportStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $fileName = ($exportType === 'attendee' ? 'Attendee_report-' : 'Order_report-') . date('Ymd-His') . '.xls';
     header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
     header('Content-Disposition: attachment; filename="' . $fileName . '"');
     header('Cache-Control: max-age=0');
@@ -862,42 +876,62 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
     echo '<Style ss:ID="Text"><NumberFormat ss:Format="@"/></Style>';
     echo '<Style ss:ID="Number"><NumberFormat ss:Format="0"/></Style>';
     echo '</Styles>';
-    echo '<Worksheet ss:Name="Orders">';
+    echo '<Worksheet ss:Name="' . ($exportType === 'attendee' ? 'Attendees' : 'Orders') . '">';
     echo '<Table>';
-    echo '<Column ss:AutoFitWidth="1" ss:Width="70"/>';
-    echo '<Column ss:AutoFitWidth="1" ss:Width="170"/>';
-    echo '<Column ss:AutoFitWidth="1" ss:Width="110"/>';
-    echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
-    echo '<Column ss:AutoFitWidth="1" ss:Width="120"/>';
-    echo '<Column ss:AutoFitWidth="1" ss:Width="280"/>';
-    echo '<Column ss:AutoFitWidth="1" ss:Width="95"/>';
-    echo '<Column ss:AutoFitWidth="1" ss:Width="140"/>';
-    echo '<Column ss:AutoFitWidth="1" ss:Width="80"/>';
-
-    echo '<Row>';
-    echo $xmlCell('Order ID', 'String', 'Header');
-    echo $xmlCell('Nama', 'String', 'Header');
-    echo $xmlCell('No. HP', 'String', 'Header');
-    echo $xmlCell('Email', 'String', 'Header');
-    echo $xmlCell('Instagram', 'String', 'Header');
-    echo $xmlCell('Paket', 'String', 'Header');
-    echo $xmlCell('Total', 'String', 'Header');
-    echo $xmlCell('Tanggal Dibuat', 'String', 'Header');
-    echo $xmlCell('Status', 'String', 'Header');
-    echo '</Row>';
-
-    foreach ($exportRows as $row) {
+    if ($exportType === 'attendee') {
+        echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
         echo '<Row>';
-        echo $xmlCell($sanitizeCell((string)($row['id'] ?? '')), 'String', 'Text');
-        echo $xmlCell($sanitizeCell((string)($row['full_name'] ?? '')), 'String', 'Text');
-        echo $xmlCell($sanitizeCell((string)($row['phone'] ?? '')), 'String', 'Text');
-        echo $xmlCell($sanitizeCell((string)($row['email'] ?? '')), 'String', 'Text');
-        echo $xmlCell($sanitizeCell((string)($row['instagram'] ?? '')), 'String', 'Text');
-        echo $xmlCell($sanitizeCell((string)($row['items'] ?? '')), 'String', 'Text');
-        echo $xmlCell((string)((int)($row['total'] ?? 0)), 'Number', 'Number');
-        echo $xmlCell($sanitizeCell((string)($row['created_at'] ?? '')), 'String', 'Text');
-        echo $xmlCell('accepted', 'String', 'Text');
+        echo $xmlCell('Nama Attendee', 'String', 'Header');
+        echo $xmlCell('Nama Pengorder', 'String', 'Header');
         echo '</Row>';
+
+        foreach ($exportRows as $row) {
+            $attendeeName = $sanitizeCell((string)($row['attendee_name'] ?? ''));
+            if ($attendeeName === '') {
+                continue;
+            }
+            echo '<Row>';
+            echo $xmlCell($attendeeName, 'String', 'Text');
+            echo $xmlCell($sanitizeCell((string)($row['orderer_name'] ?? '')), 'String', 'Text');
+            echo '</Row>';
+        }
+    } else {
+        echo '<Column ss:AutoFitWidth="1" ss:Width="70"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="170"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="110"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="220"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="120"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="280"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="95"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="140"/>';
+        echo '<Column ss:AutoFitWidth="1" ss:Width="80"/>';
+
+        echo '<Row>';
+        echo $xmlCell('Order ID', 'String', 'Header');
+        echo $xmlCell('Nama', 'String', 'Header');
+        echo $xmlCell('No. HP', 'String', 'Header');
+        echo $xmlCell('Email', 'String', 'Header');
+        echo $xmlCell('Instagram', 'String', 'Header');
+        echo $xmlCell('Paket', 'String', 'Header');
+        echo $xmlCell('Total', 'String', 'Header');
+        echo $xmlCell('Tanggal Dibuat', 'String', 'Header');
+        echo $xmlCell('Status', 'String', 'Header');
+        echo '</Row>';
+
+        foreach ($exportRows as $row) {
+            echo '<Row>';
+            echo $xmlCell($sanitizeCell((string)($row['id'] ?? '')), 'String', 'Text');
+            echo $xmlCell($sanitizeCell((string)($row['full_name'] ?? '')), 'String', 'Text');
+            echo $xmlCell($sanitizeCell((string)($row['phone'] ?? '')), 'String', 'Text');
+            echo $xmlCell($sanitizeCell((string)($row['email'] ?? '')), 'String', 'Text');
+            echo $xmlCell($sanitizeCell((string)($row['instagram'] ?? '')), 'String', 'Text');
+            echo $xmlCell($sanitizeCell((string)($row['items'] ?? '')), 'String', 'Text');
+            echo $xmlCell((string)((int)($row['total'] ?? 0)), 'Number', 'Number');
+            echo $xmlCell($sanitizeCell((string)($row['created_at'] ?? '')), 'String', 'Text');
+            echo $xmlCell('accepted', 'String', 'Text');
+            echo '</Row>';
+        }
     }
 
     echo '</Table>';
@@ -1185,7 +1219,8 @@ if ($selectedName !== '') $exportQueryParams['name'] = $selectedName;
 if ($selectedEmail !== '') $exportQueryParams['email'] = $selectedEmail;
 if ($selectedDate !== '') $exportQueryParams['created_date'] = $selectedDate;
 if ($selectedArrival !== '') $exportQueryParams['arrival'] = $selectedArrival;
-$exportExcelUrl = '/admin/dashboard?' . http_build_query($exportQueryParams);
+$exportOrderExcelUrl = '/admin/dashboard?' . http_build_query($exportQueryParams + ['export_type' => 'order']);
+$exportAttendeeExcelUrl = '/admin/dashboard?' . http_build_query($exportQueryParams + ['export_type' => 'attendee']);
 
 $extraHead = <<<'HTML'
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1437,6 +1472,56 @@ $extraHead = <<<'HTML'
     font-weight: 700;
     letter-spacing: 0.6px;
     text-transform: uppercase;
+  }
+  .export-dropdown {
+    position: relative;
+    display: inline-flex;
+  }
+  .export-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 200px;
+    border-radius: 12px;
+    border: 1px solid var(--stroke);
+    background: #fff;
+    box-shadow: 0 10px 26px rgba(12, 27, 54, 0.16);
+    padding: 6px;
+    display: none;
+    z-index: 40;
+  }
+  .export-dropdown.open .export-dropdown-menu {
+    display: grid;
+    gap: 4px;
+  }
+  .export-dropdown-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 9px;
+    padding: 8px 10px;
+    color: #1f3559;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    transition: background 0.18s ease, color 0.18s ease;
+  }
+  .export-dropdown-item:hover {
+    background: #edf4ff;
+    color: #0f417f;
+  }
+  .export-trigger {
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .export-trigger .bi-chevron-down {
+    font-size: 11px;
+    transition: transform 0.2s ease;
+  }
+  .export-dropdown.open .export-trigger .bi-chevron-down {
+    transform: rotate(180deg);
   }
   .filter-card {
     border-radius: 16px;
@@ -3106,7 +3191,19 @@ render_header([
       <section class="dashboard-data-column">
       <div class="dashboard-data-head">
         <span><i class="bi bi-card-list"></i> Data Registrasi</span>
-        <a class="btn ghost small" href="<?= h($exportExcelUrl) ?>"><i class="bi bi-file-earmark-excel"></i> Export Excel</a>
+        <div class="export-dropdown" data-export-dropdown>
+          <button class="btn ghost small export-trigger" type="button" data-export-toggle aria-haspopup="true" aria-expanded="false">
+            <i class="bi bi-file-earmark-excel"></i> Export Excel <i class="bi bi-chevron-down"></i>
+          </button>
+          <div class="export-dropdown-menu" data-export-menu>
+            <a class="export-dropdown-item" href="<?= h($exportOrderExcelUrl) ?>">
+              <i class="bi bi-list-check"></i> Export Per Order
+            </a>
+            <a class="export-dropdown-item" href="<?= h($exportAttendeeExcelUrl) ?>">
+              <i class="bi bi-people"></i> Export Per Attendee
+            </a>
+          </div>
+        </div>
       </div>
       <?php if ($flash['error']): ?>
         <div class="alert mb-16"><i class="bi bi-exclamation-triangle-fill"></i> <?= h($flash['error']) ?></div>
@@ -5098,6 +5195,47 @@ render_header([
             }
           });
         });
+      });
+    })();
+  </script>
+
+  <script>
+    // -- Export Dropdown ----------------------------------------
+    (function() {
+      var dropdown = document.querySelector('[data-export-dropdown]');
+      if (!dropdown) return;
+      var toggle = dropdown.querySelector('[data-export-toggle]');
+      var menu = dropdown.querySelector('[data-export-menu]');
+      if (!toggle || !menu) return;
+
+      function closeMenu() {
+        dropdown.classList.remove('open');
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+      function openMenu() {
+        dropdown.classList.add('open');
+        toggle.setAttribute('aria-expanded', 'true');
+      }
+
+      toggle.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (dropdown.classList.contains('open')) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
+      });
+
+      document.addEventListener('click', function(e) {
+        if (!dropdown.contains(e.target)) {
+          closeMenu();
+        }
+      });
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          closeMenu();
+        }
       });
     })();
   </script>
