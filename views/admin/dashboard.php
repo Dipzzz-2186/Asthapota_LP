@@ -1389,6 +1389,10 @@ $extraHead = <<<'HTML'
     gap: 12px;
     margin-bottom: 18px;
   }
+  .stat-grid--arrival {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 16px;
+  }
   @media (min-width: 1201px) {
     .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .stat-card--revenue-top,
@@ -2985,6 +2989,7 @@ $extraHead = <<<'HTML'
     }
 
     .stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-grid--arrival { grid-template-columns: 1fr; }
     .stat-card--revenue-top,
     .stat-card--span-2 {
       grid-column: 1 / -1;
@@ -3156,26 +3161,6 @@ render_header([
           <div class="stat-label"><i class="bi bi-people"></i> Total Attendee Accepted</div>
           <div class="stat-value"><?= (int)$totalAttendees ?></div>
         </a>
-        <?php
-          $arrivedCardParams = $cardFilterBaseParams;
-          $arrivedCardParams['arrival'] = 'arrived';
-          $arrivedCardHref = '/admin/dashboard?' . http_build_query($arrivedCardParams);
-          $isArrivedCardActive = $selectedArrival === 'arrived';
-        ?>
-        <a class="stat-card stat-card-link stat-card--span-2<?= $isArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($arrivedCardHref) ?>">
-          <div class="stat-label"><i class="bi bi-person-check"></i> Attendee Hadir</div>
-          <div class="stat-value"><?= (int)$totalArrivedAttendees ?></div>
-        </a>
-        <?php
-          $notArrivedCardParams = $cardFilterBaseParams;
-          $notArrivedCardParams['arrival'] = 'not_arrived';
-          $notArrivedCardHref = '/admin/dashboard?' . http_build_query($notArrivedCardParams);
-          $isNotArrivedCardActive = $selectedArrival === 'not_arrived';
-        ?>
-        <a class="stat-card stat-card-link stat-card--span-2<?= $isNotArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($notArrivedCardHref) ?>">
-          <div class="stat-label"><i class="bi bi-person-x"></i> Attendee Belum Hadir</div>
-          <div class="stat-value"><?= (int)$totalNotArrivedAttendees ?></div>
-        </a>
         <?php foreach ($packageSalesStats as $packageStat): ?>
           <?php
             $packageCardParams = $cardFilterBaseParams;
@@ -3208,6 +3193,26 @@ render_header([
             </a>
           <?php endfor; ?>
         </div>
+      </div>
+      <?php
+        $arrivedCardParams = $cardFilterBaseParams;
+        $arrivedCardParams['arrival'] = 'arrived';
+        $arrivedCardHref = '/admin/dashboard?' . http_build_query($arrivedCardParams);
+        $isArrivedCardActive = $selectedArrival === 'arrived';
+        $notArrivedCardParams = $cardFilterBaseParams;
+        $notArrivedCardParams['arrival'] = 'not_arrived';
+        $notArrivedCardHref = '/admin/dashboard?' . http_build_query($notArrivedCardParams);
+        $isNotArrivedCardActive = $selectedArrival === 'not_arrived';
+      ?>
+      <div class="stat-grid stat-grid--arrival">
+        <a class="stat-card stat-card-link<?= $isArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($arrivedCardHref) ?>">
+          <div class="stat-label"><i class="bi bi-person-check"></i> Attendee Hadir</div>
+          <div class="stat-value"><?= (int)$totalArrivedAttendees ?></div>
+        </a>
+        <a class="stat-card stat-card-link<?= $isNotArrivedCardActive ? ' is-active' : '' ?>" href="<?= h($notArrivedCardHref) ?>">
+          <div class="stat-label"><i class="bi bi-person-x"></i> Attendee Belum Hadir</div>
+          <div class="stat-value"><?= (int)$totalNotArrivedAttendees ?></div>
+        </a>
       </div>
 
       <div class="dashboard-split-layout">
@@ -3262,14 +3267,6 @@ render_header([
               <option value="paid" <?= $selectedStatus === 'paid' ? 'selected' : '' ?>>Paid</option>
               <option value="accepted" <?= $selectedStatus === 'accepted' ? 'selected' : '' ?>>Accepted</option>
               <option value="rejected" <?= $selectedStatus === 'rejected' ? 'selected' : '' ?>>Rejected</option>
-            </select>
-          </div>
-          <div class="filter-field filter-field-status">
-            <label class="field-label" for="filterArrival">Kehadiran</label>
-            <select id="filterArrival" name="arrival">
-              <option value="">Semua Kehadiran</option>
-              <option value="arrived" <?= $selectedArrival === 'arrived' ? 'selected' : '' ?>>Sudah Datang</option>
-              <option value="not_arrived" <?= $selectedArrival === 'not_arrived' ? 'selected' : '' ?>>Belum Datang</option>
             </select>
           </div>
           <div class="filter-field filter-field-package">
@@ -3359,7 +3356,7 @@ render_header([
           <thead>
             <tr>
               <th><i class="bi bi-fingerprint"></i> ID</th>
-              <th><i class="bi bi-person"></i> User</th>
+              <th><i class="bi bi-person"></i> <?= ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived') ? 'Attendee' : 'User' ?></th>
               <th><i class="bi bi-telephone"></i> Contact</th>
               <th><i class="bi bi-box"></i> Packages</th>
               <th><i class="bi bi-cash"></i> Total</th>
@@ -3382,6 +3379,22 @@ render_header([
               $arrivedCount = (int)($orderArrivedCountMap[$detailOrderId] ?? 0);
               $attendeeTotalCount = (int)($orderAttendeeCountMap[$detailOrderId] ?? 0);
               $notArrivedCount = max(0, $attendeeTotalCount - $arrivedCount);
+              $arrivalNameLabel = '';
+              $arrivalNameList = [];
+              if ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived') {
+                $arrivalNameLabel = $selectedArrival === 'arrived' ? 'Nama Hadir' : 'Nama Belum Datang';
+                foreach (($orderAttendeeMap[$detailOrderId] ?? []) as $attendeeRow) {
+                  $attendeeName = trim((string)($attendeeRow['attendee_name'] ?? ''));
+                  if ($attendeeName === '') {
+                    continue;
+                  }
+                  $isCheckedIn = trim((string)($attendeeRow['checked_in_at'] ?? '')) !== '';
+                  if (($selectedArrival === 'arrived' && $isCheckedIn) || ($selectedArrival === 'not_arrived' && !$isCheckedIn)) {
+                    $arrivalNameList[] = $attendeeName;
+                  }
+                }
+                $arrivalNameList = array_values(array_unique($arrivalNameList));
+              }
               $detailPayload = [
                 'order_id' => $detailOrderId,
                 'user_name' => (string)($o['full_name'] ?? ''),
@@ -3397,7 +3410,19 @@ render_header([
             ?>
               <tr>
                 <td><strong style="font-size:13.5px;letter-spacing:-0.3px;"><?= (int)$o['id'] ?></strong></td>
-                <td><strong style="font-size:13px;"><?= h($o['full_name']) ?></strong></td>
+                <td>
+                  <?php if ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived'): ?>
+                    <?php if ($arrivalNameList): ?>
+                      <?php foreach ($arrivalNameList as $attendeeName): ?>
+                        <div style="font-size:13px;font-weight:700;line-height:1.45;">- <?= h($attendeeName) ?></div>
+                      <?php endforeach; ?>
+                    <?php else: ?>
+                      <strong style="font-size:13px;color:var(--muted);">-</strong>
+                    <?php endif; ?>
+                  <?php else: ?>
+                    <strong style="font-size:13px;"><?= h($o['full_name']) ?></strong>
+                  <?php endif; ?>
+                </td>
                 <td class="admin-contact">
                   <div class="admin-contact-line"><i class="bi bi-telephone"></i><span class="contact-value"><?= h($o['phone']) ?></span></div>
                   <div class="admin-contact-line"><i class="bi bi-envelope"></i><span class="contact-value"><?= h($o['email']) ?></span></div>
@@ -3459,6 +3484,22 @@ render_header([
           $arrivedCount = (int)($orderArrivedCountMap[$detailOrderId] ?? 0);
           $attendeeTotalCount = (int)($orderAttendeeCountMap[$detailOrderId] ?? 0);
           $notArrivedCount = max(0, $attendeeTotalCount - $arrivedCount);
+          $arrivalNameLabel = '';
+          $arrivalNameList = [];
+          if ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived') {
+            $arrivalNameLabel = $selectedArrival === 'arrived' ? 'Nama Hadir' : 'Nama Belum Datang';
+            foreach (($orderAttendeeMap[$detailOrderId] ?? []) as $attendeeRow) {
+              $attendeeName = trim((string)($attendeeRow['attendee_name'] ?? ''));
+              if ($attendeeName === '') {
+                continue;
+              }
+              $isCheckedIn = trim((string)($attendeeRow['checked_in_at'] ?? '')) !== '';
+              if (($selectedArrival === 'arrived' && $isCheckedIn) || ($selectedArrival === 'not_arrived' && !$isCheckedIn)) {
+                $arrivalNameList[] = $attendeeName;
+              }
+            }
+            $arrivalNameList = array_values(array_unique($arrivalNameList));
+          }
           $detailPayload = [
             'order_id' => $detailOrderId,
             'user_name' => (string)($o['full_name'] ?? ''),
@@ -3493,7 +3534,20 @@ render_header([
             <div class="order-card-body">
               <!-- User info -->
               <div>
-                <div class="order-card-name"><?= h($o['full_name']) ?></div>
+                <?php if ($selectedArrival === 'arrived' || $selectedArrival === 'not_arrived'): ?>
+                  <div class="order-card-name" style="font-size:12px;color:var(--muted);font-weight:700;"><?= h($arrivalNameLabel) ?></div>
+                  <?php if ($arrivalNameList): ?>
+                    <div class="order-card-name" style="font-size:15px;line-height:1.45;">
+                      <?php foreach ($arrivalNameList as $attendeeName): ?>
+                        <div>- <?= h($attendeeName) ?></div>
+                      <?php endforeach; ?>
+                    </div>
+                  <?php else: ?>
+                    <div class="order-card-name" style="font-size:14px;color:var(--muted);">-</div>
+                  <?php endif; ?>
+                <?php else: ?>
+                  <div class="order-card-name"><?= h($o['full_name']) ?></div>
+                <?php endif; ?>
                 <div class="order-card-contact">
                   <div class="order-card-contact-item"><i class="bi bi-telephone"></i><span><?= h($o['phone']) ?></span></div>
                   <div class="order-card-contact-item"><i class="bi bi-envelope"></i><span><?= h($o['email']) ?></span></div>
