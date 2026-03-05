@@ -899,8 +899,8 @@ if (strtolower(trim((string)($_GET['export'] ?? ''))) === 'excel') {
         echo $xmlCell('Nama Attendee', 'String', 'Header');
         echo $xmlCell('Gender', 'String', 'Header');
         echo $xmlCell('Package', 'String', 'Header');
-        echo $xmlCell('Main di Court', 'String', 'Header');
-        echo $xmlCell('Hadir (Hari, Tanggal & Jam)', 'String', 'Header');
+        echo $xmlCell('Court', 'String', 'Header');
+        echo $xmlCell('Hadir', 'String', 'Header');
         echo '</Row>';
 
         $rowNo = 1;
