@@ -1756,7 +1756,6 @@ render_header([
     <div class="admin-header spaced">
       <div>
         <h1 class="admin-title">Competition</h1>
-        <p class="admin-sub">Americano langsung generate semua ronde. Mexicano generate Round 1 dulu, ronde berikutnya tersusun bertahap dari ranking saat ronde sebelumnya selesai.</p>
       </div>
       <div class="competition-actions"><a class="btn ghost" href="/admin/dashboard"><i class="bi bi-arrow-left"></i> Dashboard</a></div>
     </div>
