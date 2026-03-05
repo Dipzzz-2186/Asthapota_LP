@@ -72,7 +72,9 @@ function normalize_court_count($value): int {
 function calculate_round_estimation(int $playerCount, int $courtCount, string $type): array {
     $playerCount = max(0, $playerCount);
     $courtCount = normalize_court_count($courtCount);
-    $maxMatchesPerLogicalRound = intdiv($playerCount, 4);
+    $maxMatchesPerLogicalRound = ($type === 'Mexicano')
+        ? (int)ceil($playerCount / 4)
+        : intdiv($playerCount, 4);
     if ($maxMatchesPerLogicalRound <= 0) {
         return [
             'effective_courts' => 0,
@@ -121,6 +123,57 @@ function is_auto_competition_title(string $type, string $title): bool {
 function competition_ts(string $value): int {
     $ts = strtotime(trim($value));
     return $ts ? (int)$ts : 0;
+}
+
+function build_tournament_state_key(string $type, string $label): string {
+    return strtolower(trim($type) . '|' . trim($label));
+}
+
+function fetch_tournament_state_map(PDO $db): array {
+    $map = [];
+    try {
+        $stmt = $db->query(
+            "SELECT competition_type, tournament_label, is_completed, completed_at, winner_name, winner_point_total, winner_point_diff
+             FROM competition_tournament_states"
+        );
+        $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Throwable $e) {
+        $rows = [];
+    }
+    foreach ($rows as $row) {
+        $type = normalize_competition_type((string)($row['competition_type'] ?? ''));
+        $label = trim((string)($row['tournament_label'] ?? ''));
+        if ($type === '' || $label === '') {
+            continue;
+        }
+        $key = build_tournament_state_key($type, $label);
+        $map[$key] = [
+            'is_completed' => (int)($row['is_completed'] ?? 0) === 1,
+            'completed_at' => trim((string)($row['completed_at'] ?? '')),
+            'winner_name' => trim((string)($row['winner_name'] ?? '')),
+            'winner_point_total' => (int)($row['winner_point_total'] ?? 0),
+            'winner_point_diff' => (int)($row['winner_point_diff'] ?? 0),
+        ];
+    }
+    return $map;
+}
+
+function is_tournament_completed(PDO $db, string $type, string $label): bool {
+    if ($type === '' || $label === '') {
+        return false;
+    }
+    try {
+        $stmt = $db->prepare(
+            "SELECT is_completed
+             FROM competition_tournament_states
+             WHERE competition_type = ? AND tournament_label = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$type, $label]);
+        return (int)$stmt->fetchColumn() === 1;
+    } catch (Throwable $e) {
+        return false;
+    }
 }
 
 function read_configured_match_total(PDO $db, int $gameId): ?int {
@@ -618,6 +671,101 @@ function is_round_completed(array $rows): bool {
     return true;
 }
 
+function mexicano_block_round_span(int $memberCount, int $courtCount): int {
+    $courtCount = normalize_court_count($courtCount);
+    $memberCount = max(0, $memberCount);
+    if ($memberCount < 4) {
+        return 1;
+    }
+    // One Mexicano block should cover all players at least once.
+    $matchesPerBlock = (int)ceil($memberCount / 4);
+    if ($matchesPerBlock <= 0) {
+        return 1;
+    }
+    return max(1, (int)ceil($matchesPerBlock / max(1, $courtCount)));
+}
+
+function are_rounds_completed(PDO $db, string $type, int $startRound, int $endRound, string $label = ''): bool {
+    if ($startRound <= 0 || $endRound < $startRound) {
+        return false;
+    }
+    $stmt = $db->prepare(
+        "SELECT game_title, score_a, score_b
+         FROM competition_games
+         WHERE competition_type = ? AND round_no = ?
+         ORDER BY COALESCE(session_no, 1) ASC, match_no ASC, id ASC"
+    );
+    for ($round = $startRound; $round <= $endRound; $round++) {
+        $stmt->execute([$type, $round]);
+        $rows = filter_rows_by_competition_label($stmt->fetchAll(PDO::FETCH_ASSOC), $type, $label);
+        if (!$rows || !is_round_completed($rows)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function filter_mexicano_games_for_completed_blocks(array $gamesRows, array $seedPlayers): array {
+    if (!$gamesRows) {
+        return [];
+    }
+    $roundRows = [];
+    $courtCount = 1;
+    foreach ($gamesRows as $row) {
+        $roundNo = (int)($row['round_no'] ?? 0);
+        if ($roundNo <= 0) {
+            continue;
+        }
+        if (!isset($roundRows[$roundNo])) {
+            $roundRows[$roundNo] = [];
+        }
+        $roundRows[$roundNo][] = $row;
+        $candidateCourtCount = isset($row['court_count']) && $row['court_count'] !== null
+            ? (int)$row['court_count']
+            : 0;
+        if ($candidateCourtCount > 0) {
+            $courtCount = normalize_court_count($candidateCourtCount);
+        }
+    }
+    if (!$roundRows) {
+        return [];
+    }
+    ksort($roundRows, SORT_NUMERIC);
+    $blockSpan = mexicano_block_round_span(count($seedPlayers), $courtCount);
+    $lastSettledRound = 0;
+    $roundNumbers = array_keys($roundRows);
+    $maxRound = (int)max($roundNumbers);
+
+    for ($blockEnd = $blockSpan; $blockEnd <= $maxRound; $blockEnd += $blockSpan) {
+        $blockStart = $blockEnd - $blockSpan + 1;
+        $completed = true;
+        for ($r = $blockStart; $r <= $blockEnd; $r++) {
+            $rows = (array)($roundRows[$r] ?? []);
+            if (!$rows || !is_round_completed($rows)) {
+                $completed = false;
+                break;
+            }
+        }
+        if (!$completed) {
+            break;
+        }
+        $lastSettledRound = $blockEnd;
+    }
+
+    if ($lastSettledRound <= 0) {
+        return [];
+    }
+
+    $filtered = [];
+    foreach ($gamesRows as $row) {
+        $roundNo = (int)($row['round_no'] ?? 0);
+        if ($roundNo > 0 && $roundNo <= $lastSettledRound) {
+            $filtered[] = $row;
+        }
+    }
+    return $filtered;
+}
+
 function build_session_bye_notes(
     array $pairs,
     int $courtCount,
@@ -749,11 +897,16 @@ function build_mexicano_pairs_for_round(array $orderedMembers, int $courtCount):
     if (count($orderedMembers) < 4) {
         return [];
     }
-    $maxPlayers = intdiv(count($orderedMembers), 4) * 4;
-    if ($maxPlayers < 4) {
+    $matchesPerBlock = (int)ceil(count($orderedMembers) / 4);
+    if ($matchesPerBlock <= 0) {
         return [];
     }
-    $active = array_slice($orderedMembers, 0, $maxPlayers);
+    $slotsNeeded = $matchesPerBlock * 4;
+    $active = [];
+    $memberCount = count($orderedMembers);
+    for ($i = 0; $i < $slotsNeeded; $i++) {
+        $active[] = (string)$orderedMembers[$i % $memberCount];
+    }
     $pairs = [];
     for ($i = 0; $i < count($active); $i += 4) {
         $chunk = array_slice($active, $i, 4);
@@ -825,16 +978,36 @@ function select_mexicano_active_players(array $members, array $playedCounts, int
     }, $members), static function (string $name): bool {
         return $name !== '';
     })));
-    $maxPlayers = intdiv(count($members), 4) * 4;
-    if ($maxPlayers < 4) {
+    if (count($members) < 4) {
         return ['players' => [], 'mode' => 'ranking'];
     }
-    $orderedMembers = sort_mexicano_members_by_ranking($members, $rankingStats);
-    return ['players' => array_slice($orderedMembers, 0, $maxPlayers), 'mode' => 'ranking'];
+    usort($members, static function (string $x, string $y) use ($playedCounts, $rankingStats): int {
+        $playedX = (int)($playedCounts[$x] ?? 0);
+        $playedY = (int)($playedCounts[$y] ?? 0);
+        if ($playedX !== $playedY) {
+            // Ensure players with fewer played matches are scheduled first.
+            return $playedX <=> $playedY;
+        }
+        $px = (int)($rankingStats[$x]['point_total'] ?? 0);
+        $py = (int)($rankingStats[$y]['point_total'] ?? 0);
+        if ($px !== $py) {
+            return $py <=> $px;
+        }
+        $dx = (int)($rankingStats[$x]['point_diff'] ?? 0);
+        $dy = (int)($rankingStats[$y]['point_diff'] ?? 0);
+        if ($dx !== $dy) {
+            return $dy <=> $dx;
+        }
+        return strcmp($x, $y);
+    });
+    return ['players' => $members, 'mode' => 'played_then_ranking'];
 }
 
 function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int $adminId, string $label = ''): array {
     if ($sourceRound <= 0) {
+        return [0, 0];
+    }
+    if ($type === 'Mexicano' && is_tournament_completed($db, $type, $label)) {
         return [0, 0];
     }
 
@@ -925,6 +1098,14 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
         $playedCounts = (array)($memberStats['played'] ?? []);
         $ranking = build_player_ranking_stats($db, 'Mexicano', $label);
         if (count($memberPool) < 4) {
+            return [0, 0];
+        }
+        $blockSpan = mexicano_block_round_span(count($memberPool), $configuredCourtCount);
+        if (($sourceRound % $blockSpan) !== 0) {
+            return [0, 0];
+        }
+        $blockStart = $sourceRound - $blockSpan + 1;
+        if (!are_rounds_completed($db, $type, $blockStart, $sourceRound, $label)) {
             return [0, 0];
         }
         $selection = select_mexicano_active_players($memberPool, $playedCounts, $configuredCourtCount, $ranking);
@@ -1140,6 +1321,9 @@ function auto_sync_mexicano_rounds(PDO $db, int $adminId): void {
         if (!$roundMap) {
             continue;
         }
+        if (is_tournament_completed($db, 'Mexicano', (string)$label)) {
+            continue;
+        }
         krsort($roundMap, SORT_NUMERIC);
         $latestRound = (int)array_key_first($roundMap);
         $latestRows = (array)($roundMap[$latestRound] ?? []);
@@ -1191,6 +1375,25 @@ try {
     );
 } catch (Throwable $e) {
     $flash['error'] = 'Gagal menyiapkan tabel competition.';
+}
+
+try {
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS competition_tournament_states (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            competition_type VARCHAR(20) NOT NULL,
+            tournament_label VARCHAR(160) NOT NULL,
+            is_completed TINYINT(1) NOT NULL DEFAULT 0,
+            completed_at DATETIME NULL,
+            completed_by_admin_id INT NULL,
+            winner_name VARCHAR(150) NULL,
+            winner_point_total INT NULL,
+            winner_point_diff INT NULL,
+            updated_at DATETIME NOT NULL,
+            UNIQUE KEY uq_competition_tournament (competition_type, tournament_label)
+        )"
+    );
+} catch (Throwable $e) {
 }
 
 try {
@@ -1256,6 +1459,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $savedLabel = build_competition_label_from_title($savedType, (string)($savedGame['game_title'] ?? ''));
                 if ($savedType === '') {
                     $flash['error'] = 'Game tidak ditemukan.';
+                } elseif ($savedType === 'Mexicano' && is_tournament_completed($db, $savedType, $savedLabel)) {
+                    $flash['error'] = 'Tournament Mexicano ini sudah selesai.';
                 } elseif ($savedType === 'Mexicano' && !is_previous_round_completed($db, $savedType, $savedRound, $savedLabel)) {
                     $flash['error'] = 'Round ' . $savedRound . ' belum bisa diinput sebelum Round ' . ($savedRound - 1) . ' selesai.';
                 }
@@ -1282,6 +1487,135 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'ok' => $flash['error'] === '',
                 'message' => $flash['error'] !== '' ? $flash['error'] : $flash['success'],
                 'round_synced' => $roundSynced,
+            ]);
+        }
+    } elseif ($action === 'complete_tournament') {
+        $type = normalize_competition_type((string)($_POST['competition_type'] ?? ''));
+        $label = trim((string)($_POST['tournament_label'] ?? ''));
+        if ($type !== 'Mexicano') {
+            $flash['error'] = 'Hanya tournament Mexicano yang bisa ditandai selesai.';
+        } elseif ($label === '') {
+            $flash['error'] = 'Label tournament tidak valid.';
+        } elseif (is_tournament_completed($db, $type, $label)) {
+            $flash['error'] = 'Tournament ini sudah ditandai selesai.';
+        } else {
+            try {
+                $fetchStmt = $db->prepare(
+                    "SELECT id, game_title, player_a_name, player_b_name, score_a, score_b, notes
+                     FROM competition_games
+                     WHERE competition_type = ?"
+                );
+                $fetchStmt->execute([$type]);
+                $rows = filter_rows_by_competition_label($fetchStmt->fetchAll(PDO::FETCH_ASSOC), $type, $label);
+                if (!$rows) {
+                    $flash['error'] = 'Tournament tidak ditemukan.';
+                } else {
+                    $rowsForLeaderboard = [];
+                    $pendingGameIds = [];
+                    foreach ($rows as $row) {
+                        if (has_valid_game_score($row)) {
+                            $rowsForLeaderboard[] = $row;
+                            continue;
+                        }
+                        $scoreASet = isset($row['score_a']) && $row['score_a'] !== null;
+                        $scoreBSet = isset($row['score_b']) && $row['score_b'] !== null;
+                        if ($scoreASet || $scoreBSet) {
+                            $flash['error'] = 'Masih ada match dengan skor parsial/invalid. Rapikan dulu sebelum selesai.';
+                            break;
+                        }
+                        $idVal = (int)($row['id'] ?? 0);
+                        if ($idVal > 0) {
+                            $pendingGameIds[] = $idVal;
+                        }
+                    }
+                    if ($flash['error'] === '' && !$rowsForLeaderboard) {
+                        $flash['error'] = 'Belum ada skor valid untuk menentukan juara.';
+                    }
+                    if ($flash['error'] === '') {
+                        $seedPlayers = [];
+                        foreach ($rowsForLeaderboard as $row) {
+                            foreach (array_merge(
+                                split_team_members((string)($row['player_a_name'] ?? '')),
+                                split_team_members((string)($row['player_b_name'] ?? '')),
+                                extract_bye_members_from_notes((string)($row['notes'] ?? ''))
+                            ) as $member) {
+                                $name = trim((string)$member);
+                                if ($name !== '' && strcasecmp($name, 'bye') !== 0 && strcasecmp($name, 'tbd') !== 0) {
+                                    $seedPlayers[$name] = true;
+                                }
+                            }
+                        }
+                        $standings = build_standings_from_games($rowsForLeaderboard, array_keys($seedPlayers));
+                        if (!$standings) {
+                            $flash['error'] = 'Leaderboard belum tersedia untuk menentukan pemenang.';
+                        } else {
+                            $playedMap = [];
+                            foreach ($standings as $standingRow) {
+                                $playerName = trim((string)($standingRow['name'] ?? ''));
+                                if ($playerName === '') {
+                                    continue;
+                                }
+                                $playedMap[$playerName] = (int)($standingRow['played'] ?? 0);
+                            }
+                            foreach (array_keys($seedPlayers) as $seedNameRaw) {
+                                $seedName = trim((string)$seedNameRaw);
+                                if ($seedName === '' || strcasecmp($seedName, 'bye') === 0 || strcasecmp($seedName, 'tbd') === 0) {
+                                    continue;
+                                }
+                                if ((int)($playedMap[$seedName] ?? 0) <= 0) {
+                                    $flash['error'] = 'Belum bisa selesai: masih ada peserta yang belum punya skor main.';
+                                    break;
+                                }
+                            }
+                        }
+                        if ($flash['error'] === '') {
+                            $winner = (array)$standings[0];
+                            $winnerName = trim((string)($winner['name'] ?? ''));
+                            $winnerTotal = (int)($winner['point_total'] ?? 0);
+                            $winnerDiff = (int)($winner['point_diff'] ?? 0);
+                            $now = date('Y-m-d H:i:s');
+                            $adminId = (int)($_SESSION['admin_id'] ?? 0);
+                            $upsert = $db->prepare(
+                                "INSERT INTO competition_tournament_states (
+                                    competition_type, tournament_label, is_completed, completed_at, completed_by_admin_id,
+                                    winner_name, winner_point_total, winner_point_diff, updated_at
+                                 ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
+                                 ON DUPLICATE KEY UPDATE
+                                    is_completed = VALUES(is_completed),
+                                    completed_at = VALUES(completed_at),
+                                    completed_by_admin_id = VALUES(completed_by_admin_id),
+                                    winner_name = VALUES(winner_name),
+                                    winner_point_total = VALUES(winner_point_total),
+                                    winner_point_diff = VALUES(winner_point_diff),
+                                    updated_at = VALUES(updated_at)"
+                            );
+                            $upsert->execute([
+                                $type,
+                                $label,
+                                $now,
+                                $adminId > 0 ? $adminId : null,
+                                $winnerName !== '' ? $winnerName : null,
+                                $winnerTotal,
+                                $winnerDiff,
+                                $now,
+                            ]);
+                            if ($pendingGameIds) {
+                                $placeholders = implode(',', array_fill(0, count($pendingGameIds), '?'));
+                                $deletePending = $db->prepare("DELETE FROM competition_games WHERE id IN ($placeholders)");
+                                $deletePending->execute($pendingGameIds);
+                            }
+                            $flash['success'] = 'Tournament selesai. Juara: ' . ($winnerName !== '' ? $winnerName : '-');
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                $flash['error'] = 'Gagal menyelesaikan tournament.';
+            }
+        }
+        if ($ajaxRequest) {
+            respond_json([
+                'ok' => $flash['error'] === '',
+                'message' => $flash['error'] !== '' ? $flash['error'] : $flash['success'],
             ]);
         }
     } elseif ($action === 'delete_tournament') {
@@ -1349,12 +1683,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $attendees = fetch_competition_attendees($db);
             if (count($attendees) < 4) {
                 $flash['error'] = 'Attendee accepted belum cukup untuk format team (minimal 4 orang).';
-            } elseif (count($attendees) % 2 !== 0) {
-                $flash['error'] = 'Jumlah attendee harus genap untuk format team 2 orang.';
+            } elseif ($type === 'Americano' && count($attendees) % 2 !== 0) {
+                $flash['error'] = 'Americano membutuhkan jumlah pemain genap.';
             } elseif ($type === 'Americano' && count($attendees) % 4 !== 0) {
                 $flash['error'] = 'Americano membutuhkan jumlah pemain kelipatan 4 agar semua pemain bermain di setiap ronde.';
-            } elseif ($courtCount > intdiv(count($attendees), 4)) {
-                $flash['error'] = 'Jumlah court terlalu banyak untuk total pemain. Maksimal court aktif: ' . (int)intdiv(count($attendees), 4) . '.';
+            } else {
+                $maxCourtActive = ($type === 'Mexicano')
+                    ? (int)ceil(count($attendees) / 4)
+                    : (int)intdiv(count($attendees), 4);
+                $maxCourtActive = max(1, $maxCourtActive);
+                if ($courtCount > $maxCourtActive) {
+                    $flash['error'] = 'Jumlah court terlalu banyak untuk total pemain. Maksimal court aktif: ' . $maxCourtActive . '.';
+                }
+            }
+            if ($flash['error'] !== '') {
+                // validation message already set
             } else {
                 try {
                     $insert = $db->prepare(
@@ -1366,6 +1709,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                     $created = 0;
                     $label = $titlePrefix !== '' ? $titlePrefix : $type;
+                    if ($type === 'Mexicano') {
+                        try {
+                            $resetState = $db->prepare(
+                                "INSERT INTO competition_tournament_states (
+                                    competition_type, tournament_label, is_completed, completed_at, completed_by_admin_id,
+                                    winner_name, winner_point_total, winner_point_diff, updated_at
+                                 ) VALUES (?, ?, 0, NULL, NULL, NULL, NULL, NULL, ?)
+                                 ON DUPLICATE KEY UPDATE
+                                    is_completed = 0,
+                                    completed_at = NULL,
+                                    completed_by_admin_id = NULL,
+                                    winner_name = NULL,
+                                    winner_point_total = NULL,
+                                    winner_point_diff = NULL,
+                                    updated_at = VALUES(updated_at)"
+                            );
+                            $resetState->execute([$type, $label, date('Y-m-d H:i:s')]);
+                        } catch (Throwable $e) {
+                        }
+                    }
                     if ($type === 'Americano') {
                         shuffle($attendees);
                         $schedule = build_americano_full_rounds($attendees, $courtCount);
@@ -1460,6 +1823,7 @@ try {
 
 $attendeeNames = fetch_competition_attendees($db);
 $registeredAttendeeCount = count($attendeeNames);
+$tournamentStateMap = fetch_tournament_state_map($db);
 
 $tournaments = [];
 $recentCustomLabelByType = ['Americano' => '', 'Mexicano' => ''];
@@ -1497,6 +1861,13 @@ foreach ($gamesByIdAsc as $row) {
             'updated_ts' => 0,
             'rounds' => [],
             'standings' => [],
+            'is_completed' => false,
+            'completed_at' => '',
+            'winner_name' => '',
+            'winner_point_total' => 0,
+            'winner_point_diff' => 0,
+            'all_scored' => false,
+            'can_complete' => false,
         ];
     }
     $tournaments[$key]['games'][] = $row;
@@ -1560,11 +1931,67 @@ foreach ($tournaments as $key => $tournament) {
     }
     ksort($rounds, SORT_NUMERIC);
     $seedPlayers = array_values((array)($tournament['players'] ?? []));
-    $standingRows = build_standings_from_games($gamesRows, $seedPlayers);
+    $tournamentType = normalize_competition_type((string)($tournament['type'] ?? ''));
+    $gamesForStandings = $gamesRows;
+    if ($tournamentType === 'Mexicano') {
+        $gamesForStandings = filter_mexicano_games_for_completed_blocks($gamesRows, $seedPlayers);
+    }
+    $standingRows = build_standings_from_games($gamesForStandings, $seedPlayers);
 
     $tournaments[$key]['games'] = $gamesRows;
     $tournaments[$key]['rounds'] = $rounds;
     $tournaments[$key]['standings'] = $standingRows;
+    $stateKey = build_tournament_state_key((string)($tournament['type'] ?? ''), (string)($tournament['label'] ?? ''));
+    $stateRow = (array)($tournamentStateMap[$stateKey] ?? []);
+    $allScored = !empty($gamesRows);
+    $hasAnyValidScore = false;
+    $hasPartialScore = false;
+    $playedByMember = [];
+    foreach ($gamesRows as $gameRow) {
+        if (has_valid_game_score($gameRow)) {
+            $hasAnyValidScore = true;
+            foreach (array_merge(
+                split_team_members((string)($gameRow['player_a_name'] ?? '')),
+                split_team_members((string)($gameRow['player_b_name'] ?? ''))
+            ) as $memberName) {
+                $cleanMember = trim((string)$memberName);
+                if ($cleanMember === '' || strcasecmp($cleanMember, 'bye') === 0 || strcasecmp($cleanMember, 'tbd') === 0) {
+                    continue;
+                }
+                $playedByMember[$cleanMember] = (int)($playedByMember[$cleanMember] ?? 0) + 1;
+            }
+            continue;
+        }
+        $scoreASet = isset($gameRow['score_a']) && $gameRow['score_a'] !== null;
+        $scoreBSet = isset($gameRow['score_b']) && $gameRow['score_b'] !== null;
+        if ($scoreASet || $scoreBSet) {
+            $hasPartialScore = true;
+            $allScored = false;
+        } else {
+            $allScored = false;
+        }
+    }
+    $isMexicano = ($tournamentType === 'Mexicano');
+    $isCompleted = $isMexicano && ((bool)($stateRow['is_completed'] ?? false));
+    $allPlayersScored = !empty($seedPlayers);
+    foreach ($seedPlayers as $seedPlayerName) {
+        $seedName = trim((string)$seedPlayerName);
+        if ($seedName === '' || strcasecmp($seedName, 'bye') === 0 || strcasecmp($seedName, 'tbd') === 0) {
+            continue;
+        }
+        if ((int)($playedByMember[$seedName] ?? 0) <= 0) {
+            $allPlayersScored = false;
+            break;
+        }
+    }
+    $tournaments[$key]['is_completed'] = $isCompleted;
+    $tournaments[$key]['completed_at'] = trim((string)($stateRow['completed_at'] ?? ''));
+    $tournaments[$key]['winner_name'] = trim((string)($stateRow['winner_name'] ?? ''));
+    $tournaments[$key]['winner_point_total'] = (int)($stateRow['winner_point_total'] ?? 0);
+    $tournaments[$key]['winner_point_diff'] = (int)($stateRow['winner_point_diff'] ?? 0);
+    $tournaments[$key]['all_scored'] = $allScored;
+    $tournaments[$key]['all_players_scored'] = $allPlayersScored;
+    $tournaments[$key]['can_complete'] = $isMexicano && !$isCompleted && $hasAnyValidScore && !$hasPartialScore && $allPlayersScored && !empty($standingRows);
 }
 
 $tournamentList = array_values($tournaments);
@@ -1676,6 +2103,11 @@ $extraHead = <<<HTML
   .live-status.ok{color:#18633a}
   .live-status.error{color:#b43636}
   .type-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:4px 0 14px}
+  .tournament-status-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.25px;text-transform:uppercase}
+  .tournament-status-chip.ready{background:#e8f7ee;border:1px solid #b7e6c4;color:#18633a}
+  .tournament-status-chip.waiting{background:#eef4ff;border:1px solid #d3e3ff;color:#1b4d8f}
+  .tournament-complete-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tournament-complete-form .btn{min-height:34px;padding:7px 12px;border-radius:10px;font-weight:800}
   .standing-wrap{overflow-x:auto;margin-top:10px}
   .standing-wrap{cursor:grab;user-select:none}
   .standing-wrap.is-dragging{cursor:grabbing}
@@ -1794,10 +2226,11 @@ render_header([
               $label = (string)($tournament['label'] ?? $type);
               $playerCount = count((array)($tournament['players'] ?? []));
               $updatedAt = trim((string)($tournament['updated_at'] ?? ''));
+              $isCompletedCard = (bool)($tournament['is_completed'] ?? false);
             ?>
             <div class="tournament-card" data-open-tournament="<?= h($tourKey) ?>" data-game-type="<?= h($type) ?>" role="button" tabindex="0" aria-label="Buka detail <?= h($label) ?>">
               <div class="tournament-name"><?= h($label) ?></div>
-              <div class="tournament-meta"><?= (int)$playerCount ?> players</div>
+              <div class="tournament-meta"><?= (int)$playerCount ?> players<?= $type === 'Mexicano' ? (' • ' . ($isCompletedCard ? 'Selesai' : 'Berjalan')) : '' ?></div>
               <div class="tournament-updated">Updated <?= $updatedAt !== '' ? h(date('d M Y H:i', strtotime($updatedAt))) : '-' ?></div>
               <div class="tournament-card-actions">
                 <form method="post" data-delete-tournament-form>
@@ -1866,6 +2299,13 @@ render_header([
                   $tourKey = (string)($tournament['key'] ?? '');
                   $typeGames = (array)($tournament['games'] ?? []);
                   $roundGroups = (array)($tournament['rounds'] ?? []);
+                  $tourLabel = (string)($tournament['label'] ?? $type);
+                  $isTournamentCompleted = (bool)($tournament['is_completed'] ?? false);
+                  $canCompleteTournament = (bool)($tournament['can_complete'] ?? false);
+                  $allPlayersScored = (bool)($tournament['all_players_scored'] ?? false);
+                  $winnerName = trim((string)($tournament['winner_name'] ?? ''));
+                  $winnerTotal = (int)($tournament['winner_point_total'] ?? 0);
+                  $winnerDiff = (int)($tournament['winner_point_diff'] ?? 0);
                 ?>
                 <div data-tournament-panel="<?= h($tourKey) ?>" style="display:none;">
                 <?php
@@ -1875,8 +2315,28 @@ render_header([
                   }
                 ?>
                 <div class="type-head">
-                  <h3 style="margin:0;"><?= h((string)($tournament['label'] ?? $type)) ?> <small style="font-weight:400;color:#5a6b86;"><?= h($type) ?> • <?= count($typeGames) ?> match</small></h3>
+                  <h3 style="margin:0;"><?= h($tourLabel) ?> <small style="font-weight:400;color:#5a6b86;"><?= h($type) ?> • <?= count($typeGames) ?> match</small></h3>
+                  <?php if ($type === 'Mexicano'): ?>
+                    <?php if ($isTournamentCompleted): ?>
+                      <span class="tournament-status-chip ready">Selesai</span>
+                    <?php elseif ($canCompleteTournament): ?>
+                      <form method="post" data-complete-tournament-form class="tournament-complete-form">
+                        <input type="hidden" name="competition_action" value="complete_tournament">
+                        <input type="hidden" name="competition_type" value="Mexicano">
+                        <input type="hidden" name="tournament_label" value="<?= h($tourLabel) ?>">
+                        <button class="btn primary small" type="submit">Selesaikan Tournament</button>
+                      </form>
+                    <?php endif; ?>
+                  <?php endif; ?>
                 </div>
+                <?php if ($type === 'Mexicano' && $isTournamentCompleted): ?>
+                  <p class="note" style="margin:0 0 12px;">
+                    Tournament selesai.
+                    <?php if ($winnerName !== ''): ?>
+                      Juara: <strong><?= h($winnerName) ?></strong> (Total <?= (int)$winnerTotal ?>, Diff <?= (int)$winnerDiff ?>).
+                    <?php endif; ?>
+                  </p>
+                <?php endif; ?>
                 <?php if (!$typeGames): ?>
                   <p class="admin-sub" style="margin:0;">Belum ada match <?= h($type) ?>.</p>
                 <?php else: ?>
@@ -1950,7 +2410,7 @@ render_header([
                                 if (strtoupper($displayB) === 'TBD') { $displayB = 'BYE'; }
                                 $isLocked = ($displayA === 'BYE' || $displayB === 'BYE');
                                 $isCompleted = ($sa !== null && $sb !== null && in_array(((int)$sa + (int)$sb), PADEL_ALLOWED_TOTAL_POINTS, true));
-                                $isScoreInputDisabled = ($isLocked || $isCompleted || !$isRoundUnlocked);
+                                $isScoreInputDisabled = ($isLocked || $isCompleted || !$isRoundUnlocked || $isTournamentCompleted);
                                 if ($isLocked) {
                                     $sa = null;
                                     $sb = null;
@@ -2502,6 +2962,29 @@ render_header([
           });
       });
     });
+
+    boardRoot.querySelectorAll('[data-complete-tournament-form]').forEach(function (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        if (!window.confirm('Selesaikan tournament Mexicano ini? Setelah selesai, input skor akan dikunci.')) return;
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        postCompetitionForm(form)
+          .then(function (data) {
+            if (!data || !data.ok) {
+              throw new Error((data && data.message) ? data.message : 'Gagal menyelesaikan tournament.');
+            }
+            showToast(data.message || 'Tournament selesai.', 'success', 4500);
+            return refreshCompetitionBoard();
+          })
+          .catch(function (error) {
+            showToast(error && error.message ? error.message : 'Terjadi kesalahan saat menyelesaikan tournament.', 'error', 5000);
+          })
+          .finally(function () {
+            if (btn) btn.disabled = false;
+          });
+      });
+    });
   }
 
   var board = document.querySelector('[data-live-board]');
@@ -2521,7 +3004,9 @@ render_header([
     var courts = parseInt(courtEl.value || '1', 10);
     if (!Number.isFinite(courts) || courts < 1) courts = 1;
     if (courts > 12) courts = 12;
-    var maxMatchesPerLogicalRound = Math.floor(acceptedPlayerCount / 4);
+    var maxMatchesPerLogicalRound = (type === 'Mexicano')
+      ? Math.ceil(acceptedPlayerCount / 4)
+      : Math.floor(acceptedPlayerCount / 4);
     if (maxMatchesPerLogicalRound <= 0) {
       infoEl.textContent = 'Attendee belum cukup. Minimal 4 pemain untuk 1 match.';
       return;
