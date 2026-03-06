@@ -1668,6 +1668,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $titlePrefix = trim((string)($_POST['game_title'] ?? ''));
         $gameDateRaw = trim((string)($_POST['game_date'] ?? ''));
         $matchTotalPoints = isset($_POST['match_total_points']) ? (int)$_POST['match_total_points'] : 0;
+        $playerCountRaw = trim((string)($_POST['player_count'] ?? ''));
+        $playerCount = ctype_digit($playerCountRaw) ? (int)$playerCountRaw : 0;
         $courtCount = normalize_court_count($_POST['court_count'] ?? 1);
         $adminId = (int)($_SESSION['admin_id'] ?? 0);
 
@@ -1681,8 +1683,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash['error'] = 'Format tanggal tidak valid.';
         } else {
             $attendees = fetch_competition_attendees($db);
-            if (count($attendees) < 4) {
+            $availableCount = count($attendees);
+            if ($availableCount < 4) {
                 $flash['error'] = 'Attendee accepted belum cukup untuk format team (minimal 4 orang).';
+            } elseif ($playerCount > 0 && ($playerCount < 4 || $playerCount > $availableCount)) {
+                $flash['error'] = 'Jumlah pemain tidak valid. Isi 4 sampai ' . $availableCount . ' pemain.';
+            } else {
+                $effectivePlayerCount = $playerCount > 0 ? $playerCount : $availableCount;
+                shuffle($attendees);
+                if ($effectivePlayerCount < $availableCount) {
+                    $attendees = array_slice($attendees, 0, $effectivePlayerCount);
+                }
+            }
+            if ($flash['error'] !== '') {
+                // validation message already set
             } elseif ($type === 'Americano' && count($attendees) % 2 !== 0) {
                 $flash['error'] = 'Americano membutuhkan jumlah pemain genap.';
             } elseif ($type === 'Americano' && count($attendees) % 4 !== 0) {
@@ -1730,7 +1744,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                     if ($type === 'Americano') {
-                        shuffle($attendees);
                         $schedule = build_americano_full_rounds($attendees, $courtCount);
                         if (!$schedule || empty($schedule['matches'])) {
                             throw new RuntimeException('Gagal menyusun jadwal Americano.');
@@ -1750,6 +1763,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $created++;
                         }
                         $flash['success'] = 'Americano: '
+                            . count($attendees) . ' pemain random, '
                             . (int)($schedule['logical_rounds'] ?? 0) . ' ronde logika, '
                             . (int)($schedule['sesi_per_round'] ?? 0) . ' sesi/ronde, total '
                             . (int)($schedule['total_sesi'] ?? 0) . ' sesi, '
@@ -1779,7 +1793,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         $estimation = calculate_round_estimation(count($attendees), $courtCount, $type);
                         $wavesPerRound = (int)($estimation['waves_per_logical_round'] ?? 0);
-                        $flash['success'] = 'Berhasil generate batch awal Mexicano (' . $created . ' match) di ' . $courtCount . ' court. Per ronde butuh ' . max(1, $wavesPerRound) . ' wave.';
+                        $flash['success'] = 'Berhasil generate batch awal Mexicano (' . $created . ' match) dengan ' . count($attendees) . ' pemain random di ' . $courtCount . ' court. Per ronde butuh ' . max(1, $wavesPerRound) . ' wave.';
                     }
                 } catch (Throwable $e) {
                     $flash['error'] = 'Gagal menambahkan jadwal competition.';
@@ -2027,6 +2041,11 @@ $extraHead = <<<HTML
   .competition-card--full{grid-column:1 / -1}
   .competition-form{display:grid;gap:10px}.competition-form label{font-size:12px;color:#415a80;font-weight:700}
   .competition-form input,.competition-form select{width:100%;border-radius:10px;border:1px solid #c6d4ea;padding:10px 11px;background:#fff}
+  .create-step-hint{font-size:12px;font-weight:700;color:#1b4d8f;background:#eef4ff;border:1px solid #d3e3ff;border-radius:10px;padding:8px 10px;margin:0}
+  .create-progress-body[hidden]{display:none!important}
+  .create-progress-body{display:grid;gap:10px}
+  .create-step-block[hidden]{display:none!important}
+  .create-step-block{display:grid;gap:10px;animation:createStepReveal .2s ease-out}
   .alert{margin-bottom:14px}
   .alert.success{background:#e8f8ee;border:1px solid #b7e6c4;color:#18633a}
   .alert.success i{color:#18633a}
@@ -2141,13 +2160,22 @@ $extraHead = <<<HTML
   .standing-panel-title{margin:0 0 8px;font-size:12px;font-weight:900;color:#334155;text-transform:uppercase;letter-spacing:.45px}
   .round-panel-title{margin:0 0 14px;font-size:48px;font-weight:900;color:#0f172a;letter-spacing:.2px;line-height:1}
   .game-input-trigger{width:100%;min-height:46px}
-  .game-input-modal{position:fixed;inset:0;background:rgba(10,20,40,.38);z-index:5200;display:none;align-items:center;justify-content:center;padding:18px}
+  .game-input-modal{position:fixed;inset:0;background:rgba(10,20,40,.32);backdrop-filter:blur(2px);z-index:5200;display:none;align-items:center;justify-content:center;padding:18px}
   .game-input-modal.is-open{display:flex}
-  .game-input-modal-card{width:min(620px,100%);max-height:92vh;display:grid;grid-template-rows:auto minmax(0,1fr);border-radius:14px;background:#fff;border:1px solid #d4e0f2;box-shadow:0 18px 38px rgba(10,20,40,.24);overflow:hidden}
-  .game-input-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #d9e3f4;background:#f7faff}
-  .game-input-modal-title{margin:0;font-size:17px;color:#0f294d;font-weight:800}
-  .game-input-modal-close{border:1px solid #c6d4ea;background:#fff;color:#163966;border-radius:10px;min-width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;line-height:1}
-  .game-input-modal-body{padding:12px 14px 14px;overflow:auto}
+  .game-input-modal-card{width:min(680px,100%);max-height:92vh;display:grid;grid-template-rows:auto minmax(0,1fr);border-radius:22px;background:linear-gradient(180deg,#ffffff 0%,#fbf7f8 100%);border:1px solid #eadfe2;box-shadow:0 20px 52px rgba(29,20,14,.22);overflow:hidden}
+  .game-input-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px;border-bottom:1px solid #e9dfe2;background:#fff}
+  .game-input-modal-title{margin:0;font-size:32px;line-height:1.08;color:#2d1d13;font-weight:900;letter-spacing:-.4px}
+  .game-input-modal-close{border:1px solid #ddd2d6;background:#fff;color:#4a3324;border-radius:14px;min-width:42px;height:42px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;line-height:1;transition:.18s ease}
+  .game-input-modal-close:hover{background:#f7f1f3;border-color:#cdbdc4}
+  .game-input-modal-body{padding:16px 16px 18px;overflow:auto}
+  .game-input-modal-body .competition-form{gap:12px}
+  .game-input-modal-body .competition-form label{font-size:12px;color:#4c3324;font-weight:900;letter-spacing:.18px}
+  .game-input-modal-body .competition-form input,.game-input-modal-body .competition-form select{height:58px;border-radius:999px;border:1px solid #e5dadd;background:#f7f3f4;color:#352317;padding:0 18px;font-size:16px;font-weight:700;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
+  .game-input-modal-body .competition-form input::placeholder{color:#b6a8ad;font-weight:600}
+  .game-input-modal-body .competition-form input:focus,.game-input-modal-body .competition-form select:focus{outline:none;border-color:#aac47b;box-shadow:0 0 0 3px rgba(170,196,123,.24);background:#fff}
+  .game-input-modal-body .competition-form .btn.primary{min-height:56px;border-radius:999px;font-size:20px;font-weight:900}
+  .game-input-modal-body .note{border-radius:14px;background:#f3eef0;border:1px solid #e6dce0;color:#5a4251}
+  .game-input-modal-body .create-step-hint{border-radius:14px;background:#f3eef0;border:1px solid #e6dce0;color:#5a4251}
   .toast-stack{position:fixed;top:18px;right:18px;z-index:9999;display:grid;gap:10px;max-width:min(420px,calc(100vw - 24px))}
   .toast-item{display:flex;align-items:flex-start;gap:10px;border-radius:12px;padding:11px 12px;box-shadow:0 10px 24px rgba(10,20,40,.18);border:1px solid transparent;background:#fff;animation:toastIn .18s ease-out}
   .toast-item.success{border-color:#9ad5b0;background:#e9f8ef;color:#14532d}
@@ -2156,7 +2184,16 @@ $extraHead = <<<HTML
   .toast-msg{font-size:13px;font-weight:700;line-height:1.45}
   .toast-close{border:0;background:transparent;color:inherit;cursor:pointer;padding:0 2px;font-size:16px;line-height:1;opacity:.72}
   .toast-close:hover{opacity:1}
+  .alert-modal{position:fixed;inset:0;background:rgba(10,20,40,.42);z-index:10020;display:none;align-items:center;justify-content:center;padding:16px}
+  .alert-modal.is-open{display:flex}
+  .alert-modal-card{width:min(480px,100%);background:#fff;border:1px solid #d8e3f4;border-radius:14px;box-shadow:0 20px 42px rgba(10,20,40,.24);padding:16px}
+  .alert-modal-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .alert-modal-icon{width:32px;height:32px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:16px;background:#eef4ff;color:#1b4d8f}
+  .alert-modal-title{margin:0;font-size:16px;font-weight:800;color:#0f294d}
+  .alert-modal-message{margin:0;font-size:14px;line-height:1.55;color:#334155}
+  .alert-modal-actions{margin-top:14px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
   @keyframes toastIn{from{opacity:0;transform:translateY(-5px) translateX(10px)}to{opacity:1;transform:translateY(0) translateX(0)}}
+  @keyframes createStepReveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
   @media (max-width:980px){
     .competition-grid{grid-template-columns:1fr}
     .round-column{width:100%;min-width:100%}
@@ -2171,6 +2208,9 @@ $extraHead = <<<HTML
     .match-actions{justify-content:flex-start}
     .score-strip{justify-content:flex-start}
     .game-input-modal{padding:10px}
+    .game-input-modal-title{font-size:26px}
+    .game-input-modal-body .competition-form input,.game-input-modal-body .competition-form select{height:54px;font-size:15px}
+    .game-input-modal-body .competition-form .btn.primary{min-height:52px;font-size:18px}
   }
 </style>
 HTML;
@@ -2193,6 +2233,19 @@ render_header([
     </div>
 
     <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+    <div class="alert-modal" id="competitionAlertModal" aria-hidden="true">
+      <div class="alert-modal-card" role="dialog" aria-modal="true" aria-labelledby="competitionAlertTitle" aria-describedby="competitionAlertMessage">
+        <div class="alert-modal-head">
+          <span class="alert-modal-icon"><i class="bi bi-exclamation-circle"></i></span>
+          <h3 class="alert-modal-title" id="competitionAlertTitle">Konfirmasi</h3>
+        </div>
+        <p class="alert-modal-message" id="competitionAlertMessage">Lanjutkan aksi ini?</p>
+        <div class="alert-modal-actions">
+          <button type="button" class="btn ghost small" data-alert-cancel>Batal</button>
+          <button type="button" class="btn primary small" data-alert-ok>Ya, lanjut</button>
+        </div>
+      </div>
+    </div>
     <noscript>
       <?php if (!empty($flash['success'])): ?><div class="alert success"><i class="bi bi-check-circle"></i> <?= h($flash['success']) ?></div><?php endif; ?>
       <?php if (!empty($flash['error'])): ?><div class="alert error"><i class="bi bi-exclamation-triangle"></i> <?= h($flash['error']) ?></div><?php endif; ?>
@@ -2500,32 +2553,42 @@ render_header([
                     <option value="Mexicano">Mexicano</option>
                   </select>
                 </div>
-                <div>
-                  <label for="gameTitle">Label Prefix (Opsional)</label>
-                  <input id="gameTitle" name="game_title" type="text" maxlength="160" placeholder="Contoh: Week 1">
+                <p class="create-step-hint" data-create-step-hint>Pilih tipe game dulu untuk membuka pengaturan lanjutan.</p>
+                <div class="create-progress-body" data-create-progress-body hidden>
+                  <div class="create-step-block" data-step-block="name">
+                    <label for="gameTitle">Nama Game</label>
+                    <input id="gameTitle" name="game_title" type="text" maxlength="160" placeholder="Contoh: Week 1" required>
+                  </div>
+                  <div class="create-step-block" data-step-block="players" hidden>
+                    <label for="playerCount">Jumlah Pemain (Random)</label>
+                    <input id="playerCount" name="player_count" type="number" min="4" max="<?= max(4, (int)$registeredAttendeeCount) ?>" value="<?= max(4, (int)$registeredAttendeeCount) ?>" required>
+                  </div>
+                  <div class="create-step-block" data-step-block="total" hidden>
+                    <label for="matchTotalPoints">Total Poin Match</label>
+                    <select id="matchTotalPoints" name="match_total_points" required>
+                      <option value="">-- pilih total poin --</option>
+                      <?php foreach (PADEL_ALLOWED_TOTAL_POINTS as $tp): ?>
+                        <option value="<?= (int)$tp ?>"><?= (int)$tp ?> poin</option>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
+                  <div class="create-step-block" data-step-block="courts" hidden>
+                    <label for="courtCount">Jumlah Court Aktif</label>
+                    <input id="courtCount" name="court_count" type="number" min="1" max="12" value="1" required>
+                  </div>
+                  <div class="create-step-block" data-step-block="final" hidden>
+                    <div>
+                      <label for="gameDate">Tanggal Game (Opsional)</label>
+                      <input id="gameDate" name="game_date" type="date">
+                    </div>
+                    <p class="note" id="courtEstimatorText">
+                      Isi jumlah court untuk hitung ronde logika vs sesi eksekusi. Jika court kurang, sistem otomatis pecah jadi beberapa sesi per ronde.
+                    </p>
+                    <p class="note">Sistem akan memilih pemain secara acak dari attendee accepted sesuai jumlah yang kamu isi.</p>
+                    <p class="note">Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Leaderboard diurutkan dari total poin, lalu selisih poin. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
+                    <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
+                  </div>
                 </div>
-                <div>
-                  <label for="gameDate">Tanggal Game (Opsional)</label>
-                  <input id="gameDate" name="game_date" type="date">
-                </div>
-                <div>
-                  <label for="matchTotalPoints">Total Poin Match</label>
-                  <select id="matchTotalPoints" name="match_total_points" required>
-                    <option value="">-- pilih total poin --</option>
-                    <?php foreach (PADEL_ALLOWED_TOTAL_POINTS as $tp): ?>
-                      <option value="<?= (int)$tp ?>"><?= (int)$tp ?> poin</option>
-                    <?php endforeach; ?>
-                  </select>
-                </div>
-                <div>
-                  <label for="courtCount">Jumlah Court Aktif</label>
-                  <input id="courtCount" name="court_count" type="number" min="1" max="12" value="1" required>
-                </div>
-                <p class="note" id="courtEstimatorText">
-                  Isi jumlah court untuk hitung ronde logika vs sesi eksekusi. Jika court kurang, sistem otomatis pecah jadi beberapa sesi per ronde.
-                </p>
-                <p class="note">Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Leaderboard diurutkan dari total poin, lalu selisih poin. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
-                <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
               </form>
             </div>
           </div>
@@ -2541,9 +2604,59 @@ render_header([
   var activeGameFilter = 'all';
   var isTournamentModalOpen = false;
   var toastStack = document.getElementById('toastStack');
+  var alertModal = document.getElementById('competitionAlertModal');
+  var alertTitleEl = document.getElementById('competitionAlertTitle');
+  var alertMessageEl = document.getElementById('competitionAlertMessage');
+  var alertOkBtn = alertModal ? alertModal.querySelector('[data-alert-ok]') : null;
+  var alertCancelBtn = alertModal ? alertModal.querySelector('[data-alert-cancel]') : null;
   var acceptedPlayerCount = <?= (int)$registeredAttendeeCount ?>;
   var initialFlashSuccess = <?= json_encode((string)($flash['success'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   var initialFlashError = <?= json_encode((string)($flash['error'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+  function openAlertModal(options) {
+    options = options || {};
+    var message = String(options.message || '').trim();
+    var title = String(options.title || 'Konfirmasi').trim();
+    var okText = String(options.okText || 'Ya, lanjut').trim();
+    var cancelText = String(options.cancelText || 'Batal').trim();
+    if (!alertModal || !alertOkBtn || !alertCancelBtn) {
+      return Promise.resolve(false);
+    }
+    return new Promise(function (resolve) {
+      var done = false;
+      if (alertTitleEl) alertTitleEl.textContent = title || 'Konfirmasi';
+      if (alertMessageEl) alertMessageEl.textContent = message || 'Lanjutkan aksi ini?';
+      alertOkBtn.textContent = okText || 'Ya, lanjut';
+      alertCancelBtn.textContent = cancelText || 'Batal';
+      alertModal.classList.add('is-open');
+      alertModal.setAttribute('aria-hidden', 'false');
+      window.setTimeout(function () {
+        if (alertOkBtn) alertOkBtn.focus();
+      }, 0);
+
+      function closeModal(value) {
+        if (done) return;
+        done = true;
+        alertModal.classList.remove('is-open');
+        alertModal.setAttribute('aria-hidden', 'true');
+        alertOkBtn.removeEventListener('click', onOk);
+        alertCancelBtn.removeEventListener('click', onCancel);
+        alertModal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKeydown);
+        resolve(value);
+      }
+
+      function onOk() { closeModal(true); }
+      function onCancel() { closeModal(false); }
+      function onBackdrop(ev) { if (ev.target === alertModal) closeModal(false); }
+      function onKeydown(ev) { if (ev.key === 'Escape') closeModal(false); }
+
+      alertOkBtn.addEventListener('click', onOk);
+      alertCancelBtn.addEventListener('click', onCancel);
+      alertModal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKeydown);
+    });
+  }
 
   function getGameInputModal() {
     return document.querySelector('[data-game-input-modal]');
@@ -2916,22 +3029,29 @@ render_header([
     boardRoot.querySelectorAll('[data-delete-game-form]').forEach(function (form) {
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        if (!window.confirm('Hapus game ini?')) return;
-        var btn = form.querySelector('button[type="submit"]');
-        if (btn) btn.disabled = true;
-        postCompetitionForm(form)
-          .then(function (data) {
-            if (!data || !data.ok) {
-              throw new Error((data && data.message) ? data.message : 'Gagal menghapus game.');
-            }
-            showToast(data.message || 'Game berhasil dihapus.', 'success', 4500);
-            return refreshCompetitionBoard();
-          })
-          .catch(function (error) {
-            showToast(error && error.message ? error.message : 'Terjadi kesalahan saat menghapus game.', 'error', 5000);
-          })
-          .finally(function () {
-            if (btn) btn.disabled = false;
+        openAlertModal({
+          title: 'Konfirmasi Hapus',
+          message: 'Hapus game ini?',
+          okText: 'Hapus',
+          cancelText: 'Batal'
+        }).then(function (confirmed) {
+          if (!confirmed) return;
+          var btn = form.querySelector('button[type="submit"]');
+          if (btn) btn.disabled = true;
+          postCompetitionForm(form)
+            .then(function (data) {
+              if (!data || !data.ok) {
+                throw new Error((data && data.message) ? data.message : 'Gagal menghapus game.');
+              }
+              showToast(data.message || 'Game berhasil dihapus.', 'success', 4500);
+              return refreshCompetitionBoard();
+            })
+            .catch(function (error) {
+              showToast(error && error.message ? error.message : 'Terjadi kesalahan saat menghapus game.', 'error', 5000);
+            })
+            .finally(function () {
+              if (btn) btn.disabled = false;
+            });
           });
       });
     });
@@ -2943,22 +3063,29 @@ render_header([
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        if (!window.confirm('Hapus semua match di game ini?')) return;
-        var btn = form.querySelector('button[type="submit"]');
-        if (btn) btn.disabled = true;
-        postCompetitionForm(form)
-          .then(function (data) {
-            if (!data || !data.ok) {
-              throw new Error((data && data.message) ? data.message : 'Gagal menghapus game.');
-            }
-            showToast(data.message || 'Game berhasil dihapus.', 'success', 4500);
-            return refreshCompetitionBoard();
-          })
-          .catch(function (error) {
-            showToast(error && error.message ? error.message : 'Terjadi kesalahan saat menghapus game.', 'error', 5000);
-          })
-          .finally(function () {
-            if (btn) btn.disabled = false;
+        openAlertModal({
+          title: 'Konfirmasi Hapus',
+          message: 'Hapus semua match di game ini?',
+          okText: 'Hapus',
+          cancelText: 'Batal'
+        }).then(function (confirmed) {
+          if (!confirmed) return;
+          var btn = form.querySelector('button[type="submit"]');
+          if (btn) btn.disabled = true;
+          postCompetitionForm(form)
+            .then(function (data) {
+              if (!data || !data.ok) {
+                throw new Error((data && data.message) ? data.message : 'Gagal menghapus game.');
+              }
+              showToast(data.message || 'Game berhasil dihapus.', 'success', 4500);
+              return refreshCompetitionBoard();
+            })
+            .catch(function (error) {
+              showToast(error && error.message ? error.message : 'Terjadi kesalahan saat menghapus game.', 'error', 5000);
+            })
+            .finally(function () {
+              if (btn) btn.disabled = false;
+            });
           });
       });
     });
@@ -2966,22 +3093,29 @@ render_header([
     boardRoot.querySelectorAll('[data-complete-tournament-form]').forEach(function (form) {
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        if (!window.confirm('Selesaikan tournament Mexicano ini? Setelah selesai, input skor akan dikunci.')) return;
-        var btn = form.querySelector('button[type="submit"]');
-        if (btn) btn.disabled = true;
-        postCompetitionForm(form)
-          .then(function (data) {
-            if (!data || !data.ok) {
-              throw new Error((data && data.message) ? data.message : 'Gagal menyelesaikan tournament.');
-            }
-            showToast(data.message || 'Tournament selesai.', 'success', 4500);
-            return refreshCompetitionBoard();
-          })
-          .catch(function (error) {
-            showToast(error && error.message ? error.message : 'Terjadi kesalahan saat menyelesaikan tournament.', 'error', 5000);
-          })
-          .finally(function () {
-            if (btn) btn.disabled = false;
+        openAlertModal({
+          title: 'Selesaikan Tournament',
+          message: 'Selesaikan tournament Mexicano ini? Setelah selesai, input skor akan dikunci.',
+          okText: 'Selesaikan',
+          cancelText: 'Batal'
+        }).then(function (confirmed) {
+          if (!confirmed) return;
+          var btn = form.querySelector('button[type="submit"]');
+          if (btn) btn.disabled = true;
+          postCompetitionForm(form)
+            .then(function (data) {
+              if (!data || !data.ok) {
+                throw new Error((data && data.message) ? data.message : 'Gagal menyelesaikan tournament.');
+              }
+              showToast(data.message || 'Tournament selesai.', 'success', 4500);
+              return refreshCompetitionBoard();
+            })
+            .catch(function (error) {
+              showToast(error && error.message ? error.message : 'Terjadi kesalahan saat menyelesaikan tournament.', 'error', 5000);
+            })
+            .finally(function () {
+              if (btn) btn.disabled = false;
+            });
           });
       });
     });
@@ -2998,15 +3132,23 @@ render_header([
     var infoEl = createForm.querySelector('#courtEstimatorText');
     var typeEl = createForm.querySelector('[name=\"competition_type\"]');
     var courtEl = createForm.querySelector('[name=\"court_count\"]');
-    if (!infoEl || !typeEl || !courtEl) return;
+    var playerEl = createForm.querySelector('[name=\"player_count\"]');
+    if (!infoEl || !typeEl || !courtEl || !playerEl) return;
 
     var type = String(typeEl.value || '');
     var courts = parseInt(courtEl.value || '1', 10);
+    var selectedPlayers = parseInt(playerEl.value || String(acceptedPlayerCount), 10);
     if (!Number.isFinite(courts) || courts < 1) courts = 1;
     if (courts > 12) courts = 12;
+    if (!Number.isFinite(selectedPlayers)) selectedPlayers = acceptedPlayerCount;
+    if (selectedPlayers < 4) selectedPlayers = 4;
+    if (selectedPlayers > acceptedPlayerCount) selectedPlayers = acceptedPlayerCount;
+    if (String(playerEl.value || '') !== String(selectedPlayers)) {
+      playerEl.value = String(selectedPlayers);
+    }
     var maxMatchesPerLogicalRound = (type === 'Mexicano')
-      ? Math.ceil(acceptedPlayerCount / 4)
-      : Math.floor(acceptedPlayerCount / 4);
+      ? Math.ceil(selectedPlayers / 4)
+      : Math.floor(selectedPlayers / 4);
     if (maxMatchesPerLogicalRound <= 0) {
       infoEl.textContent = 'Attendee belum cukup. Minimal 4 pemain untuk 1 match.';
       return;
@@ -3016,24 +3158,78 @@ render_header([
     }
     var wavesPerLogicalRound = Math.ceil(maxMatchesPerLogicalRound / Math.max(1, courts));
     if (type === 'Americano') {
-      var logicalRounds = Math.max(1, acceptedPlayerCount - 1);
+      if ((selectedPlayers % 2) !== 0 || (selectedPlayers % 4) !== 0) {
+        infoEl.textContent = 'Americano butuh jumlah pemain kelipatan 4. Sekarang: ' + selectedPlayers + ' pemain.';
+        return;
+      }
+      var logicalRounds = Math.max(1, selectedPlayers - 1);
       var estimatedSlots = logicalRounds * wavesPerLogicalRound;
-      infoEl.textContent = 'Americano: ' + acceptedPlayerCount + ' pemain, ' + courts + ' court aktif, ' + logicalRounds + ' ronde logika, ' + wavesPerLogicalRound + ' sesi/ronde, total ' + estimatedSlots + ' sesi.';
+      infoEl.textContent = 'Americano: ' + selectedPlayers + ' pemain random, ' + courts + ' court aktif, ' + logicalRounds + ' ronde logika, ' + wavesPerLogicalRound + ' sesi/ronde, total ' + estimatedSlots + ' sesi.';
       return;
     }
     if (type === 'Mexicano') {
       var recommendedRounds = 6;
       var estimatedMexSlots = recommendedRounds * wavesPerLogicalRound;
-      infoEl.textContent = 'Mexicano: pairing dinamis berdasar ranking tiap ronde. Dengan ' + courts + ' court aktif, estimasi ' + wavesPerLogicalRound + ' wave/ronde, rekomendasi awal ' + recommendedRounds + ' ronde (' + estimatedMexSlots + ' slot ronde).';
+      infoEl.textContent = 'Mexicano: ' + selectedPlayers + ' pemain random. Dengan ' + courts + ' court aktif, estimasi ' + wavesPerLogicalRound + ' wave/ronde, rekomendasi awal ' + recommendedRounds + ' ronde (' + estimatedMexSlots + ' slot ronde).';
       return;
     }
     infoEl.textContent = 'Pilih tipe game dulu untuk lihat estimasi ronde dari jumlah court.';
   }
 
+  function syncCreateFormProgress() {
+    var createForm = document.querySelector('[data-create-match-form]');
+    if (!createForm) return;
+    var typeEl = createForm.querySelector('[name=\"competition_type\"]');
+    var progressBody = createForm.querySelector('[data-create-progress-body]');
+    var stepHint = createForm.querySelector('[data-create-step-hint]');
+    var nameEl = createForm.querySelector('[name=\"game_title\"]');
+    var playerEl = createForm.querySelector('[name=\"player_count\"]');
+    var totalEl = createForm.querySelector('[name=\"match_total_points\"]');
+    var courtEl = createForm.querySelector('[name=\"court_count\"]');
+    var nameBlock = createForm.querySelector('[data-step-block=\"name\"]');
+    var playersBlock = createForm.querySelector('[data-step-block=\"players\"]');
+    var totalBlock = createForm.querySelector('[data-step-block=\"total\"]');
+    var courtsBlock = createForm.querySelector('[data-step-block=\"courts\"]');
+    var finalBlock = createForm.querySelector('[data-step-block=\"final\"]');
+    if (!typeEl || !progressBody) return;
+
+    var hasType = String(typeEl.value || '').trim() !== '';
+    progressBody.hidden = !hasType;
+    if (nameBlock) nameBlock.hidden = !hasType;
+
+    var hasName = hasType && nameEl && String(nameEl.value || '').trim() !== '';
+    if (playersBlock) playersBlock.hidden = !hasName;
+
+    var playerCount = playerEl ? parseInt(playerEl.value || '', 10) : NaN;
+    var hasPlayers = hasName && Number.isFinite(playerCount) && playerCount >= 4;
+    if (totalBlock) totalBlock.hidden = !hasPlayers;
+
+    var totalPoints = totalEl ? parseInt(totalEl.value || '', 10) : NaN;
+    var hasTotal = hasPlayers && Number.isFinite(totalPoints) && totalPoints > 0;
+    if (courtsBlock) courtsBlock.hidden = !hasTotal;
+
+    var courtCount = courtEl ? parseInt(courtEl.value || '', 10) : NaN;
+    var hasCourt = hasTotal && Number.isFinite(courtCount) && courtCount >= 1;
+    if (finalBlock) finalBlock.hidden = !hasCourt;
+
+    progressBody.querySelectorAll('.create-step-block').forEach(function (block) {
+      var enabled = !block.hidden && hasType;
+      block.querySelectorAll('input, select, textarea, button').forEach(function (el) {
+        el.disabled = !enabled;
+      });
+    });
+    if (stepHint) {
+      stepHint.style.display = hasType ? 'none' : '';
+    }
+  }
+
   document.addEventListener('click', function (ev) {
     var openBtn = ev.target && ev.target.closest ? ev.target.closest('[data-open-game-input-modal]') : null;
     if (openBtn) {
+      var createForm = document.querySelector('[data-create-match-form]');
+      if (createForm) createForm.reset();
       setGameInputModalState(true);
+      syncCreateFormProgress();
       updateCourtEstimator();
       return;
     }
@@ -3053,17 +3249,30 @@ render_header([
   document.addEventListener('change', function (ev) {
     var target = ev.target;
     if (!target || !target.matches) return;
-    if (target.matches('[data-create-match-form] [name="competition_type"]') || target.matches('[data-create-match-form] [name="court_count"]')) {
+    if (
+      target.matches('[data-create-match-form] [name="competition_type"]') ||
+      target.matches('[data-create-match-form] [name="game_title"]') ||
+      target.matches('[data-create-match-form] [name="player_count"]') ||
+      target.matches('[data-create-match-form] [name="match_total_points"]') ||
+      target.matches('[data-create-match-form] [name="court_count"]')
+    ) {
+      syncCreateFormProgress();
       updateCourtEstimator();
     }
   });
   document.addEventListener('input', function (ev) {
     var target = ev.target;
     if (!target || !target.matches) return;
-    if (target.matches('[data-create-match-form] [name="court_count"]')) {
+    if (
+      target.matches('[data-create-match-form] [name="game_title"]') ||
+      target.matches('[data-create-match-form] [name="player_count"]') ||
+      target.matches('[data-create-match-form] [name="court_count"]')
+    ) {
+      syncCreateFormProgress();
       updateCourtEstimator();
     }
   });
+  syncCreateFormProgress();
   updateCourtEstimator();
 
   document.addEventListener('submit', function (ev) {
