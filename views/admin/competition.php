@@ -2173,6 +2173,14 @@ $extraHead = <<<HTML
   .game-input-modal-body .competition-form input,.game-input-modal-body .competition-form select{height:58px;border-radius:999px;border:1px solid #e5dadd;background:#f7f3f4;color:#352317;padding:0 18px;font-size:16px;font-weight:700;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
   .game-input-modal-body .competition-form input::placeholder{color:#b6a8ad;font-weight:600}
   .game-input-modal-body .competition-form input:focus,.game-input-modal-body .competition-form select:focus{outline:none;border-color:#aac47b;box-shadow:0 0 0 3px rgba(170,196,123,.24);background:#fff}
+  .player-stepper{display:grid;grid-template-columns:58px minmax(0,1fr) 58px;gap:10px;align-items:center}
+  .player-stepper-btn{height:58px;border-radius:999px;border:1px solid #d8c9ce;background:#efe6e9;color:#4a3324;font-size:24px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .16s ease,border-color .16s ease,transform .12s ease}
+  .player-stepper-btn:hover{background:#eadfe3;border-color:#cdbdc4}
+  .player-stepper-btn:active{transform:translateY(1px)}
+  .player-stepper-btn:focus{outline:none;box-shadow:0 0 0 3px rgba(170,196,123,.24);border-color:#aac47b}
+  .player-stepper-btn[disabled]{opacity:.55;cursor:not-allowed;transform:none}
+  .player-stepper-input{text-align:center;padding:0 14px !important;appearance:textfield}
+  .player-stepper-input::-webkit-outer-spin-button,.player-stepper-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   .game-input-modal-body .competition-form .btn.primary{min-height:56px;border-radius:999px;font-size:20px;font-weight:900}
   .game-input-modal-body .note{border-radius:14px;background:#f3eef0;border:1px solid #e6dce0;color:#5a4251}
   .game-input-modal-body .create-step-hint{border-radius:14px;background:#f3eef0;border:1px solid #e6dce0;color:#5a4251}
@@ -2561,7 +2569,11 @@ render_header([
                   </div>
                   <div class="create-step-block" data-step-block="players" hidden>
                     <label for="playerCount">Jumlah Pemain (Random)</label>
-                    <input id="playerCount" name="player_count" type="number" min="4" max="<?= max(4, (int)$registeredAttendeeCount) ?>" value="<?= max(4, (int)$registeredAttendeeCount) ?>" required>
+                    <div class="player-stepper" data-player-stepper>
+                      <button type="button" class="player-stepper-btn" data-player-step="down" aria-label="Kurangi jumlah pemain">-</button>
+                      <input id="playerCount" class="player-stepper-input" name="player_count" type="number" min="4" max="<?= max(4, (int)$registeredAttendeeCount) ?>" value="<?= max(4, (int)$registeredAttendeeCount) ?>" inputmode="none" readonly required>
+                      <button type="button" class="player-stepper-btn" data-player-step="up" aria-label="Tambah jumlah pemain">+</button>
+                    </div>
                   </div>
                   <div class="create-step-block" data-step-block="total" hidden>
                     <label for="matchTotalPoints">Total Poin Match</label>
@@ -3126,6 +3138,67 @@ render_header([
     initBoardInteractions(board);
   }
 
+  function initPlayerCountStepper(createForm) {
+    if (!createForm) return;
+    var playerEl = createForm.querySelector('#playerCount');
+    var wrap = createForm.querySelector('[data-player-stepper]');
+    if (!playerEl || !wrap) return;
+    var downBtn = wrap.querySelector('[data-player-step="down"]');
+    var upBtn = wrap.querySelector('[data-player-step="up"]');
+    var min = parseInt(playerEl.getAttribute('min') || '4', 10);
+    var max = parseInt(playerEl.getAttribute('max') || String(acceptedPlayerCount), 10);
+    if (!Number.isFinite(min)) min = 4;
+    if (!Number.isFinite(max)) max = acceptedPlayerCount;
+    if (max < min) max = min;
+
+    function clamp(val) {
+      var n = parseInt(String(val || ''), 10);
+      if (!Number.isFinite(n)) n = min;
+      if (n < min) n = min;
+      if (n > max) n = max;
+      return n;
+    }
+
+    function renderButtons(n) {
+      if (downBtn) downBtn.disabled = n <= min;
+      if (upBtn) upBtn.disabled = n >= max;
+    }
+
+    function setValue(next, triggerEvents) {
+      var n = clamp(next);
+      playerEl.value = String(n);
+      renderButtons(n);
+      if (triggerEvents) {
+        playerEl.dispatchEvent(new Event('input', { bubbles: true }));
+        playerEl.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+
+    if (downBtn) {
+      downBtn.addEventListener('click', function () {
+        setValue(clamp(playerEl.value) - 1, true);
+      });
+    }
+    if (upBtn) {
+      upBtn.addEventListener('click', function () {
+        setValue(clamp(playerEl.value) + 1, true);
+      });
+    }
+    playerEl.addEventListener('keydown', function (ev) {
+      ev.preventDefault();
+    });
+    playerEl.addEventListener('wheel', function () {
+      playerEl.blur();
+    });
+    playerEl.addEventListener('input', function () {
+      renderButtons(clamp(playerEl.value));
+    });
+    playerEl.addEventListener('change', function () {
+      renderButtons(clamp(playerEl.value));
+    });
+    setValue(playerEl.value, false);
+  }
+
   function updateCourtEstimator() {
     var createForm = document.querySelector('[data-create-match-form]');
     if (!createForm) return;
@@ -3271,6 +3344,7 @@ render_header([
     }
   });
   syncCreateFormProgress();
+  initPlayerCountStepper(document.querySelector('[data-create-match-form]'));
   updateCourtEstimator();
 
   document.addEventListener('submit', function (ev) {
