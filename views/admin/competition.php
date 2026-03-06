@@ -2190,7 +2190,7 @@ $extraHead = <<<HTML
   .alert-modal-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
   .alert-modal-icon{width:32px;height:32px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:16px;background:#eef4ff;color:#1b4d8f}
   .alert-modal-title{margin:0;font-size:16px;font-weight:800;color:#0f294d}
-  .alert-modal-message{margin:0;font-size:14px;line-height:1.55;color:#334155}
+  .alert-modal-message{margin:0;font-size:14px;line-height:1.55;color:#334155;white-space:pre-line}
   .alert-modal-actions{margin-top:14px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
   @keyframes toastIn{from{opacity:0;transform:translateY(-5px) translateX(10px)}to{opacity:1;transform:translateY(0) translateX(0)}}
   @keyframes createStepReveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
@@ -2581,11 +2581,11 @@ render_header([
                       <label for="gameDate">Tanggal Game (Opsional)</label>
                       <input id="gameDate" name="game_date" type="date">
                     </div>
-                    <p class="note" id="courtEstimatorText">
+                    <p class="note" id="courtEstimatorText" hidden>
                       Isi jumlah court untuk hitung ronde logika vs sesi eksekusi. Jika court kurang, sistem otomatis pecah jadi beberapa sesi per ronde.
                     </p>
-                    <p class="note">Sistem akan memilih pemain secara acak dari attendee accepted sesuai jumlah yang kamu isi.</p>
-                    <p class="note">Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Leaderboard diurutkan dari total poin, lalu selisih poin. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
+                    <p class="note" id="generateInfoRandom" hidden>Sistem akan memilih pemain secara acak dari attendee accepted sesuai jumlah yang kamu isi.</p>
+                    <p class="note" id="generateInfoScoring" hidden>Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Leaderboard diurutkan dari total poin, lalu selisih poin. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
                     <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
                   </div>
                 </div>
@@ -3240,10 +3240,8 @@ render_header([
       return;
     }
 
-    var gameInputModal = getGameInputModal();
-    if (gameInputModal && ev.target === gameInputModal) {
-      setGameInputModalState(false);
-    }
+    // Do not close game input modal on backdrop click.
+    // This avoids accidental close when using native select dropdowns.
   });
 
   document.addEventListener('change', function (ev) {
@@ -3279,23 +3277,49 @@ render_header([
     var createForm = ev.target && ev.target.closest ? ev.target.closest('[data-create-match-form]') : null;
     if (!createForm) return;
     ev.preventDefault();
-    var btn = createForm.querySelector('button[type="submit"]');
-    if (btn) btn.disabled = true;
-    postCompetitionForm(createForm)
-      .then(function (data) {
-        if (!data || !data.ok) {
-          throw new Error((data && data.message) ? data.message : 'Gagal generate match.');
-        }
-        showToast(data.message || 'Match berhasil digenerate.', 'success', 5000);
-        setGameInputModalState(false);
-        return refreshCompetitionBoard();
-      })
-      .catch(function (error) {
-        showToast(error && error.message ? error.message : 'Terjadi kesalahan saat generate match.', 'error', 5500);
-      })
-      .finally(function () {
-        if (btn) btn.disabled = false;
-      });
+    var runGenerate = function () {
+      var btn = createForm.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+      postCompetitionForm(createForm)
+        .then(function (data) {
+          if (!data || !data.ok) {
+            throw new Error((data && data.message) ? data.message : 'Gagal generate match.');
+          }
+          showToast(data.message || 'Match berhasil digenerate.', 'success', 5000);
+          setGameInputModalState(false);
+          return refreshCompetitionBoard();
+        })
+        .catch(function (error) {
+          showToast(error && error.message ? error.message : 'Terjadi kesalahan saat generate match.', 'error', 5500);
+        })
+        .finally(function () {
+          if (btn) btn.disabled = false;
+        });
+    };
+
+    var estimatorEl = createForm.querySelector('#courtEstimatorText');
+    var infoRandomEl = createForm.querySelector('#generateInfoRandom');
+    var infoScoringEl = createForm.querySelector('#generateInfoScoring');
+    var modalLines = [];
+    if (estimatorEl && String(estimatorEl.textContent || '').trim() !== '') {
+      modalLines.push(String(estimatorEl.textContent || '').trim());
+    }
+    if (infoRandomEl && String(infoRandomEl.textContent || '').trim() !== '') {
+      modalLines.push(String(infoRandomEl.textContent || '').trim());
+    }
+    if (infoScoringEl && String(infoScoringEl.textContent || '').trim() !== '') {
+      modalLines.push(String(infoScoringEl.textContent || '').trim());
+    }
+
+    openAlertModal({
+      title: 'Konfirmasi Generate Match',
+      message: modalLines.join('\n\n') || 'Lanjutkan generate match?',
+      okText: 'Lanjut Generate',
+      cancelText: 'Kembali'
+    }).then(function (confirmed) {
+      if (!confirmed) return;
+      runGenerate();
+    });
   });
 
   if (initialFlashSuccess) {
