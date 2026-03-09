@@ -1620,7 +1620,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $winnerName = trim((string)($winner['name'] ?? ''));
                             $winnerTotal = (int)($winner['point_total'] ?? 0);
                             $winnerDiff = (int)($winner['point_diff'] ?? 0);
-                            $winnerWinTotal = $leaderboardSortBy === 'wins' ? (int)($winner['win'] ?? 0) : null;
+                            $winnerWinTotal = (int)($winner['win'] ?? 0);
                             $now = date('Y-m-d H:i:s');
                             $adminId = (int)($_SESSION['admin_id'] ?? 0);
                             $upsert = $db->prepare(
@@ -1781,7 +1781,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             "INSERT INTO competition_tournament_states (
                                 competition_type, tournament_label, leaderboard_sort_by, is_completed, completed_at, completed_by_admin_id,
                                 winner_name, winner_point_total, winner_point_diff, winner_win_total, updated_at
-                             ) VALUES (?, ?, ?, 0, NULL, NULL, NULL, NULL, NULL, NULL, ?)
+                             ) VALUES (?, ?, ?, 0, NULL, NULL, NULL, NULL, NULL, 0, ?)
                              ON DUPLICATE KEY UPDATE
                                 leaderboard_sort_by = VALUES(leaderboard_sort_by),
                                 is_completed = 0,
@@ -1790,7 +1790,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 winner_name = NULL,
                                 winner_point_total = NULL,
                                 winner_point_diff = NULL,
-                                winner_win_total = NULL,
+                                winner_win_total = 0,
                                 updated_at = VALUES(updated_at)"
                         );
                         $resetState->execute([$type, $label, $leaderboardSortBy, date('Y-m-d H:i:s')]);
@@ -3292,9 +3292,7 @@ render_header([
                             <tr>
                               <th>#</th>
                               <th>Player</th>
-                              <?php if ($leaderboardSortBy === 'wins'): ?>
-                                <th>Menang</th>
-                              <?php endif; ?>
+                              <th>Menang</th>
                               <th>Diff</th>
                               <th>Total Point</th>
                             </tr>
@@ -3302,15 +3300,13 @@ render_header([
                           <tbody>
                             <?php $rows = (array)($tournament['standings'] ?? []); ?>
                             <?php if (!$rows): ?>
-                              <tr><td colspan="<?= $leaderboardSortBy === 'wins' ? 5 : 4 ?>">Belum ada skor valid untuk klasemen <?= h($type) ?>.</td></tr>
+                              <tr><td colspan="5">Belum ada skor valid untuk klasemen <?= h($type) ?>.</td></tr>
                             <?php else: ?>
                               <?php foreach ($rows as $idx => $row): ?>
                                 <tr<?= $idx === 0 ? ' style="background:#ffe44a;"' : '' ?>>
                                   <td><?= (int)($idx + 1) ?></td>
                                   <td><?= h((string)($row['name'] ?? '-')) ?></td>
-                                  <?php if ($leaderboardSortBy === 'wins'): ?>
-                                    <td><?= (int)($row['win'] ?? 0) ?></td>
-                                  <?php endif; ?>
+                                  <td><?= (int)($row['win'] ?? 0) ?></td>
                                   <td><?= (int)($row['point_diff'] ?? 0) ?></td>
                                   <td><strong><?= (int)($row['point_total'] ?? 0) ?></strong></td>
                                 </tr>
