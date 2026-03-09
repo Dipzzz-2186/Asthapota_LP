@@ -213,53 +213,267 @@ usort($tournamentList, static function (array $a, array $b): int {
 
 $extraHead = <<<HTML
 <style>
-  .lb-shell { padding: 22px 0 40px; }
-  .lb-head { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
-  .lb-title { margin:0; font-size:clamp(28px,4vw,42px); color:#132c4d; }
-  .lb-sub { margin:6px 0 0; color:#5b7090; }
-  .tournament-list { display:grid; gap:12px; margin-top:10px; }
-  .tournament-card { width:100%; text-align:left; border:1px solid #d8e2f2; background:#f8fbff; border-radius:14px; padding:14px; cursor:pointer; transition:.16s ease; }
-  .tournament-card:hover { transform:translateY(-1px); box-shadow:0 8px 20px rgba(15,32,60,.08); border-color:#bcd2f3; }
-  .tournament-name { font-size:32px; line-height:1.05; color:#0f294d; font-weight:800; letter-spacing:-.5px; }
-  .tournament-meta { margin-top:6px; font-size:18px; color:#1c426e; }
-  .tournament-updated { margin-top:5px; font-size:12px; color:#5a6b86; font-weight:700; text-transform:uppercase; letter-spacing:.55px; }
-  .lb-empty { color:#5c7090; font-size:13px; margin:0; }
-  .lb-modal { position:fixed; inset:0; background:rgba(7,16,34,.46); z-index:5000; display:none; align-items:center; justify-content:center; padding:16px; }
-  .lb-modal.is-open { display:flex; }
-  .lb-modal-card { width:min(1280px,100%); max-height:94vh; border-radius:18px; background:#f4f7fb; border:1px solid #cfdaec; box-shadow:0 18px 38px rgba(10,20,40,.24); overflow:hidden; display:grid; grid-template-rows:auto minmax(0,1fr); }
-  .lb-modal-head { padding:16px 18px; display:flex; justify-content:space-between; align-items:center; gap:12px; background:linear-gradient(135deg,#3a4a8f,#6a66b4); color:#fff; }
-  .lb-modal-title { margin:0; font-size:clamp(30px,4vw,48px); line-height:1; letter-spacing:-.4px; }
-  .lb-modal-close { border:1px solid rgba(255,255,255,.45); background:rgba(255,255,255,.12); color:#fff; border-radius:10px; min-width:38px; height:38px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-size:20px; line-height:1; }
-  .lb-modal-body { overflow:auto; padding:14px; }
-  .lb-modal-panel { display:none; }
-  .lb-modal-panel.is-active { display:block; }
-  .lb-detail-grid { display:grid; gap:14px; grid-template-columns:minmax(280px,420px) minmax(0,1fr); align-items:start; }
-  .lb-stand-card, .lb-round-card { background:#fff; border:1px solid #dbe5f4; border-radius:14px; box-shadow:0 6px 14px rgba(15,32,60,.06); }
-  .lb-stand-card { padding:10px; position:sticky; top:0; }
-  .lb-stand-head { display:grid; grid-template-columns:62px minmax(0,1fr) 54px 88px; gap:8px; font-size:12px; color:#5d7090; text-transform:uppercase; font-weight:700; letter-spacing:.4px; padding:4px 8px 8px; }
-  .lb-stand-row { display:grid; grid-template-columns:62px minmax(0,1fr) 54px 88px; gap:8px; align-items:center; padding:9px 8px; border-radius:10px; }
-  .lb-stand-row + .lb-stand-row { margin-top:6px; }
-  .lb-stand-row.is-first { background:#ffe24a; }
-  .lb-stand-row:not(.is-first) { background:#eef3fb; }
-  .lb-rank { font-weight:700; }
-  .lb-player { font-weight:700; color:#152f54; }
-  .lb-score-strong { font-weight:800; color:#0f2a4b; }
-  .lb-rounds { display:grid; gap:12px; }
-  .lb-round-title { margin:0 0 6px; font-size:30px; color:#0f294d; line-height:1; }
-  .lb-round-card { padding:10px; }
-  .lb-match-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
-  .lb-match-court { font-size:12px; text-transform:uppercase; font-weight:700; color:#405d84; }
-  .lb-score-pair { display:flex; gap:4px; align-items:center; }
-  .lb-score-box { min-width:44px; height:34px; border-radius:7px; background:#0d1117; color:#fff; font-weight:900; font-size:24px; line-height:34px; text-align:center; letter-spacing:.6px; }
-  .lb-match-lines { border:1px solid #dce6f3; border-radius:10px; overflow:hidden; background:#f8fbff; }
-  .lb-match-line { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 10px; font-size:19px; color:#243f64; }
-  .lb-match-line + .lb-match-line { border-top:1px solid #e1e9f6; }
+  .lb-shell {
+    padding: 22px 0 40px;
+  }
+  .lb-head {
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .lb-title {
+    margin:0;
+    font-size:clamp(28px,4vw,42px);
+    color:#132c4d;
+  }
+  .lb-sub {
+    margin:6px 0 0;
+    color:#5b7090;
+  }
+  .tournament-list {
+    display:grid;
+    gap:12px;
+    margin-top:10px;
+  }
+  .tournament-card {
+    width:100%;
+    text-align:left;
+    border:1px solid #d8e2f2;
+    background:#f8fbff;
+    border-radius:14px;
+    padding:14px;
+    cursor:pointer;
+    transition:.16s ease;
+  }
+  .tournament-card:hover {
+    transform:translateY(-1px);
+    box-shadow:0 8px 20px rgba(15,32,60,.08);
+    border-color:#bcd2f3;
+  }
+  .tournament-name {
+    font-size:32px;
+    line-height:1.05;
+    color:#0f294d;
+    font-weight:800;
+    letter-spacing:-.5px;
+  }
+  .tournament-meta {
+    margin-top:6px;
+    font-size:18px;
+    color:#1c426e;
+  }
+  .tournament-updated {
+    margin-top:5px;
+    font-size:12px;
+    color:#5a6b86;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.55px;
+  }
+  .lb-empty {
+    color:#5c7090;
+    font-size:13px;
+    margin:0;
+  }
+  .lb-modal {
+    position:fixed;
+    inset:0;
+    background:rgba(7,16,34,.46);
+    z-index:5000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:16px;
+  }
+  .lb-modal.is-open {
+    display:flex;
+  }
+  .lb-modal-card {
+    width:min(1280px,100%);
+    max-height:94vh;
+    border-radius:18px;
+    background:#f4f7fb;
+    border:1px solid #cfdaec;
+    box-shadow:0 18px 38px rgba(10,20,40,.24);
+    overflow:hidden;
+    display:grid;
+    grid-template-rows:auto minmax(0,1fr);
+  }
+  .lb-modal-head {
+    padding:16px 18px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    background:linear-gradient(135deg,#3a4a8f,#6a66b4);
+    color:#fff;
+  }
+  .lb-modal-title {
+    margin:0;
+    font-size:clamp(30px,4vw,48px);
+    line-height:1;
+    letter-spacing:-.4px;
+  }
+  .lb-modal-close {
+    border:1px solid rgba(255,255,255,.45);
+    background:rgba(255,255,255,.12);
+    color:#fff;
+    border-radius:10px;
+    min-width:38px;
+    height:38px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    font-size:20px;
+    line-height:1;
+  }
+  .lb-modal-body {
+    overflow:auto;
+    padding:14px;
+  }
+  .lb-modal-panel {
+    display:none;
+  }
+  .lb-modal-panel.is-active {
+    display:block;
+  }
+  .lb-detail-grid {
+    display:grid;
+    gap:14px;
+    grid-template-columns:minmax(280px,420px) minmax(0,1fr);
+    align-items:start;
+  }
+  .lb-stand-card, .lb-round-card {
+    background:#fff;
+    border:1px solid #dbe5f4;
+    border-radius:14px;
+    box-shadow:0 6px 14px rgba(15,32,60,.06);
+  }
+  .lb-stand-card {
+    padding:10px;
+    position:sticky;
+    top:0;
+  }
+  .lb-stand-head {
+    display:grid;
+    grid-template-columns:62px minmax(0,1fr) 54px 88px;
+    gap:8px;
+    font-size:12px;
+    color:#5d7090;
+    text-transform:uppercase;
+    font-weight:700;
+    letter-spacing:.4px;
+    padding:4px 8px 8px;
+  }
+  .lb-stand-row {
+    display:grid;
+    grid-template-columns:62px minmax(0,1fr) 54px 88px;
+    gap:8px;
+    align-items:center;
+    padding:9px 8px;
+    border-radius:10px;
+  }
+  .lb-stand-row + .lb-stand-row {
+    margin-top:6px;
+  }
+  .lb-stand-row.is-first {
+    background:#ffe24a;
+  }
+  .lb-stand-row:not(.is-first) {
+    background:#eef3fb;
+  }
+  .lb-rank {
+    font-weight:700;
+  }
+  .lb-player {
+    font-weight:700;
+    color:#152f54;
+  }
+  .lb-score-strong {
+    font-weight:800;
+    color:#0f2a4b;
+  }
+  .lb-rounds {
+    display:grid;
+    gap:12px;
+  }
+  .lb-round-title {
+    margin:0 0 6px;
+    font-size:30px;
+    color:#0f294d;
+    line-height:1;
+  }
+  .lb-round-card {
+    padding:10px;
+  }
+  .lb-match-head {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:8px;
+  }
+  .lb-match-court {
+    font-size:12px;
+    text-transform:uppercase;
+    font-weight:700;
+    color:#405d84;
+  }
+  .lb-score-pair {
+    display:flex;
+    gap:4px;
+    align-items:center;
+  }
+  .lb-score-box {
+    min-width:44px;
+    height:34px;
+    border-radius:7px;
+    background:#0d1117;
+    color:#fff;
+    font-weight:900;
+    font-size:24px;
+    line-height:34px;
+    text-align:center;
+    letter-spacing:.6px;
+  }
+  .lb-match-lines {
+    border:1px solid #dce6f3;
+    border-radius:10px;
+    overflow:hidden;
+    background:#f8fbff;
+  }
+  .lb-match-line {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    padding:8px 10px;
+    font-size:19px;
+    color:#243f64;
+  }
+  .lb-match-line + .lb-match-line {
+    border-top:1px solid #e1e9f6;
+  }
   @media (max-width: 980px) {
-    .lb-detail-grid { grid-template-columns:1fr; }
-    .lb-stand-card { position:static; }
-    .tournament-name { font-size:26px; }
-    .lb-round-title { font-size:24px; }
-    .lb-match-line { font-size:16px; }
+    .lb-detail-grid {
+      grid-template-columns:1fr;
+    }
+    .lb-stand-card {
+      position:static;
+    }
+    .tournament-name {
+      font-size:26px;
+    }
+    .lb-round-title {
+      font-size:24px;
+    }
+    .lb-match-line {
+      font-size:16px;
+    }
   }
 </style>
 HTML;
