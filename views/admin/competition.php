@@ -18,6 +18,14 @@ function normalize_competition_type(string $type): string {
     return '';
 }
 
+function normalize_leaderboard_sort_mode(string $mode): string {
+    $mode = strtolower(trim($mode));
+    if ($mode === 'win' || $mode === 'wins') {
+        return 'wins';
+    }
+    return 'point';
+}
+
 function parse_score_request(array $source): array {
     $selectedTotalRaw = trim((string)($source['score_total'] ?? ''));
     $scoreARaw = trim((string)($source['score_a'] ?? ''));
@@ -133,7 +141,7 @@ function fetch_tournament_state_map(PDO $db): array {
     $map = [];
     try {
         $stmt = $db->query(
-            "SELECT competition_type, tournament_label, is_completed, completed_at, winner_name, winner_point_total, winner_point_diff
+            "SELECT competition_type, tournament_label, is_completed, completed_at, winner_name, winner_point_total, winner_point_diff, winner_win_total, leaderboard_sort_by
              FROM competition_tournament_states"
         );
         $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
@@ -153,6 +161,8 @@ function fetch_tournament_state_map(PDO $db): array {
             'winner_name' => trim((string)($row['winner_name'] ?? '')),
             'winner_point_total' => (int)($row['winner_point_total'] ?? 0),
             'winner_point_diff' => (int)($row['winner_point_diff'] ?? 0),
+            'winner_win_total' => isset($row['winner_win_total']) && $row['winner_win_total'] !== null ? (int)$row['winner_win_total'] : null,
+            'leaderboard_sort_by' => normalize_leaderboard_sort_mode((string)($row['leaderboard_sort_by'] ?? 'point')),
         ];
     }
     return $map;
@@ -479,7 +489,8 @@ function build_americano_full_rounds(array $players, int $courtCount): array {
     ];
 }
 
-function build_standings_from_games(array $gamesRows, array $seedPlayers = []): array {
+function build_standings_from_games(array $gamesRows, array $seedPlayers = [], string $sortMode = 'point'): array {
+    $sortMode = normalize_leaderboard_sort_mode($sortMode);
     $table = [];
     foreach ($seedPlayers as $seedNameRaw) {
         $seedName = trim((string)$seedNameRaw);
@@ -557,7 +568,13 @@ function build_standings_from_games(array $gamesRows, array $seedPlayers = []): 
     }
 
     $rows = array_values($table);
-    usort($rows, static function (array $x, array $y): int {
+    usort($rows, static function (array $x, array $y) use ($sortMode): int {
+        if ($sortMode === 'wins') {
+            if ((int)$x['win'] !== (int)$y['win']) return (int)$y['win'] <=> (int)$x['win'];
+            if ((int)$x['point_total'] !== (int)$y['point_total']) return (int)$y['point_total'] <=> (int)$x['point_total'];
+            if ((int)$x['point_diff'] !== (int)$y['point_diff']) return (int)$y['point_diff'] <=> (int)$x['point_diff'];
+            return strcmp((string)$x['name'], (string)$y['name']);
+        }
         if ((int)$x['point_total'] !== (int)$y['point_total']) return (int)$y['point_total'] <=> (int)$x['point_total'];
         if ((int)$x['point_diff'] !== (int)$y['point_diff']) return (int)$y['point_diff'] <=> (int)$x['point_diff'];
         if ((int)$x['win'] !== (int)$y['win']) return (int)$y['win'] <=> (int)$x['win'];
@@ -1393,12 +1410,14 @@ try {
             id INT AUTO_INCREMENT PRIMARY KEY,
             competition_type VARCHAR(20) NOT NULL,
             tournament_label VARCHAR(160) NOT NULL,
+            leaderboard_sort_by VARCHAR(20) NOT NULL DEFAULT 'point',
             is_completed TINYINT(1) NOT NULL DEFAULT 0,
             completed_at DATETIME NULL,
             completed_by_admin_id INT NULL,
             winner_name VARCHAR(150) NULL,
             winner_point_total INT NULL,
             winner_point_diff INT NULL,
+            winner_win_total INT NULL,
             updated_at DATETIME NOT NULL,
             UNIQUE KEY uq_competition_tournament (competition_type, tournament_label)
         )"
@@ -1430,6 +1449,23 @@ try {
         $ensureColumn($db, $schema, 'player_b_name', "VARCHAR(150) NULL AFTER player_b_user_id");
         $ensureColumn($db, $schema, 'score_a', "INT NULL AFTER player_b_name");
         $ensureColumn($db, $schema, 'score_b', "INT NULL AFTER score_a");
+
+        $stateColumnCheck = $db->prepare(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'competition_tournament_states' AND COLUMN_NAME = 'leaderboard_sort_by'"
+        );
+        $stateColumnCheck->execute([$schema]);
+        if ((int)$stateColumnCheck->fetchColumn() === 0) {
+            $db->exec("ALTER TABLE competition_tournament_states ADD COLUMN leaderboard_sort_by VARCHAR(20) NOT NULL DEFAULT 'point' AFTER tournament_label");
+        }
+        $stateWinColumnCheck = $db->prepare(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'competition_tournament_states' AND COLUMN_NAME = 'winner_win_total'"
+        );
+        $stateWinColumnCheck->execute([$schema]);
+        if ((int)$stateWinColumnCheck->fetchColumn() === 0) {
+            $db->exec("ALTER TABLE competition_tournament_states ADD COLUMN winner_win_total INT NULL AFTER winner_point_diff");
+        }
     }
 } catch (Throwable $e) {
 }
@@ -1502,6 +1538,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'complete_tournament') {
         $type = normalize_competition_type((string)($_POST['competition_type'] ?? ''));
         $label = trim((string)($_POST['tournament_label'] ?? ''));
+        $leaderboardSortBy = normalize_leaderboard_sort_mode((string)($_POST['leaderboard_sort_by'] ?? 'point'));
         if ($type !== 'Mexicano') {
             $flash['error'] = 'Hanya tournament Mexicano yang bisa ditandai selesai.';
         } elseif ($label === '') {
@@ -1555,7 +1592,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 }
                             }
                         }
-                        $standings = build_standings_from_games($rowsForLeaderboard, array_keys($seedPlayers));
+                        $standings = build_standings_from_games($rowsForLeaderboard, array_keys($seedPlayers), $leaderboardSortBy);
                         if (!$standings) {
                             $flash['error'] = 'Leaderboard belum tersedia untuk menentukan pemenang.';
                         } else {
@@ -1583,30 +1620,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $winnerName = trim((string)($winner['name'] ?? ''));
                             $winnerTotal = (int)($winner['point_total'] ?? 0);
                             $winnerDiff = (int)($winner['point_diff'] ?? 0);
+                            $winnerWinTotal = $leaderboardSortBy === 'wins' ? (int)($winner['win'] ?? 0) : null;
                             $now = date('Y-m-d H:i:s');
                             $adminId = (int)($_SESSION['admin_id'] ?? 0);
                             $upsert = $db->prepare(
                                 "INSERT INTO competition_tournament_states (
-                                    competition_type, tournament_label, is_completed, completed_at, completed_by_admin_id,
-                                    winner_name, winner_point_total, winner_point_diff, updated_at
-                                 ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
+                                    competition_type, tournament_label, leaderboard_sort_by, is_completed, completed_at, completed_by_admin_id,
+                                    winner_name, winner_point_total, winner_point_diff, winner_win_total, updated_at
+                                 ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
                                  ON DUPLICATE KEY UPDATE
+                                    leaderboard_sort_by = VALUES(leaderboard_sort_by),
                                     is_completed = VALUES(is_completed),
                                     completed_at = VALUES(completed_at),
                                     completed_by_admin_id = VALUES(completed_by_admin_id),
                                     winner_name = VALUES(winner_name),
                                     winner_point_total = VALUES(winner_point_total),
                                     winner_point_diff = VALUES(winner_point_diff),
+                                    winner_win_total = VALUES(winner_win_total),
                                     updated_at = VALUES(updated_at)"
                             );
                             $upsert->execute([
                                 $type,
                                 $label,
+                                $leaderboardSortBy,
                                 $now,
                                 $adminId > 0 ? $adminId : null,
                                 $winnerName !== '' ? $winnerName : null,
                                 $winnerTotal,
                                 $winnerDiff,
+                                $winnerWinTotal,
                                 $now,
                             ]);
                             if ($pendingGameIds) {
@@ -1678,6 +1720,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $titlePrefix = trim((string)($_POST['game_title'] ?? ''));
         $gameDateRaw = trim((string)($_POST['game_date'] ?? ''));
         $matchTotalPoints = isset($_POST['match_total_points']) ? (int)$_POST['match_total_points'] : 0;
+        $leaderboardSortBy = normalize_leaderboard_sort_mode((string)($_POST['leaderboard_sort_by'] ?? 'point'));
         $playerCountRaw = trim((string)($_POST['player_count'] ?? ''));
         $playerCount = ctype_digit($playerCountRaw) ? (int)$playerCountRaw : 0;
         $courtCount = normalize_court_count($_POST['court_count'] ?? 1);
@@ -1733,25 +1776,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                     $created = 0;
                     $label = $titlePrefix !== '' ? $titlePrefix : $type;
-                    if ($type === 'Mexicano') {
-                        try {
-                            $resetState = $db->prepare(
-                                "INSERT INTO competition_tournament_states (
-                                    competition_type, tournament_label, is_completed, completed_at, completed_by_admin_id,
-                                    winner_name, winner_point_total, winner_point_diff, updated_at
-                                 ) VALUES (?, ?, 0, NULL, NULL, NULL, NULL, NULL, ?)
-                                 ON DUPLICATE KEY UPDATE
-                                    is_completed = 0,
-                                    completed_at = NULL,
-                                    completed_by_admin_id = NULL,
-                                    winner_name = NULL,
-                                    winner_point_total = NULL,
-                                    winner_point_diff = NULL,
-                                    updated_at = VALUES(updated_at)"
-                            );
-                            $resetState->execute([$type, $label, date('Y-m-d H:i:s')]);
-                        } catch (Throwable $e) {
-                        }
+                    try {
+                        $resetState = $db->prepare(
+                            "INSERT INTO competition_tournament_states (
+                                competition_type, tournament_label, leaderboard_sort_by, is_completed, completed_at, completed_by_admin_id,
+                                winner_name, winner_point_total, winner_point_diff, winner_win_total, updated_at
+                             ) VALUES (?, ?, ?, 0, NULL, NULL, NULL, NULL, NULL, NULL, ?)
+                             ON DUPLICATE KEY UPDATE
+                                leaderboard_sort_by = VALUES(leaderboard_sort_by),
+                                is_completed = 0,
+                                completed_at = NULL,
+                                completed_by_admin_id = NULL,
+                                winner_name = NULL,
+                                winner_point_total = NULL,
+                                winner_point_diff = NULL,
+                                winner_win_total = NULL,
+                                updated_at = VALUES(updated_at)"
+                        );
+                        $resetState->execute([$type, $label, $leaderboardSortBy, date('Y-m-d H:i:s')]);
+                    } catch (Throwable $e) {
                     }
                     if ($type === 'Americano') {
                         $schedule = build_americano_full_rounds($attendees, $courtCount);
@@ -1890,6 +1933,8 @@ foreach ($gamesByIdAsc as $row) {
             'winner_name' => '',
             'winner_point_total' => 0,
             'winner_point_diff' => 0,
+            'winner_win_total' => null,
+            'leaderboard_sort_by' => 'point',
             'all_scored' => false,
             'can_complete' => false,
         ];
@@ -1960,11 +2005,12 @@ foreach ($tournaments as $key => $tournament) {
     $stateRow = (array)($tournamentStateMap[$stateKey] ?? []);
     $isMexicano = ($tournamentType === 'Mexicano');
     $isCompleted = $isMexicano && ((bool)($stateRow['is_completed'] ?? false));
+    $leaderboardSortBy = normalize_leaderboard_sort_mode((string)($stateRow['leaderboard_sort_by'] ?? 'point'));
     $gamesForStandings = $gamesRows;
     if ($isMexicano) {
         $gamesForStandings = filter_games_with_valid_scores($gamesRows);
     }
-    $standingRows = build_standings_from_games($gamesForStandings, $seedPlayers);
+    $standingRows = build_standings_from_games($gamesForStandings, $seedPlayers, $leaderboardSortBy);
 
     $tournaments[$key]['games'] = $gamesRows;
     $tournaments[$key]['rounds'] = $rounds;
@@ -2013,6 +2059,8 @@ foreach ($tournaments as $key => $tournament) {
     $tournaments[$key]['winner_name'] = trim((string)($stateRow['winner_name'] ?? ''));
     $tournaments[$key]['winner_point_total'] = (int)($stateRow['winner_point_total'] ?? 0);
     $tournaments[$key]['winner_point_diff'] = (int)($stateRow['winner_point_diff'] ?? 0);
+    $tournaments[$key]['winner_win_total'] = isset($stateRow['winner_win_total']) && $stateRow['winner_win_total'] !== null ? (int)$stateRow['winner_win_total'] : null;
+    $tournaments[$key]['leaderboard_sort_by'] = $leaderboardSortBy;
     $tournaments[$key]['all_scored'] = $allScored;
     $tournaments[$key]['all_players_scored'] = $allPlayersScored;
     $tournaments[$key]['can_complete'] = $isMexicano && !$isCompleted && $hasAnyValidScore && !$hasPartialScore && $allPlayersScored && !empty($standingRows);
@@ -2410,9 +2458,28 @@ $extraHead = <<<HTML
     background-image:none !important;
     text-indent:0;
   }
+  .score-box option {
+    background:#0d1117 !important;
+    color:#fff !important;
+  }
   .score-box:focus {
     outline:2px solid #7aa7ff;
     outline-offset:2px
+  }
+  .score-box.score-box-win {
+    border-color:#166534 !important;
+    background:#16a34a !important;
+    color:#fff !important
+  }
+  .score-box.score-box-lose {
+    border-color:#991b1b !important;
+    background:#dc2626 !important;
+    color:#fff !important
+  }
+  .score-box.score-box-draw {
+    border-color:#1d4ed8 !important;
+    background:#2563eb !important;
+    color:#fff !important
   }
   .score-editor button[type="submit"] {
     height:34px
@@ -3103,7 +3170,7 @@ render_header([
             ?>
             <div class="tournament-card" data-open-tournament="<?= h($tourKey) ?>" data-game-type="<?= h($type) ?>" role="button" tabindex="0" aria-label="Buka detail <?= h($label) ?>">
               <div class="tournament-name"><?= h($label) ?></div>
-              <div class="tournament-meta"><?= (int)$playerCount ?> players<?= $type === 'Mexicano' ? (' â€¢ ' . ($isCompletedCard ? 'Selesai' : 'Berjalan')) : '' ?></div>
+              <div class="tournament-meta"><?= (int)$playerCount ?> players<?= $type === 'Mexicano' ? (' • ' . ($isCompletedCard ? 'Selesai' : 'Berjalan')) : '' ?></div>
               <div class="tournament-updated">Updated <?= $updatedAt !== '' ? h(date('d M Y H:i', strtotime($updatedAt))) : '-' ?></div>
               <div class="tournament-card-actions">
                 <form method="post" data-delete-tournament-form>
@@ -3179,6 +3246,8 @@ render_header([
                   $winnerName = trim((string)($tournament['winner_name'] ?? ''));
                   $winnerTotal = (int)($tournament['winner_point_total'] ?? 0);
                   $winnerDiff = (int)($tournament['winner_point_diff'] ?? 0);
+                  $leaderboardSortBy = normalize_leaderboard_sort_mode((string)($tournament['leaderboard_sort_by'] ?? 'point'));
+                  $leaderboardSortLabel = $leaderboardSortBy === 'wins' ? 'Jumlah Menang' : 'Poin';
                 ?>
                 <div data-tournament-panel="<?= h($tourKey) ?>" style="display:none;">
                 <?php
@@ -3188,7 +3257,7 @@ render_header([
                   }
                 ?>
                 <div class="type-head">
-                  <h3 style="margin:0;"><?= h($tourLabel) ?> <small style="font-weight:400;color:#5a6b86;"><?= h($type) ?> â€¢ <?= count($typeGames) ?> match</small></h3>
+                  <h3 style="margin:0;"><?= h($tourLabel) ?> <small style="font-weight:400;color:#5a6b86;"><?= h($type) ?> • <?= count($typeGames) ?> match</small></h3>
                   <?php if ($type === 'Mexicano'): ?>
                     <?php if ($isTournamentCompleted): ?>
                       <span class="tournament-status-chip ready">Selesai</span>
@@ -3197,6 +3266,7 @@ render_header([
                         <input type="hidden" name="competition_action" value="complete_tournament">
                         <input type="hidden" name="competition_type" value="Mexicano">
                         <input type="hidden" name="tournament_label" value="<?= h($tourLabel) ?>">
+                        <input type="hidden" name="leaderboard_sort_by" value="<?= h($leaderboardSortBy) ?>">
                         <button class="btn primary small" type="submit">Selesaikan Tournament</button>
                       </form>
                     <?php endif; ?>
@@ -3215,21 +3285,32 @@ render_header([
                 <?php else: ?>
                   <div class="tour-detail-grid">
                     <div class="standing-panel">
-                      <p class="standing-panel-title">Toplist</p>
+                      <p class="standing-panel-title">Toplist (Sort: <?= h($leaderboardSortLabel) ?>)</p>
                       <div class="standing-wrap" style="margin-top:0;">
                         <table class="standing-table">
                           <thead>
-                            <tr><th>#</th><th>Player</th><th>Diff</th><th>Total Point</th></tr>
+                            <tr>
+                              <th>#</th>
+                              <th>Player</th>
+                              <?php if ($leaderboardSortBy === 'wins'): ?>
+                                <th>Menang</th>
+                              <?php endif; ?>
+                              <th>Diff</th>
+                              <th>Total Point</th>
+                            </tr>
                           </thead>
                           <tbody>
                             <?php $rows = (array)($tournament['standings'] ?? []); ?>
                             <?php if (!$rows): ?>
-                              <tr><td colspan="4">Belum ada skor valid untuk klasemen <?= h($type) ?>.</td></tr>
+                              <tr><td colspan="<?= $leaderboardSortBy === 'wins' ? 5 : 4 ?>">Belum ada skor valid untuk klasemen <?= h($type) ?>.</td></tr>
                             <?php else: ?>
                               <?php foreach ($rows as $idx => $row): ?>
                                 <tr<?= $idx === 0 ? ' style="background:#ffe44a;"' : '' ?>>
                                   <td><?= (int)($idx + 1) ?></td>
                                   <td><?= h((string)($row['name'] ?? '-')) ?></td>
+                                  <?php if ($leaderboardSortBy === 'wins'): ?>
+                                    <td><?= (int)($row['win'] ?? 0) ?></td>
+                                  <?php endif; ?>
                                   <td><?= (int)($row['point_diff'] ?? 0) ?></td>
                                   <td><strong><?= (int)($row['point_total'] ?? 0) ?></strong></td>
                                 </tr>
@@ -3284,10 +3365,25 @@ render_header([
                                 $isLocked = ($displayA === 'BYE' || $displayB === 'BYE');
                                 $isCompleted = ($sa !== null && $sb !== null && in_array(((int)$sa + (int)$sb), PADEL_ALLOWED_TOTAL_POINTS, true));
                                 $isScoreInputDisabled = ($isLocked || $isCompleted || !$isRoundUnlocked || $isTournamentCompleted);
+                                $isScoreUnset = ($sa === null && $sb === null);
                                 if ($isLocked) {
                                     $sa = null;
                                     $sb = null;
                                     $st = 0;
+                                }
+                                $scoreClassA = '';
+                                $scoreClassB = '';
+                                if ($sa !== null && $sb !== null) {
+                                    if ($sa > $sb) {
+                                        $scoreClassA = ' score-box-win';
+                                        $scoreClassB = ' score-box-lose';
+                                    } elseif ($sb > $sa) {
+                                        $scoreClassA = ' score-box-lose';
+                                        $scoreClassB = ' score-box-win';
+                                    } else {
+                                        $scoreClassA = ' score-box-draw';
+                                        $scoreClassB = ' score-box-draw';
+                                    }
                                 }
                               ?>
                               <div class="match-item" data-match-item>
@@ -3299,18 +3395,18 @@ render_header([
                                   </div>
                                 </div>
                                 <div class="match-top-actions">
-                                  <form method="post" class="score-strip" data-inline-score-form>
+                                  <form method="post" class="score-strip" data-inline-score-form<?= $isScoreUnset ? ' data-score-unset="1"' : '' ?>>
                                     <input type="hidden" name="competition_action" value="update_score">
                                     <input type="hidden" name="game_id" value="<?= (int)($game['id'] ?? 0) ?>">
                                     <input type="hidden" name="score_total" value="<?= $configuredTotal > 0 ? (int)$configuredTotal : 0 ?>" data-inline-total>
                                     <span class="score-side">Skor 1</span>
-                                    <select name="score_a" class="score-box" data-inline-score-a <?= $isScoreInputDisabled ? 'disabled' : '' ?>>
+                                    <select name="score_a" class="score-box<?= $scoreClassA ?>" data-inline-score-a <?= $isScoreInputDisabled ? 'disabled' : '' ?>>
                                       <?php for ($point = 0; $point <= max(0, $configuredTotal); $point++): ?>
                                         <option value="<?= $point ?>" <?= ((int)($sa ?? 0) === $point) ? 'selected' : '' ?>><?= str_pad((string)$point, 2, '0', STR_PAD_LEFT) ?></option>
                                       <?php endfor; ?>
                                     </select>
                                     <span class="score-vs-inline">vs</span>
-                                    <select name="score_b" class="score-box" data-inline-score-b <?= $isScoreInputDisabled ? 'disabled' : '' ?>>
+                                    <select name="score_b" class="score-box<?= $scoreClassB ?>" data-inline-score-b <?= $isScoreInputDisabled ? 'disabled' : '' ?>>
                                       <?php for ($point = 0; $point <= max(0, $configuredTotal); $point++): ?>
                                         <option value="<?= $point ?>" <?= ((int)($sb ?? 0) === $point) ? 'selected' : '' ?>><?= str_pad((string)$point, 2, '0', STR_PAD_LEFT) ?></option>
                                       <?php endfor; ?>
@@ -3396,6 +3492,13 @@ render_header([
                       <?php endforeach; ?>
                     </select>
                   </div>
+                  <div class="create-step-block" data-step-block="leaderboard-sort" hidden>
+                    <label for="leaderboardSortBy">Sort Leaderboard</label>
+                    <select id="leaderboardSortBy" name="leaderboard_sort_by" required>
+                      <option value="point">Berdasarkan Poin</option>
+                      <option value="wins">Berdasarkan Jumlah Menang</option>
+                    </select>
+                  </div>
                   <div class="create-step-block" data-step-block="courts" hidden>
                     <label for="courtCount">Jumlah Court Aktif</label>
                     <input id="courtCount" name="court_count" type="number" min="1" max="12" value="1" required>
@@ -3409,7 +3512,7 @@ render_header([
                       Isi jumlah court untuk hitung ronde logika vs sesi eksekusi. Jika court kurang, sistem otomatis pecah jadi beberapa sesi per ronde.
                     </p>
                     <p class="note" id="generateInfoRandom" hidden>Sistem akan memilih pemain secara acak dari attendee accepted sesuai jumlah yang kamu isi.</p>
-                    <p class="note" id="generateInfoScoring" hidden>Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Leaderboard diurutkan dari total poin, lalu selisih poin. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
+                    <p class="note" id="generateInfoScoring" hidden>Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Sorting leaderboard mengikuti pilihan: berdasarkan poin atau jumlah menang. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
                     <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
                   </div>
                 </div>
@@ -3770,6 +3873,31 @@ render_header([
       return Number.isFinite(n) ? n : null;
     }
 
+    function updateInlineScoreVisual(form, isInitial) {
+      if (!form) return;
+      var aEl = form.querySelector('[data-inline-score-a]');
+      var bEl = form.querySelector('[data-inline-score-b]');
+      if (!aEl || !bEl) return;
+      var a = parseInlineScore(aEl);
+      var b = parseInlineScore(bEl);
+      aEl.classList.remove('score-box-win', 'score-box-lose', 'score-box-draw');
+      bEl.classList.remove('score-box-win', 'score-box-lose', 'score-box-draw');
+      if (isInitial && form.getAttribute('data-score-unset') === '1') return;
+      if (a === null || b === null) return;
+      if (a === b) {
+        aEl.classList.add('score-box-draw');
+        bEl.classList.add('score-box-draw');
+        return;
+      }
+      if (a > b) {
+        aEl.classList.add('score-box-win');
+        bEl.classList.add('score-box-lose');
+      } else {
+        aEl.classList.add('score-box-lose');
+        bEl.classList.add('score-box-win');
+      }
+    }
+
     function setInlineScoreStatus(form, message, kind) {
       if (!form) return;
       var statusEl = form.closest('[data-match-item]') ? form.closest('[data-match-item]').querySelector('[data-inline-score-status]') : null;
@@ -3794,11 +3922,13 @@ render_header([
       } else if (side === 'b' && b !== null) {
         aEl.value = String(Math.max(0, total - b));
       }
+      updateInlineScoreVisual(form, false);
     }
 
     boardRoot.querySelectorAll('[data-inline-score-form]').forEach(function (form) {
       var aEl = form.querySelector('[data-inline-score-a]');
       var bEl = form.querySelector('[data-inline-score-b]');
+      updateInlineScoreVisual(form, true);
       if (aEl) {
         aEl.addEventListener('change', function () { syncInlineScore(form, 'a'); });
         aEl.addEventListener('input', function () { syncInlineScore(form, 'a'); });
@@ -4085,10 +4215,12 @@ render_header([
     var nameEl = createForm.querySelector('[name=\"game_title\"]');
     var playerEl = createForm.querySelector('[name=\"player_count\"]');
     var totalEl = createForm.querySelector('[name=\"match_total_points\"]');
+    var sortEl = createForm.querySelector('[name=\"leaderboard_sort_by\"]');
     var courtEl = createForm.querySelector('[name=\"court_count\"]');
     var nameBlock = createForm.querySelector('[data-step-block=\"name\"]');
     var playersBlock = createForm.querySelector('[data-step-block=\"players\"]');
     var totalBlock = createForm.querySelector('[data-step-block=\"total\"]');
+    var sortBlock = createForm.querySelector('[data-step-block=\"leaderboard-sort\"]');
     var courtsBlock = createForm.querySelector('[data-step-block=\"courts\"]');
     var finalBlock = createForm.querySelector('[data-step-block=\"final\"]');
     if (!typeEl || !progressBody) return;
@@ -4106,10 +4238,13 @@ render_header([
 
     var totalPoints = totalEl ? parseInt(totalEl.value || '', 10) : NaN;
     var hasTotal = hasPlayers && Number.isFinite(totalPoints) && totalPoints > 0;
-    if (courtsBlock) courtsBlock.hidden = !hasTotal;
+    if (sortBlock) sortBlock.hidden = !hasTotal;
+
+    var hasSort = hasTotal && sortEl && (String(sortEl.value || '') === 'point' || String(sortEl.value || '') === 'wins');
+    if (courtsBlock) courtsBlock.hidden = !hasSort;
 
     var courtCount = courtEl ? parseInt(courtEl.value || '', 10) : NaN;
-    var hasCourt = hasTotal && Number.isFinite(courtCount) && courtCount >= 1;
+    var hasCourt = hasSort && Number.isFinite(courtCount) && courtCount >= 1;
     if (finalBlock) finalBlock.hidden = !hasCourt;
 
     progressBody.querySelectorAll('.create-step-block').forEach(function (block) {
@@ -4156,6 +4291,7 @@ render_header([
       target.matches('[data-create-match-form] [name="game_title"]') ||
       target.matches('[data-create-match-form] [name="player_count"]') ||
       target.matches('[data-create-match-form] [name="match_total_points"]') ||
+      target.matches('[data-create-match-form] [name="leaderboard_sort_by"]') ||
       target.matches('[data-create-match-form] [name="court_count"]')
     ) {
       syncCreateFormProgress();
