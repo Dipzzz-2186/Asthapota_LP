@@ -16,15 +16,24 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
 
 $sponsorItems = [];
 try {
-    $sponsorStmt = $db->query('SELECT name, website_url, logo_path FROM sponsors ORDER BY id DESC');
+    try {
+        $sponsorStmt = $db->query("SELECT name, website_url, logo_path, logo_mode FROM sponsors ORDER BY id DESC");
+    } catch (Throwable $e) {
+        $sponsorStmt = $db->query("SELECT name, website_url, logo_path, 'white' AS logo_mode FROM sponsors ORDER BY id DESC");
+    }
     foreach ($sponsorStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $logoPath = trim((string)($row['logo_path'] ?? ''));
         if ($logoPath === '') continue;
+        $logoMode = strtolower(trim((string)($row['logo_mode'] ?? 'white')));
+        if (!in_array($logoMode, ['white', 'color'], true)) {
+            $logoMode = 'white';
+        }
         if (preg_match('/^https?:\\/\\//i', $logoPath)) { $logoSrc = $logoPath; }
         else { $logoSrc = $basePath . '/' . ltrim($logoPath, '/'); }
         $sponsorItems[] = [
             'name' => trim((string)($row['name'] ?? 'Sponsor')),
             'logo' => $logoSrc,
+            'logo_mode' => $logoMode,
             'url'  => filter_var(trim((string)($row['website_url'] ?? '')), FILTER_VALIDATE_URL) ? trim((string)($row['website_url'] ?? '')) : '',
         ];
     }
@@ -32,10 +41,10 @@ try {
 
 if (!$sponsorItems) {
     $sponsorItems = [
-        ['name' => 'HIPPI',    'logo' => $basePath . '/assets/img/hippi.png',   'url' => 'https://www.hippi.or.id/'],
-        ['name' => 'BAPORA',   'logo' => $basePath . '/assets/img/logo.webp',   'url' => 'https://www.hippi.or.id/'],
-        ['name' => 'FCOM',     'logo' => $basePath . '/assets/img/fcom.png',    'url' => 'https://fcom.co.id/'],
-        ['name' => 'MY Padel', 'logo' => $basePath . '/assets/img/mypadel.png', 'url' => 'https://ayo.co.id/v/mypadel'],
+        ['name' => 'HIPPI',    'logo' => $basePath . '/assets/img/hippi.png',   'logo_mode' => 'color', 'url' => 'https://www.hippi.or.id/'],
+        ['name' => 'BAPORA',   'logo' => $basePath . '/assets/img/logo.webp',   'logo_mode' => 'color', 'url' => 'https://www.hippi.or.id/'],
+        ['name' => 'FCOM',     'logo' => $basePath . '/assets/img/fcom.png',    'logo_mode' => 'color', 'url' => 'https://fcom.co.id/'],
+        ['name' => 'MY Padel', 'logo' => $basePath . '/assets/img/mypadel.png', 'logo_mode' => 'color', 'url' => 'https://ayo.co.id/v/mypadel'],
     ];
 }
 
@@ -724,12 +733,18 @@ body.admin-page::after { display: none !important; }
   max-width: 132px;
   max-height: 58px;
   object-fit: contain;
-  filter: brightness(0) invert(1) drop-shadow(0 0 10px rgba(255,255,255,0.35));
+  filter: saturate(1.03) contrast(1.02) drop-shadow(0 0 10px rgba(255,255,255,0.2));
   opacity: 0.9;
   transition: opacity 0.3s ease, filter 0.3s ease;
 }
+.logo-link img.logo-white {
+  filter: brightness(0) invert(1) drop-shadow(0 0 10px rgba(255,255,255,0.35));
+}
 .logo-link:hover img {
   opacity: 1;
+  filter: saturate(1.08) contrast(1.04) drop-shadow(0 0 14px rgba(255,255,255,0.3));
+}
+.logo-link:hover img.logo-white {
   filter: brightness(0) invert(1) drop-shadow(0 0 14px rgba(255,255,255,0.55));
 }
 
@@ -999,11 +1014,11 @@ render_header([
           <?php $hasUrl = !empty($sp['url']); ?>
           <?php if ($hasUrl): ?>
             <a class="logo-link" href="<?= h($sp['url']) ?>" target="_blank" rel="noopener noreferrer">
-              <img src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>">
+              <img class="<?= (($sp['logo_mode'] ?? 'white') === 'white') ? 'logo-white' : 'logo-color' ?>" src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>">
             </a>
           <?php else: ?>
             <div class="logo-link">
-              <img src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>">
+              <img class="<?= (($sp['logo_mode'] ?? 'white') === 'white') ? 'logo-white' : 'logo-color' ?>" src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>">
             </div>
           <?php endif; ?>
         </div>

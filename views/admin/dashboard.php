@@ -17,6 +17,7 @@ ensure_order_attendee_package_schema($db);
 ensure_order_attendee_payment_schema($db);
 ensure_order_attendee_court_schema($db);
 ensure_admin_notification_schema($db);
+ensure_sponsors_logo_mode_schema($db);
 $flash = ['success' => '', 'error' => ''];
 $selectedOrderIdRaw = trim((string)($_REQUEST['filter_order_id'] ?? ''));
 $selectedOrderId = ctype_digit($selectedOrderIdRaw) ? (int)$selectedOrderIdRaw : 0;
@@ -34,6 +35,8 @@ $allowedStatusFilters = ['pending', 'paid', 'accepted', 'rejected'];
 $allowedArrivalFilters = ['arrived', 'not_arrived'];
 $selectedStatus = in_array($selectedStatusRaw, $allowedStatusFilters, true) ? $selectedStatusRaw : '';
 $selectedArrival = in_array($selectedArrivalRaw, $allowedArrivalFilters, true) ? $selectedArrivalRaw : '';
+$selectedOpenModalRaw = trim((string)($_REQUEST['open_modal'] ?? ''));
+$selectedOpenModal = in_array($selectedOpenModalRaw, ['sponsor', 'ad', 'admin_email', 'password'], true) ? $selectedOpenModalRaw : '';
 if ($selectedDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)) {
     $selectedDate = '';
 }
@@ -42,6 +45,7 @@ $sponsorsTableSql = "CREATE TABLE IF NOT EXISTS sponsors (
     name VARCHAR(150) NOT NULL,
     website_url VARCHAR(255) NULL,
     logo_path VARCHAR(255) NOT NULL,
+    logo_mode VARCHAR(16) NOT NULL DEFAULT 'white',
     created_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 $adsTableSql = "CREATE TABLE IF NOT EXISTS ads (
@@ -150,6 +154,40 @@ function save_white_logo_png(string $tmpPath, string $mime, string $targetPath):
     return $ok;
 }
 
+function save_logo_png(string $tmpPath, string $mime, string $targetPath): bool {
+    if (!extension_loaded('gd')) return false;
+    $src = create_image_from_upload($tmpPath, $mime);
+    if (!$src) return false;
+
+    $w = imagesx($src);
+    $h = imagesy($src);
+    if ($w <= 0 || $h <= 0 || $w > 4096 || $h > 4096) {
+        imagedestroy($src);
+        return false;
+    }
+
+    $img = imagecreatetruecolor($w, $h);
+    imagealphablending($img, false);
+    imagesavealpha($img, true);
+    $transparent = imagecolorallocatealpha($img, 0, 0, 0, 127);
+    imagefill($img, 0, 0, $transparent);
+    imagecopy($img, $src, 0, 0, 0, 0, $w, $h);
+    imagedestroy($src);
+
+    imagealphablending($img, false);
+    imagesavealpha($img, true);
+    $ok = @imagepng($img, $targetPath, 6);
+    imagedestroy($img);
+    return $ok;
+}
+
+function ensure_sponsors_logo_mode_schema(PDO $db): void {
+    try {
+        $db->exec("ALTER TABLE sponsors ADD COLUMN logo_mode VARCHAR(16) NOT NULL DEFAULT 'white' AFTER logo_path");
+    } catch (Throwable $e) {
+    }
+}
+
 ensure_session();
 if (!empty($_SESSION['dashboard_flash']) && is_array($_SESSION['dashboard_flash'])) {
     $flash = array_merge($flash, $_SESSION['dashboard_flash']);
@@ -159,6 +197,8 @@ if (!empty($_SESSION['dashboard_flash']) && is_array($_SESSION['dashboard_flash'
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $flash = ['success' => '', 'error' => ''];
     $dashboardAction = trim((string)($_POST['dashboard_action'] ?? 'order_decision'));
+    $postOpenModalRaw = trim((string)($_POST['open_modal'] ?? ''));
+    $postOpenModal = in_array($postOpenModalRaw, ['sponsor', 'ad', 'admin_email', 'password'], true) ? $postOpenModalRaw : '';
     $isAjaxRequest = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
 
     if ($dashboardAction === 'add_admin_notification_email') {
@@ -248,7 +288,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($dashboardAction === 'create_sponsor') {
         $sponsorName = trim((string)($_POST['sponsor_name'] ?? ''));
         $sponsorLink = trim((string)($_POST['sponsor_link'] ?? ''));
+        $sponsorLogoMode = strtolower(trim((string)($_POST['sponsor_logo_mode'] ?? 'white')));
         $logoFile = $_FILES['sponsor_logo'] ?? null;
+        if (!in_array($sponsorLogoMode, ['white', 'color'], true)) {
+            $sponsorLogoMode = 'white';
+        }
 
         if ($sponsorName === '') {
             $flash['error'] = 'Sponsor name is required.';
@@ -276,13 +320,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $newFileName = 'sponsor-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.png';
                     $targetPath = $uploadDir . '/' . $newFileName;
                     $storedLogoPath = '/uploads/sponsors/' . $newFileName;
-                    if (!save_white_logo_png($tmpPath, $mime, $targetPath)) {
-                        $flash['error'] = 'Gagal memproses logo. Upload PNG/JPG/WEBP dengan background polos.';
+                    $saveOk = $sponsorLogoMode === 'color'
+                        ? save_logo_png($tmpPath, $mime, $targetPath)
+                        : save_white_logo_png($tmpPath, $mime, $targetPath);
+                    if (!$saveOk) {
+                        $flash['error'] = $sponsorLogoMode === 'color'
+                            ? 'Gagal memproses logo berwarna. Upload PNG/JPG/WEBP yang valid.'
+                            : 'Gagal memproses logo putih. Upload PNG/JPG/WEBP dengan background polos.';
                     } else {
                         try {
                             $db->exec($sponsorsTableSql);
-                            $insertSponsor = $db->prepare('INSERT INTO sponsors (name, website_url, logo_path, created_at) VALUES (?, ?, ?, ?)');
-                            $insertSponsor->execute([$sponsorName, $sponsorLink !== '' ? $sponsorLink : null, $storedLogoPath, date('Y-m-d H:i:s')]);
+                            $insertSponsor = $db->prepare('INSERT INTO sponsors (name, website_url, logo_path, logo_mode, created_at) VALUES (?, ?, ?, ?, ?)');
+                            $insertSponsor->execute([$sponsorName, $sponsorLink !== '' ? $sponsorLink : null, $storedLogoPath, $sponsorLogoMode, date('Y-m-d H:i:s')]);
                             $flash['success'] = 'Sponsor added successfully.';
                         } catch (Throwable $e) {
                             if (is_file($targetPath)) @unlink($targetPath);
@@ -734,6 +783,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($selectedStatus !== '') $redirectParams['status'] = $selectedStatus;
     if ($selectedArrival !== '') $redirectParams['arrival'] = $selectedArrival;
     if ($selectedPage > 1) $redirectParams['page'] = $selectedPage;
+    if ($postOpenModal !== '') $redirectParams['open_modal'] = $postOpenModal;
     $redirectPath = '/admin/dashboard';
     if ($redirectParams) $redirectPath .= '?' . http_build_query($redirectParams);
     redirect($redirectPath);
@@ -749,10 +799,41 @@ try {
 $dashboardSponsors = [];
 try {
     $db->exec($sponsorsTableSql);
-    $dashboardSponsors = $db->query('SELECT id, name, website_url, logo_path, created_at FROM sponsors ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
+    $sponsorColumns = [];
+    $sponsorColumnRows = $db->query('SHOW COLUMNS FROM sponsors')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($sponsorColumnRows as $columnRow) {
+        $field = strtolower(trim((string)($columnRow['Field'] ?? '')));
+        if ($field !== '') {
+            $sponsorColumns[$field] = true;
+        }
+    }
+
+    $nameColumn = isset($sponsorColumns['name']) ? 'name' : (isset($sponsorColumns['sponsor_name']) ? 'sponsor_name' : '');
+    $websiteColumn = isset($sponsorColumns['website_url']) ? 'website_url' : (isset($sponsorColumns['sponsor_link']) ? 'sponsor_link' : (isset($sponsorColumns['link']) ? 'link' : ''));
+    $logoColumn = isset($sponsorColumns['logo_path']) ? 'logo_path' : (isset($sponsorColumns['logo']) ? 'logo' : '');
+    $logoModeColumn = isset($sponsorColumns['logo_mode']) ? 'logo_mode' : '';
+    $createdColumn = isset($sponsorColumns['created_at']) ? 'created_at' : '';
+
+    if ($nameColumn !== '' && $logoColumn !== '') {
+        $selectParts = [
+            'id',
+            $nameColumn . ' AS name',
+            ($websiteColumn !== '' ? $websiteColumn : 'NULL') . ' AS website_url',
+            $logoColumn . ' AS logo_path',
+            ($logoModeColumn !== '' ? $logoModeColumn : "'white'") . ' AS logo_mode',
+            ($createdColumn !== '' ? $createdColumn : 'NULL') . ' AS created_at',
+        ];
+        $dashboardSponsors = $db->query('SELECT ' . implode(', ', $selectParts) . ' FROM sponsors ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
+    }
 } catch (Throwable $e) {
     $dashboardSponsors = [];
 }
+if (!is_array($dashboardSponsors)) {
+    $dashboardSponsors = [];
+}
+$dashboardSponsors = array_values(array_filter($dashboardSponsors, static function ($row): bool {
+    return is_array($row);
+}));
 
 $dashboardAds = [];
 try {
@@ -1886,7 +1967,7 @@ $extraHead = <<<'HTML'
     display: grid;
     gap: 12px;
     padding: 16px 18px 18px;
-    max-height: calc(88vh - 74px);
+    max-height: calc(94vh - 74px);
     overflow-y: auto;
   }
   #sponsorModal .sponsor-form {
@@ -1897,13 +1978,16 @@ $extraHead = <<<'HTML'
   #sponsorModal .sponsor-manage-note {
     margin: 0;
     font-size: 12px;
-    color: var(--muted);
+    color: #526684;
     font-weight: 600;
     line-height: 1.45;
     padding: 8px 10px;
     border-radius: 10px;
     background: #f7faff;
     border: 1px solid var(--stroke);
+  }
+  #sponsorModal .sponsor-manage-note strong {
+    color: #17233a;
   }
   #sponsorModal .sponsor-manage-divider {
     height: 1px;
@@ -1913,33 +1997,39 @@ $extraHead = <<<'HTML'
   }
   #sponsorModal .sponsor-manage-list {
     margin: 0;
-    padding: 0;
+    padding: 12px;
     list-style: none;
-    display: grid;
-    gap: 8px;
-    max-height: 260px;
+    display: block;
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    background: #fff;
+    max-height: 420px;
+    min-height: 190px;
     overflow-y: auto;
-    padding-right: 2px;
   }
   #sponsorModal .sponsor-manage-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 14px;
+    min-height: 110px;
     border: 1px solid var(--stroke);
-    border-radius: 12px;
-    padding: 10px 12px;
+    border-radius: 14px;
+    padding: 14px 16px;
     background: var(--surface-2, #f8faff);
+    margin-bottom: 10px;
   }
+  #sponsorModal .sponsor-manage-item:last-child { margin-bottom: 0; }
   #sponsorModal .sponsor-manage-item-main {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+    flex: 1 1 auto;
   }
   #sponsorModal .sponsor-manage-logo {
-    width: 64px;
-    height: 42px;
+    width: 128px;
+    height: 82px;
     border-radius: 8px;
     border: 1px solid var(--stroke);
     background: #fff;
@@ -1957,29 +2047,31 @@ $extraHead = <<<'HTML'
   }
   #sponsorModal .sponsor-manage-meta {
     display: grid;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
   }
   #sponsorModal .sponsor-manage-meta strong {
-    font-size: 13px;
+    font-size: 18px;
     color: var(--text);
+    line-height: 1.25;
     overflow-wrap: anywhere;
   }
   #sponsorModal .sponsor-manage-meta span {
     color: var(--muted);
-    font-size: 11.5px;
+    font-size: 14px;
+    line-height: 1.35;
     overflow-wrap: anywhere;
   }
   #sponsorModal .sponsor-manage-item form { margin: 0; }
   #sponsorModal .sponsor-remove-btn {
-    height: 34px;
-    min-width: 34px;
-    padding: 0 10px;
-    border-radius: 10px;
+    height: 40px;
+    min-width: 84px;
+    padding: 0 14px;
+    border-radius: 11px;
     border: 1px solid rgba(193, 70, 70, 0.28);
     background: rgba(211, 47, 47, 0.08);
     color: #b33434;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     cursor: pointer;
     display: inline-flex;
@@ -2644,7 +2736,7 @@ $extraHead = <<<'HTML'
 
   .sponsor-modal-card {
     width: min(540px, 100%);
-    max-height: min(88vh, 720px);
+    max-height: min(94vh, 900px);
     background: var(--surface);
     border: 1px solid var(--stroke);
     border-radius: 20px;
@@ -2689,12 +2781,15 @@ $extraHead = <<<'HTML'
   }
   .sponsor-field { display: grid; gap: 7px; }
   .sponsor-field label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .sponsor-field input[type="text"], .sponsor-field input[type="url"], .sponsor-field input[type="password"], .sponsor-field input[type="file"] {
+  .sponsor-field input[type="text"], .sponsor-field input[type="url"], .sponsor-field input[type="password"], .sponsor-field input[type="file"], .sponsor-field select {
     width: 100%; min-height: 46px; padding: 11px 13px; border-radius: 10px;
     border: 1.5px solid var(--stroke); font-size: 14px; font-family: inherit;
     background: var(--surface); color: var(--text); font-weight: 500; transition: border-color 0.18s, box-shadow 0.18s;
   }
   .sponsor-field input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,102,255,0.1); }
+  .sponsor-field select {
+    cursor: pointer;
+  }
   .sponsor-field input[type="file"] { padding: 8px; cursor: pointer; background: #f7f9ff; font-size: 13px; }
   .sponsor-field input[type="file"]::file-selector-button { border: 0; border-radius: 999px; padding: 8px 14px; margin-right: 10px; background: #dfeaff; color: #0d3f98; font-weight: 700; font-size: 12px; cursor: pointer; }
   .sponsor-help { font-size: 11.5px; color: var(--muted); margin: 0; }
@@ -3833,6 +3928,7 @@ render_header([
 
         <form class="sponsor-form" method="post" action="/admin/dashboard" enctype="multipart/form-data" id="sponsorForm">
           <input type="hidden" name="dashboard_action" value="create_sponsor">
+          <input type="hidden" name="open_modal" value="sponsor">
           <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
           <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
           <input type="hidden" name="package" value="<?= (int)$selectedPackage ?>">
@@ -3854,6 +3950,14 @@ render_header([
             <input id="sponsorLogo" type="file" name="sponsor_logo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
             <p class="sponsor-help"><i class="bi bi-info-circle"></i> Format: JPG, PNG, WEBP</p>
           </div>
+          <div class="sponsor-field">
+            <label for="sponsorLogoMode">Mode Warna Logo</label>
+            <select id="sponsorLogoMode" name="sponsor_logo_mode">
+              <option value="white" selected>Putih (monochrome)</option>
+              <option value="color">Berwarna (asli)</option>
+            </select>
+            <p class="sponsor-help"><i class="bi bi-palette"></i> Pilih <strong>Putih</strong> untuk logo all-white, atau <strong>Berwarna</strong> untuk warna asli.</p>
+          </div>
           <div class="sponsor-form-actions">
             <button class="btn primary" type="submit"><i class="bi bi-check-circle"></i> Simpan</button>
           </div>
@@ -3861,10 +3965,19 @@ render_header([
 
         <hr class="sponsor-manage-divider">
 
-        <?php if ($dashboardSponsors): ?>
+        <?php $hasDashboardSponsors = is_array($dashboardSponsors) && count($dashboardSponsors) > 0; ?>
+        <?php if ($hasDashboardSponsors): ?>
           <ul class="sponsor-manage-list">
             <?php foreach ($dashboardSponsors as $sponsorRow): ?>
               <?php
+                $sponsorName = trim((string)($sponsorRow['name'] ?? $sponsorRow['sponsor_name'] ?? ''));
+                if ($sponsorName === '') {
+                    $sponsorName = 'Sponsor #' . (int)($sponsorRow['id'] ?? 0);
+                }
+                $sponsorWebsite = trim((string)($sponsorRow['website_url'] ?? $sponsorRow['sponsor_link'] ?? $sponsorRow['link'] ?? ''));
+                if ($sponsorWebsite === '') {
+                    $sponsorWebsite = 'Tanpa link website';
+                }
                 $rawLogoPath = trim((string)($sponsorRow['logo_path'] ?? ''));
                 $logoSrc = $rawLogoPath;
                 if ($logoSrc !== '' && !preg_match('/^https?:\/\//i', $logoSrc)) {
@@ -3874,15 +3987,16 @@ render_header([
               <li class="sponsor-manage-item">
                 <div class="sponsor-manage-item-main">
                   <div class="sponsor-manage-logo">
-                    <img src="<?= h($logoSrc) ?>" alt="<?= h((string)($sponsorRow['name'] ?? 'Sponsor')) ?>">
+                    <img src="<?= h($logoSrc) ?>" alt="<?= h($sponsorName) ?>">
                   </div>
                   <div class="sponsor-manage-meta">
-                    <strong><?= h((string)($sponsorRow['name'] ?? 'Sponsor')) ?></strong>
-                    <span><?= h((string)($sponsorRow['website_url'] ?? 'Tanpa link website')) ?></span>
+                    <strong><?= h($sponsorName) ?></strong>
+                    <span><?= h($sponsorWebsite) ?></span>
                   </div>
                 </div>
                 <form method="post" action="/admin/dashboard" onsubmit="return confirm('Hapus sponsor ini dari daftar?');">
                   <input type="hidden" name="dashboard_action" value="remove_sponsor">
+                  <input type="hidden" name="open_modal" value="sponsor">
                   <input type="hidden" name="sponsor_id" value="<?= (int)($sponsorRow['id'] ?? 0) ?>">
                   <input type="hidden" name="page" value="<?= (int)$currentPage ?>">
                   <input type="hidden" name="filter_order_id" value="<?= $selectedOrderId > 0 ? (int)$selectedOrderId : '' ?>">
@@ -5433,6 +5547,27 @@ render_header([
           setTimeout(function() { if (el && el.parentNode) el.parentNode.removeChild(el); }, 360);
         });
       }, 3500);
+    })();
+  </script>
+
+  <script>
+    // -- Auto Reopen Modal After Redirect -----------------------
+    (function () {
+      var target = <?= json_encode($selectedOpenModal, JSON_UNESCAPED_SLASHES) ?>;
+      if (!target) return;
+      var openButtonByModal = {
+        sponsor: 'openSponsorModal',
+        ad: 'openAdModal',
+        admin_email: 'openAdminEmailModal',
+        password: 'openPasswordModal'
+      };
+      var openBtnId = openButtonByModal[target] || '';
+      if (!openBtnId) return;
+      var btn = document.getElementById(openBtnId);
+      if (!btn) return;
+      setTimeout(function () {
+        btn.click();
+      }, 50);
     })();
   </script>
   

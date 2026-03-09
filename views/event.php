@@ -11,11 +11,19 @@ $basePath = ($scriptDir === '/' || $scriptDir === '.') ? '' : rtrim($scriptDir, 
 $sponsorItems = [];
 try {
     $db = get_db();
-    $sponsorRows = $db->query('SELECT name, website_url, logo_path FROM sponsors ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $sponsorRows = $db->query("SELECT name, website_url, logo_path, logo_mode FROM sponsors ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        $sponsorRows = $db->query("SELECT name, website_url, logo_path, 'white' AS logo_mode FROM sponsors ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
+    }
     foreach ($sponsorRows as $row) {
         $name = trim((string)($row['name'] ?? ''));
         $logoPath = trim((string)($row['logo_path'] ?? ''));
         $websiteUrl = trim((string)($row['website_url'] ?? ''));
+        $logoMode = strtolower(trim((string)($row['logo_mode'] ?? 'white')));
+        if (!in_array($logoMode, ['white', 'color'], true)) {
+            $logoMode = 'white';
+        }
         if ($logoPath === '') {
             continue;
         }
@@ -30,6 +38,7 @@ try {
             'name' => $name !== '' ? $name : 'Sponsor',
             'logo' => $logoSrc,
             'url' => filter_var($websiteUrl, FILTER_VALIDATE_URL) ? $websiteUrl : '',
+            'logo_mode' => $logoMode,
         ];
     }
 } catch (Throwable $e) {
@@ -38,10 +47,10 @@ try {
 
 if (!$sponsorItems) {
     $sponsorItems = [
-        ['name' => 'HIPPI', 'logo' => $basePath . '/assets/img/hippi.png', 'url' => 'https://www.hippi.or.id/'],
-        ['name' => 'BAPORA', 'logo' => $basePath . '/assets/img/logo.webp', 'url' => 'https://www.hippi.or.id/'],
-        ['name' => 'FCOM', 'logo' => $basePath . '/assets/img/fcom.png', 'url' => 'https://fcom.co.id/'],
-        ['name' => 'MY Padel', 'logo' => $basePath . '/assets/img/mypadel.png', 'url' => 'https://ayo.co.id/v/mypadel'],
+        ['name' => 'HIPPI', 'logo' => $basePath . '/assets/img/hippi.png', 'url' => 'https://www.hippi.or.id/', 'logo_mode' => 'color'],
+        ['name' => 'BAPORA', 'logo' => $basePath . '/assets/img/logo.webp', 'url' => 'https://www.hippi.or.id/', 'logo_mode' => 'color'],
+        ['name' => 'FCOM', 'logo' => $basePath . '/assets/img/fcom.png', 'url' => 'https://fcom.co.id/', 'logo_mode' => 'color'],
+        ['name' => 'MY Padel', 'logo' => $basePath . '/assets/img/mypadel.png', 'url' => 'https://ayo.co.id/v/mypadel', 'logo_mode' => 'color'],
     ];
 }
 ?>
@@ -670,14 +679,20 @@ if (!$sponsorItems) {
       height: var(--sponsor-logo-h);
       object-fit: contain;
       object-position: center;
-      filter: grayscale(100%) brightness(0) invert(1) contrast(1.2);
+      filter: saturate(1.03) contrast(1.02);
       user-select: none;
       pointer-events: none;
       transition: transform 0.16s ease, filter 0.2s ease;
     }
+    .sponsor img.logo-white {
+      filter: grayscale(100%) brightness(0) invert(1) contrast(1.2);
+    }
 
     .sponsor:hover img {
       transform: scale(1.03);
+      filter: saturate(1.08) contrast(1.04) drop-shadow(0 5px 10px rgba(0, 0, 0, 0.24));
+    }
+    .sponsor:hover img.logo-white {
       filter: grayscale(100%) brightness(0) invert(1) contrast(1.25) drop-shadow(0 5px 10px rgba(0, 0, 0, 0.24));
     }
 
@@ -1396,9 +1411,9 @@ if (!$sponsorItems) {
         <div class="sponsor-track">
           <?php foreach ($sponsorItems as $sp): ?>
             <?php if (!empty($sp['url'])): ?>
-              <a href="<?= h($sp['url']) ?>" target="_blank" rel="noopener noreferrer" class="sponsor"><img src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>"></a>
+              <a href="<?= h($sp['url']) ?>" target="_blank" rel="noopener noreferrer" class="sponsor"><img class="<?= (($sp['logo_mode'] ?? 'white') === 'white') ? 'logo-white' : 'logo-color' ?>" src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>"></a>
             <?php else: ?>
-              <div class="sponsor"><img src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>"></div>
+              <div class="sponsor"><img class="<?= (($sp['logo_mode'] ?? 'white') === 'white') ? 'logo-white' : 'logo-color' ?>" src="<?= h($sp['logo']) ?>" alt="<?= h($sp['name']) ?>"></div>
             <?php endif; ?>
           <?php endforeach; ?>
         </div>
