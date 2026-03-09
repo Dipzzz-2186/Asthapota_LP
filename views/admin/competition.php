@@ -766,6 +766,16 @@ function filter_mexicano_games_for_completed_blocks(array $gamesRows, array $see
     return $filtered;
 }
 
+function filter_games_with_valid_scores(array $gamesRows): array {
+    $filtered = [];
+    foreach ($gamesRows as $row) {
+        if (has_valid_game_score($row)) {
+            $filtered[] = $row;
+        }
+    }
+    return $filtered;
+}
+
 function build_session_bye_notes(
     array $pairs,
     int $courtCount,
@@ -1946,17 +1956,19 @@ foreach ($tournaments as $key => $tournament) {
     ksort($rounds, SORT_NUMERIC);
     $seedPlayers = array_values((array)($tournament['players'] ?? []));
     $tournamentType = normalize_competition_type((string)($tournament['type'] ?? ''));
+    $stateKey = build_tournament_state_key((string)($tournament['type'] ?? ''), (string)($tournament['label'] ?? ''));
+    $stateRow = (array)($tournamentStateMap[$stateKey] ?? []);
+    $isMexicano = ($tournamentType === 'Mexicano');
+    $isCompleted = $isMexicano && ((bool)($stateRow['is_completed'] ?? false));
     $gamesForStandings = $gamesRows;
-    if ($tournamentType === 'Mexicano') {
-        $gamesForStandings = filter_mexicano_games_for_completed_blocks($gamesRows, $seedPlayers);
+    if ($isMexicano) {
+        $gamesForStandings = filter_games_with_valid_scores($gamesRows);
     }
     $standingRows = build_standings_from_games($gamesForStandings, $seedPlayers);
 
     $tournaments[$key]['games'] = $gamesRows;
     $tournaments[$key]['rounds'] = $rounds;
     $tournaments[$key]['standings'] = $standingRows;
-    $stateKey = build_tournament_state_key((string)($tournament['type'] ?? ''), (string)($tournament['label'] ?? ''));
-    $stateRow = (array)($tournamentStateMap[$stateKey] ?? []);
     $allScored = !empty($gamesRows);
     $hasAnyValidScore = false;
     $hasPartialScore = false;
@@ -1985,8 +1997,6 @@ foreach ($tournaments as $key => $tournament) {
             $allScored = false;
         }
     }
-    $isMexicano = ($tournamentType === 'Mexicano');
-    $isCompleted = $isMexicano && ((bool)($stateRow['is_completed'] ?? false));
     $allPlayersScored = !empty($seedPlayers);
     foreach ($seedPlayers as $seedPlayerName) {
         $seedName = trim((string)$seedPlayerName);
@@ -3143,6 +3153,12 @@ render_header([
     var playerEl = createForm.querySelector('#playerCount');
     var wrap = createForm.querySelector('[data-player-stepper]');
     if (!playerEl || !wrap) return;
+    if (wrap.dataset.stepperReady === '1') {
+      if (typeof createForm.__syncPlayerStepper === 'function') {
+        createForm.__syncPlayerStepper();
+      }
+      return;
+    }
     var downBtn = wrap.querySelector('[data-player-step="down"]');
     var upBtn = wrap.querySelector('[data-player-step="up"]');
     var min = parseInt(playerEl.getAttribute('min') || '4', 10);
@@ -3160,8 +3176,9 @@ render_header([
     }
 
     function renderButtons(n) {
-      if (downBtn) downBtn.disabled = n <= min;
-      if (upBtn) upBtn.disabled = n >= max;
+      var stepperDisabled = !!playerEl.disabled || !!wrap.closest('[hidden]');
+      if (downBtn) downBtn.disabled = stepperDisabled || n <= min;
+      if (upBtn) upBtn.disabled = stepperDisabled || n >= max;
     }
 
     function setValue(next, triggerEvents) {
@@ -3175,12 +3192,16 @@ render_header([
     }
 
     if (downBtn) {
-      downBtn.addEventListener('click', function () {
+      downBtn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        if (downBtn.disabled) return;
         setValue(clamp(playerEl.value) - 1, true);
       });
     }
     if (upBtn) {
-      upBtn.addEventListener('click', function () {
+      upBtn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        if (upBtn.disabled) return;
         setValue(clamp(playerEl.value) + 1, true);
       });
     }
@@ -3196,6 +3217,10 @@ render_header([
     playerEl.addEventListener('change', function () {
       renderButtons(clamp(playerEl.value));
     });
+    createForm.__syncPlayerStepper = function () {
+      setValue(playerEl.value, false);
+    };
+    wrap.dataset.stepperReady = '1';
     setValue(playerEl.value, false);
   }
 
@@ -3291,6 +3316,9 @@ render_header([
         el.disabled = !enabled;
       });
     });
+    if (typeof createForm.__syncPlayerStepper === 'function') {
+      createForm.__syncPlayerStepper();
+    }
     if (stepHint) {
       stepHint.style.display = hasType ? 'none' : '';
     }
@@ -3301,6 +3329,7 @@ render_header([
     if (openBtn) {
       var createForm = document.querySelector('[data-create-match-form]');
       if (createForm) createForm.reset();
+      initPlayerCountStepper(createForm);
       setGameInputModalState(true);
       syncCreateFormProgress();
       updateCourtEstimator();
