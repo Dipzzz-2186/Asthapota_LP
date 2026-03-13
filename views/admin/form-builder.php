@@ -28,8 +28,20 @@ function form_builder_default_schema(): array
 
 function form_builder_normalize_type(string $type): string
 {
-    $allowed = ['short_text', 'paragraph', 'single_choice', 'multiple_choice', 'dropdown', 'rating', 'number', 'email', 'phone', 'date'];
+    $allowed = ['short_text', 'paragraph', 'single_choice', 'multiple_choice', 'dropdown', 'rating', 'number', 'email', 'phone', 'date', 'file', 'info_text'];
     return in_array($type, $allowed, true) ? $type : 'short_text';
+}
+
+function form_builder_normalize_category(string $category): string
+{
+    $allowed = ['question', 'identity'];
+    return in_array($category, $allowed, true) ? $category : 'question';
+}
+
+function form_builder_normalize_block_kind(string $kind): string
+{
+    $allowed = ['field', 'page_break'];
+    return in_array($kind, $allowed, true) ? $kind : 'field';
 }
 
 function form_builder_slug(string $value): string
@@ -40,21 +52,38 @@ function form_builder_slug(string $value): string
     return $value !== '' ? $value : 'field_' . substr(md5((string)mt_rand()), 0, 6);
 }
 
-function form_builder_question(string $label, string $type = 'short_text', bool $required = true, array $options = [], string $helpText = ''): array
+function form_builder_question(string $label, string $type = 'short_text', bool $required = true, array $options = [], string $helpText = '', string $category = 'question'): array
 {
+    $normalizedType = form_builder_normalize_type($type);
     return [
         'id' => form_builder_slug($label),
         'label' => trim($label) !== '' ? trim($label) : 'Pertanyaan',
-        'type' => form_builder_normalize_type($type),
-        'required' => $required,
-        'options' => array_values(array_filter(array_map(static function ($option): string {
+        'kind' => 'field',
+        'type' => $normalizedType,
+        'category' => form_builder_normalize_category($category),
+        'required' => $normalizedType === 'info_text' ? false : $required,
+        'options' => in_array($normalizedType, ['single_choice', 'multiple_choice', 'dropdown'], true) ? array_values(array_filter(array_map(static function ($option): string {
             return trim((string)$option);
         }, $options), static function (string $option): bool {
             return $option !== '';
-        })),
+        })) : [],
         'help_text' => trim($helpText),
-        'placeholder' => '',
+        'placeholder' => in_array($normalizedType, ['file', 'info_text'], true) ? '' : '',
     ];
+}
+
+function form_builder_info_block(string $title, string $description = ''): array
+{
+    return form_builder_question($title, 'info_text', false, [], $description, 'question');
+}
+
+function form_builder_section_break(string $title = 'Bagian Baru', string $description = ''): array
+{
+    $row = form_builder_question($title, 'short_text', false, [], $description, 'section_break');
+    $row['kind'] = 'page_break';
+    $row['category'] = 'question';
+    $row['placeholder'] = '';
+    return $row;
 }
 
 function form_builder_extract_question_count(string $prompt): int
@@ -172,15 +201,248 @@ function form_builder_cycle_types(array $types, int $index): string
     return (string)$types[$index % count($types)];
 }
 
+function form_builder_normalize_prompt_text(string $prompt): string
+{
+    $normalized = trim(preg_replace('/\s+/', ' ', $prompt) ?? $prompt);
+    return preg_replace('/^(buatkan|buat|bikin|tolong buatkan|tolong buat|tolong|please create|please make|create|make)\s+/i', '', $normalized) ?? $normalized;
+}
+
+function form_builder_extract_subject_from_prompt(string $prompt): string
+{
+    $normalized = form_builder_normalize_prompt_text($prompt);
+    if ($normalized === '') {
+        return '';
+    }
+
+    $subject = $normalized;
+    if (preg_match('/\b(?:survey|survei|kuis|quiz|form|formulir)\b\s*(?:tentang|mengenai|untuk|about|regarding)?\s*([^.\n]+)/iu', $normalized, $match)) {
+        $subject = trim((string)$match[1]);
+    }
+
+    $subject = preg_split('/(,|\sdengan\s|\suntuk\s(?:peserta|responden|usia|umur|kelas|tim)\b|\sbagi\s|\sfor\s|\sagar\s|\ssupaya\s|\syang\s|\sdengan\s\d+\s(?:pertanyaan|questions|soal|items)\b|\sberisi\s|\sisi\s|\starget\s|\saudiens?\s)/iu', $subject)[0] ?? '';
+    $subject = trim((string)$subject);
+    $subject = trim($subject, " \t\n\r\0\x0B.,:;-");
+
+    return mb_strlen($subject) >= 3 ? $subject : '';
+}
+
+function form_builder_subject_label(string $prompt, string $topic): string
+{
+    $subject = form_builder_extract_subject_from_prompt($prompt);
+    if ($subject !== '') {
+        return $subject;
+    }
+    return $topic !== 'umum' ? $topic : 'topik ini';
+}
+
+function form_builder_prompt_summary(string $prompt): string
+{
+    $normalized = form_builder_normalize_prompt_text($prompt);
+    if ($normalized === '') {
+        return '';
+    }
+
+    $summary = preg_split('/(?<=[.!?])\s+|\s+(?:dengan|untuk|bagi|for|agar|supaya|target|berisi)\b/iu', $normalized)[0] ?? $normalized;
+    $summary = trim((string)$summary);
+    $summary = trim($summary, " \t\n\r\0\x0B.,:;-");
+
+    return $summary;
+}
+
+function form_builder_topic_description(string $mode, string $subject, string $topic, string $ageGroup): string
+{
+    $label = trim($subject !== '' ? $subject : ($topic !== 'umum' ? $topic : 'topik umum'));
+    $prefix = $mode === 'quiz' ? 'Kuis tentang ' : 'Survey tentang ';
+    $description = $prefix . $label;
+
+    if ($ageGroup !== '') {
+        $description .= ' untuk ' . $ageGroup;
+    }
+
+    return $description . '.';
+}
+
+function form_builder_generic_choice_options(string $type, string $subject): array
+{
+    $label = $subject !== '' ? $subject : 'topik ini';
+
+    if ($type === 'dropdown') {
+        return [
+            'Sangat memahami ' . $label,
+            'Cukup memahami ' . $label,
+            'Masih belajar ' . $label,
+            'Belum memahami ' . $label,
+        ];
+    }
+
+    return [
+        'Sangat sesuai',
+        'Cukup sesuai',
+        'Kurang sesuai',
+        'Tidak sesuai',
+    ];
+}
+
+function form_builder_generic_quiz_questions(string $subject, string $ageGroup): array
+{
+    $subjectLabel = $subject !== '' ? $subject : 'materi ini';
+    $suffix = $ageGroup !== '' ? ' untuk peserta usia ' . $ageGroup : '';
+
+    return [
+        form_builder_question('Seberapa paham Anda dengan ' . $subjectLabel . ' sebelumnya?', 'single_choice', true, ['Belum paham', 'Sedikit paham', 'Cukup paham', 'Sangat paham']),
+        form_builder_question('Bagian apa dari ' . $subjectLabel . ' yang paling ingin Anda uji pemahamannya' . $suffix . '?', 'paragraph', false),
+        form_builder_question('Konsep mana yang paling menggambarkan inti dari ' . $subjectLabel . '?', 'single_choice', true, ['Konsep utama', 'Contoh penerapan', 'Hambatan umum', 'Strategi pengembangan']),
+        form_builder_question('Aspek apa yang paling penting diperhatikan saat membahas ' . $subjectLabel . '?', 'multiple_choice', true, ['Tujuan', 'Proses', 'Kualitas hasil', 'Evaluasi lanjutan']),
+        form_builder_question('Tahap mana yang biasanya paling awal dilakukan dalam ' . $subjectLabel . '?', 'dropdown', true, ['Persiapan', 'Pelaksanaan', 'Evaluasi', 'Tindak lanjut']),
+        form_builder_question('Jelaskan alasan jawaban Anda terkait ' . $subjectLabel . ' secara singkat', 'paragraph', false),
+        form_builder_question('Nilai tingkat kesulitan kuis ' . $subjectLabel, 'rating', true),
+    ];
+}
+
+function form_builder_identity_questions(string $mode, string $topic = 'umum', string $subject = '', string $ageGroup = '', string $audienceLevel = 'general'): array
+{
+    $subjectLabel = $subject !== '' ? $subject : ($topic !== 'umum' ? $topic : 'materi ini');
+    $roleOptions = [
+        'Peserta',
+        'Siswa / Mahasiswa',
+        'Profesional',
+        'Pengajar / Mentor',
+        'Lainnya',
+    ];
+    if ($topic === 'event') {
+        $roleOptions = ['Peserta', 'Panitia', 'Pembicara', 'Sponsor', 'Lainnya'];
+    } elseif ($topic === 'produk') {
+        $roleOptions = ['Calon pengguna', 'Pengguna aktif', 'Decision maker', 'Tim internal', 'Lainnya'];
+    } elseif ($topic === 'pendidikan') {
+        $roleOptions = ['Siswa', 'Mahasiswa', 'Guru', 'Orang tua', 'Lainnya'];
+    }
+
+    $levelOptions = ['Pemula', 'Menengah', 'Mahir'];
+    if ($audienceLevel === 'advanced') {
+        $levelOptions = ['Menengah', 'Mahir', 'Expert'];
+    } elseif ($audienceLevel === 'beginner') {
+        $levelOptions = ['Baru mulai', 'Pemula', 'Sedang belajar'];
+    }
+
+    $questions = $mode === 'quiz'
+        ? [
+            form_builder_question('Nama peserta', 'short_text', false, [], '', 'identity'),
+            form_builder_question('Email peserta', 'email', false, [], '', 'identity'),
+        ]
+        : [
+            form_builder_question('Nama lengkap', 'short_text', false, [], '', 'identity'),
+            form_builder_question('Email', 'email', false, [], '', 'identity'),
+        ];
+
+    $questions[] = form_builder_question('Peran Anda terkait ' . $subjectLabel, 'dropdown', true, $roleOptions, '', 'identity');
+    $questions[] = form_builder_question('Seberapa familiar Anda dengan ' . $subjectLabel . '?', 'dropdown', true, $levelOptions, $ageGroup !== '' ? 'Target usia: ' . $ageGroup : '', 'identity');
+
+    return $questions;
+}
+
+function form_builder_requested_file_support(string $prompt): bool
+{
+    return preg_match('/\b(upload|unggah|lampiran|attachment|file|dokumen|foto|gambar|pdf)\b/i', $prompt) === 1;
+}
+
+function form_builder_random_section_titles(string $mode, string $subject, string $topic): array
+{
+    $label = $subject !== '' ? $subject : ($topic !== 'umum' ? $topic : 'materi ini');
+    $sets = $mode === 'quiz'
+        ? [
+            [
+                ['title' => 'Pemahaman Dasar', 'description' => 'Pertanyaan pembuka untuk mengukur fondasi awal terkait ' . $label . '.'],
+                ['title' => 'Analisis Materi', 'description' => 'Fokus pada penerapan dan pemahaman yang lebih spesifik.'],
+                ['title' => 'Refleksi Akhir', 'description' => 'Penutup untuk melihat kesiapan dan umpan balik peserta.'],
+            ],
+            [
+                ['title' => 'Baseline Peserta', 'description' => 'Lihat titik awal pemahaman peserta tentang ' . $label . '.'],
+                ['title' => 'Latihan Inti', 'description' => 'Bagian utama untuk menguji materi inti dan pengambilan keputusan.'],
+                ['title' => 'Evaluasi Penutup', 'description' => 'Ringkasan akhir dari pengalaman atau tingkat keyakinan peserta.'],
+            ],
+        ]
+        : [
+            [
+                ['title' => 'Pengalaman Utama', 'description' => 'Bagian ini menggali pengalaman responden terkait ' . $label . '.'],
+                ['title' => 'Penilaian Detail', 'description' => 'Evaluasi lebih rinci terhadap aspek-aspek penting.'],
+                ['title' => 'Masukan Tambahan', 'description' => 'Ruang untuk umpan balik akhir dan insight tambahan.'],
+            ],
+            [
+                ['title' => 'Konteks Responden', 'description' => 'Memahami konteks dan kebutuhan responden lebih dulu.'],
+                ['title' => 'Evaluasi Inti', 'description' => 'Bagian utama untuk menilai pengalaman terhadap ' . $label . '.'],
+                ['title' => 'Tindak Lanjut', 'description' => 'Masukan dan rekomendasi yang bisa dipakai ke depan.'],
+            ],
+        ];
+
+    return $sets[array_rand($sets)];
+}
+
+function form_builder_insert_generated_sections(array $identityQuestions, array $questions, string $mode, string $subject, string $topic, bool $includeFilePrompt = false): array
+{
+    $output = [];
+    $output[] = form_builder_info_block(
+        'Informasi Awal',
+        'Bagian awal ini berisi identitas dan profil singkat agar jawaban bisa dibaca sesuai konteks ' . ($subject !== '' ? $subject : ($topic !== 'umum' ? $topic : 'materi ini')) . '.'
+    );
+    foreach ($identityQuestions as $identityQuestion) {
+        $output[] = $identityQuestion;
+    }
+
+    if ($includeFilePrompt) {
+        $output[] = form_builder_question('Upload file pendukung jika diperlukan', 'file', false, [], 'Contoh: foto, PDF, atau dokumen pendukung lainnya.');
+    }
+
+    if (empty($questions)) {
+        return $output;
+    }
+
+    $titles = form_builder_random_section_titles($mode, $subject, $topic);
+    $sectionCount = count($questions) >= 9 ? mt_rand(2, 3) : (count($questions) >= 4 ? 2 : 1);
+    $sectionCount = min($sectionCount, count($titles), max(1, count($questions)));
+
+    $chunkSizes = [];
+    $remainingQuestions = count($questions);
+    $remainingSections = $sectionCount;
+    for ($i = 0; $i < $sectionCount; $i++) {
+        if ($remainingSections === 1) {
+            $chunkSizes[] = $remainingQuestions;
+            break;
+        }
+
+        $minForThisSection = 2;
+        $maxForThisSection = $remainingQuestions - (($remainingSections - 1) * 2);
+        $size = $maxForThisSection <= $minForThisSection ? $minForThisSection : mt_rand($minForThisSection, $maxForThisSection);
+        $chunkSizes[] = $size;
+        $remainingQuestions -= $size;
+        $remainingSections--;
+    }
+
+    $offset = 0;
+    foreach ($chunkSizes as $index => $size) {
+        $meta = $titles[$index] ?? ['title' => 'Bagian ' . ($index + 2), 'description' => ''];
+        $output[] = form_builder_section_break((string)$meta['title'], (string)$meta['description']);
+        foreach (array_slice($questions, $offset, $size) as $question) {
+            $output[] = $question;
+        }
+        $offset += $size;
+    }
+
+    return $output;
+}
+
 function form_builder_extract_title_from_prompt(string $prompt): string
 {
+    $subject = form_builder_extract_subject_from_prompt($prompt);
+    if ($subject !== '') {
+        return mb_convert_case($subject, MB_CASE_TITLE, 'UTF-8');
+    }
+
     $prompt = trim($prompt);
     if ($prompt === '') {
         return '';
     }
 
-    $normalized = preg_replace('/\s+/', ' ', $prompt) ?? $prompt;
-    $normalized = preg_replace('/^(buatkan|bikin|tolong buat|tolong|please create|please make|create|make)\s+/i', '', $normalized) ?? $normalized;
+    $normalized = form_builder_normalize_prompt_text($prompt);
 
     if (preg_match('/\b(survey|survei|kuis|quiz|form|formulir)\s+([^."\n]+)/i', $normalized, $match)) {
         $candidate = trim((string)$match[2]);
@@ -198,71 +460,52 @@ function form_builder_extract_title_from_prompt(string $prompt): string
     return mb_convert_case($candidate, MB_CASE_TITLE, 'UTF-8');
 }
 
-function form_builder_generate_title(string $prompt, string $mode, string $topic, string $ageGroup): string
+function form_builder_generate_title(string $prompt, string $mode, string $topic, string $ageGroup, string $subject): string
 {
     $extracted = form_builder_extract_title_from_prompt($prompt);
     if ($extracted !== '') {
-        return $extracted;
+        if (preg_match('/^(survey|survei|quiz|kuis|form|formulir)\b/i', $extracted)) {
+            return $extracted;
+        }
+
+        $base = $mode === 'quiz' ? 'Kuis' : 'Survey';
+        return $base . ' ' . $extracted;
     }
 
     $base = $mode === 'quiz' ? 'Kuis' : 'Survey';
-    $title = $base . ' ' . ucfirst($topic);
+    $title = $base . ' ' . mb_convert_case($subject !== '' ? $subject : ucfirst($topic), MB_CASE_TITLE, 'UTF-8');
     if ($ageGroup !== '') {
         $title .= ' untuk ' . $ageGroup;
     }
     return $title;
 }
 
-function form_builder_generate_description(string $prompt, string $mode, string $topic, string $ageGroup): string
+function form_builder_generate_description(string $prompt, string $mode, string $topic, string $ageGroup, string $subject): string
 {
-    $parts = [];
-    $parts[] = $mode === 'quiz'
-        ? 'Form ini dirancang sebagai kuis interaktif yang masih bisa diedit ulang.'
-        : 'Form ini dirancang sebagai survey yang masih bisa diedit ulang.';
-    if ($topic !== 'umum') {
-        $parts[] = 'Fokus utama: ' . $topic . '.';
-    }
-    if ($ageGroup !== '') {
-        $parts[] = 'Target responden: ' . $ageGroup . '.';
-    }
-    return implode(' ', $parts);
+    return form_builder_topic_description($mode, $subject, $topic, $ageGroup);
 }
 
-function form_builder_identity_questions(string $mode): array
-{
-    if ($mode === 'quiz') {
-        return [
-            form_builder_question('Nama peserta', 'short_text', false),
-            form_builder_question('Email peserta', 'email', false),
-        ];
-    }
-
-    return [
-        form_builder_question('Nama lengkap', 'short_text', false),
-        form_builder_question('Email', 'email', false),
-    ];
-}
-
-function form_builder_apply_identity_questions(array $schema, string $mode): array
+function form_builder_apply_identity_questions(array $schema, string $mode, string $topic = 'umum', string $subject = '', string $ageGroup = '', string $audienceLevel = 'general', bool $includeFilePrompt = false): array
 {
     $questions = is_array($schema['questions'] ?? null) ? $schema['questions'] : [];
-    $identityQuestions = form_builder_identity_questions($mode);
-    $schema['questions'] = array_merge($identityQuestions, $questions);
+    $identityQuestions = form_builder_identity_questions($mode, $topic, $subject, $ageGroup, $audienceLevel);
+    $schema['questions'] = form_builder_insert_generated_sections($identityQuestions, $questions, $mode, $subject, $topic, $includeFilePrompt);
     return $schema;
 }
 
-function form_builder_survey_bank(string $topic, string $ageGroup): array
+function form_builder_survey_bank(string $topic, string $ageGroup, string $subject): array
 {
+    $subjectLabel = $subject !== '' ? $subject : ($topic !== 'umum' ? $topic : 'topik ini');
     $suffix = $ageGroup !== '' ? ' untuk responden usia ' . $ageGroup : '';
     $bank = [
         form_builder_question('Rentang usia Anda', 'dropdown', true, ['< 18 tahun', '18-24 tahun', '25-34 tahun', '35-44 tahun', '45+ tahun']),
-        form_builder_question('Seberapa familiar Anda dengan topik ini?', 'rating', true),
-        form_builder_question('Apa tujuan utama Anda mengikuti atau menggunakan hal ini?', 'paragraph', true),
-        form_builder_question('Bagian mana yang paling memuaskan?', 'paragraph', true),
-        form_builder_question('Bagian mana yang perlu diperbaiki?', 'paragraph', true),
-        form_builder_question('Seberapa besar kemungkinan Anda merekomendasikannya ke orang lain?', 'rating', true),
+        form_builder_question('Seberapa familiar Anda dengan ' . $subjectLabel . '?', 'rating', true),
+        form_builder_question('Apa tujuan utama Anda terkait ' . $subjectLabel . '?', 'paragraph', true),
+        form_builder_question('Bagian dari ' . $subjectLabel . ' mana yang paling memuaskan?', 'paragraph', true),
+        form_builder_question('Bagian dari ' . $subjectLabel . ' mana yang perlu diperbaiki?', 'paragraph', true),
+        form_builder_question('Seberapa besar kemungkinan Anda merekomendasikan ' . $subjectLabel . ' ke orang lain?', 'rating', true),
         form_builder_question('Pilihan yang paling sesuai dengan pengalaman Anda', 'single_choice', true, ['Sangat puas', 'Puas', 'Biasa saja', 'Kurang puas', 'Tidak puas']),
-        form_builder_question('Saran tambahan' . $suffix, 'paragraph', false),
+        form_builder_question('Saran tambahan untuk ' . $subjectLabel . $suffix, 'paragraph', false),
     ];
     if ($topic === 'event') {
         $bank[4] = form_builder_question('Apa alasan utama Anda mengikuti event ini?', 'paragraph', true);
@@ -280,18 +523,9 @@ function form_builder_survey_bank(string $topic, string $ageGroup): array
     return $bank;
 }
 
-function form_builder_quiz_bank(string $topic, string $ageGroup): array
+function form_builder_quiz_bank(string $topic, string $ageGroup, string $subject): array
 {
-    $suffix = $ageGroup !== '' ? ' untuk peserta usia ' . $ageGroup : '';
-    $bank = [
-        form_builder_question('Seberapa paham Anda dengan materi ini sebelumnya?', 'single_choice', true, ['Belum paham', 'Sedikit paham', 'Cukup paham', 'Sangat paham']),
-        form_builder_question('Topik apa yang paling ingin Anda uji pemahamannya' . $suffix . '?', 'paragraph', false),
-        form_builder_question('Pertanyaan pilihan ganda 1', 'single_choice', true, ['Opsi A', 'Opsi B', 'Opsi C', 'Opsi D']),
-        form_builder_question('Pertanyaan pilihan ganda 2', 'single_choice', true, ['Opsi A', 'Opsi B', 'Opsi C', 'Opsi D']),
-        form_builder_question('Pertanyaan pilihan ganda 3', 'single_choice', true, ['Opsi A', 'Opsi B', 'Opsi C', 'Opsi D']),
-        form_builder_question('Jelaskan alasan jawaban Anda secara singkat', 'paragraph', false),
-        form_builder_question('Nilai tingkat kesulitan kuis ini', 'rating', true),
-    ];
+    $bank = form_builder_generic_quiz_questions($subject !== '' ? $subject : $topic, $ageGroup);
     if ($topic === 'pendidikan') {
         $bank[4] = form_builder_question('Materi mana yang paling sering membuat Anda bingung?', 'single_choice', true, ['Konsep dasar', 'Analisis soal', 'Penerapan rumus', 'Interpretasi hasil']);
         $bank[5] = form_builder_question('Jenis evaluasi apa yang paling membantu Anda belajar?', 'multiple_choice', true, ['Pilihan ganda', 'Essay', 'Diskusi', 'Simulasi']);
@@ -517,28 +751,33 @@ function form_builder_generate_schema_from_prompt(string $prompt): array
 {
     $mode = form_builder_detect_mode($prompt);
     $topic = form_builder_detect_topic($prompt);
+    $subject = form_builder_subject_label($prompt, $topic);
     $ageGroup = form_builder_extract_age_group($prompt);
     $audienceLevel = form_builder_detect_audience_level($prompt);
     $questionCount = form_builder_extract_question_count($prompt);
     $requestedTypes = form_builder_detect_requested_types($prompt);
+    $includeFilePrompt = form_builder_requested_file_support($prompt);
     if ($mode === 'quiz' && $topic === 'padel') {
         $bank = form_builder_padel_quiz_bank($audienceLevel, $requestedTypes);
     } elseif ($mode === 'quiz' && in_array($topic, ['golf', 'run', 'tenis', 'sepatu roda', 'triathlon'], true)) {
         $bank = form_builder_sport_quiz_bank($topic, $audienceLevel, $requestedTypes);
     } else {
-        $bank = $mode === 'quiz' ? form_builder_quiz_bank($topic, $ageGroup) : form_builder_survey_bank($topic, $ageGroup);
+        $bank = $mode === 'quiz'
+            ? form_builder_quiz_bank($topic, $ageGroup, $subject)
+            : form_builder_survey_bank($topic, $ageGroup, $subject);
     }
 
     if (count($bank) < $questionCount) {
         for ($i = count($bank); $i < $questionCount; $i++) {
             $type = form_builder_cycle_types($requestedTypes, $i);
+            $label = in_array($topic, ['padel', 'golf', 'run', 'tenis', 'sepatu roda', 'triathlon'], true)
+                ? 'Pertanyaan dasar ' . $topic . ' ' . ($i + 1)
+                : 'Bagaimana penilaian Anda terhadap aspek ' . ($i - 1) . ' dari ' . $subject . '?';
             $bank[] = form_builder_question(
-                in_array($topic, ['padel', 'golf', 'run', 'tenis', 'sepatu roda', 'triathlon'], true)
-                    ? 'Pertanyaan dasar ' . $topic . ' ' . ($i + 1)
-                    : 'Pertanyaan ' . ($i + 1),
+                $label,
                 $type,
                 true,
-                in_array($type, ['single_choice', 'multiple_choice', 'dropdown'], true) ? ['Opsi 1', 'Opsi 2', 'Opsi 3', 'Opsi 4'] : []
+                in_array($type, ['single_choice', 'multiple_choice', 'dropdown'], true) ? form_builder_generic_choice_options($type, $subject) : []
             );
         }
     }
@@ -548,8 +787,8 @@ function form_builder_generate_schema_from_prompt(string $prompt): array
         $questions[$index]['id'] = 'q_' . ($index + 1) . '_' . form_builder_slug((string)($question['label'] ?? 'question'));
     }
     $schema = [
-        'title' => form_builder_generate_title($prompt, $mode, $topic, $ageGroup),
-        'description' => form_builder_generate_description($prompt, $mode, $topic, $ageGroup),
+        'title' => form_builder_generate_title($prompt, $mode, $topic, $ageGroup, $subject),
+        'description' => form_builder_generate_description($prompt, $mode, $topic, $ageGroup, $subject),
         'settings' => [
             'collect_email' => $mode === 'quiz',
             'show_progress' => true,
@@ -557,7 +796,7 @@ function form_builder_generate_schema_from_prompt(string $prompt): array
         ],
         'questions' => $questions,
     ];
-    return form_builder_apply_identity_questions($schema, $mode);
+    return form_builder_apply_identity_questions($schema, $mode, $topic, $subject, $ageGroup, $audienceLevel, $includeFilePrompt);
 }
 
 function form_builder_sanitize_schema(array $schema): array
@@ -570,18 +809,26 @@ function form_builder_sanitize_schema(array $schema): array
         if (!is_array($question)) {
             continue;
         }
+        $legacyCategory = (string)($question['category'] ?? 'question');
+        $kind = form_builder_normalize_block_kind((string)($question['kind'] ?? ($legacyCategory === 'section_break' ? 'page_break' : 'field')));
         $label = trim((string)($question['label'] ?? ''));
         if ($label === '') {
             $label = 'Pertanyaan ' . (count($normalizedQuestions) + 1);
         }
+        $category = form_builder_normalize_category($legacyCategory);
         $type = form_builder_normalize_type((string)($question['type'] ?? 'short_text'));
         $options = is_array($question['options'] ?? null) ? $question['options'] : [];
-        if (!in_array($type, ['single_choice', 'multiple_choice', 'dropdown'], true)) {
+        if ($kind === 'page_break') {
+            $type = 'short_text';
+            $options = [];
+        } elseif (!in_array($type, ['single_choice', 'multiple_choice', 'dropdown'], true)) {
             $options = [];
         }
-        $row = form_builder_question($label, $type, !empty($question['required']), $options, trim((string)($question['help_text'] ?? '')));
+        $isInformational = $type === 'info_text';
+        $row = form_builder_question($label, $type, ($kind === 'page_break' || $isInformational) ? false : !empty($question['required']), $options, trim((string)($question['help_text'] ?? '')), $category);
+        $row['kind'] = $kind;
         $row['id'] = trim((string)($question['id'] ?? '')) !== '' ? form_builder_slug((string)$question['id']) : 'q_' . ($index + 1) . '_' . form_builder_slug($label);
-        $row['placeholder'] = trim((string)($question['placeholder'] ?? ''));
+        $row['placeholder'] = ($kind === 'page_break' || in_array($type, ['file', 'info_text'], true)) ? '' : trim((string)($question['placeholder'] ?? ''));
         $normalizedQuestions[] = $row;
     }
     return [
@@ -819,7 +1066,9 @@ render_header([
   .response-answer-list { display:grid; gap:10px; }
   .response-answer-item { padding:12px 14px; border-radius:14px; background:#f7faff; border:1px solid rgba(17,47,88,0.08); }
   .response-answer-item strong { display:block; margin-bottom:6px; font-size:13px; color:#123255; }
-  .builder-form, .builder-question-list, .builder-preview-stack { display:grid; gap:14px; }
+  .builder-form { display:grid; gap:14px; }
+  .builder-preview-stack { display:flex; flex-direction:column; gap:14px; flex:1; min-height:0; }
+  .builder-question-list { display:grid; gap:14px; max-height:72vh; overflow:auto; padding-right:4px; }
   .builder-field { display:grid; gap:7px; }
   .builder-field label { font-weight:700; font-size:13px; color:#173b67; }
   .builder-field input, .builder-field textarea, .builder-field select { width:100%; border-radius:14px; border:1px solid rgba(23,59,103,0.16); background:#fff; padding:12px 14px; font:inherit; color:#132b4a; }
@@ -829,19 +1078,45 @@ render_header([
   .builder-toolbar { justify-content:space-between; align-items:center; }
   .builder-badge { display:inline-flex; align-items:center; gap:8px; border-radius:999px; padding:8px 12px; background:rgba(17,80,156,0.08); color:#1658ad; font-size:12px; font-weight:700; }
   .builder-question { border:1px solid rgba(15,48,90,0.1); border-radius:22px; padding:16px; background:linear-gradient(180deg, rgba(247,249,255,0.95), rgba(255,255,255,0.98)); }
+  .builder-question.is-dragging { opacity:0.55; box-shadow:0 18px 34px rgba(15,48,90,0.16); }
+  .builder-question.drop-before { border-top:3px solid #1f6de0; }
+  .builder-question.drop-after { border-bottom:3px solid #1f6de0; }
+  .builder-question.is-page-break { margin-block:28px; border-style:dashed; border-width:2px; background:linear-gradient(180deg, rgba(236,244,255,0.98), rgba(250,252,255,0.98)); }
   .builder-question-head { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:14px; }
+  .builder-question-head-main { display:flex; align-items:center; gap:10px; min-width:0; }
   .builder-question-title { font-size:13px; font-weight:800; color:#45617f; text-transform:uppercase; letter-spacing:0.08em; }
+  .builder-drag-handle { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:12px; border:1px dashed rgba(17,80,156,0.24); background:#fff; color:#5b7592; cursor:grab; }
+  .builder-drag-handle:active { cursor:grabbing; }
+  .builder-section-card { margin:14px; padding:18px; border-radius:18px; background:linear-gradient(135deg, rgba(31,109,224,0.1), rgba(57,165,217,0.08)); border:1px solid rgba(31,109,224,0.16); }
+  .builder-section-card strong { display:block; margin-bottom:6px; color:#123255; font-size:15px; }
+  .builder-section-card p { margin:0; color:#577190; font-size:13px; }
+  .builder-question.is-info-block { border-style:dashed; background:linear-gradient(180deg, rgba(255,250,235,0.95), rgba(255,255,255,0.98)); }
+  .builder-page-gap { display:flex; align-items:center; gap:12px; margin:20px 14px; color:#557191; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; }
+  .builder-page-gap::before, .builder-page-gap::after { content:""; flex:1; height:1px; background:rgba(17,80,156,0.18); }
+  .preview-page-indicator { margin:14px 14px 0; color:#557191; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; }
+  .preview-progress { margin:14px 14px 0; height:8px; border-radius:999px; background:rgba(31,109,224,0.12); overflow:hidden; }
+  .preview-progress-bar { display:block; height:100%; background:linear-gradient(90deg, #1f6de0, #39a5d9); transition:width .2s ease; }
+  .preview-section-actions { padding:0 14px 14px; display:flex; justify-content:space-between; gap:10px; margin-top:auto; }
+  .preview-nav-button { border:none; border-radius:999px; padding:10px 16px; font:inherit; font-weight:700; cursor:pointer; transition:opacity 0.2s ease, transform 0.2s ease; }
+  .preview-nav-button:disabled { cursor:not-allowed; opacity:0.45; transform:none; }
+  .preview-nav-button:not(:disabled):hover { transform:translateY(-1px); }
+  .preview-nav-button.prev { background:rgba(31,109,224,0.1); color:#1658ad; }
+  .preview-nav-button.next { background:#1f6de0; color:#fff; margin-left:auto; }
+  .preview-nav-button.submit { background:#1f6de0; color:#fff; margin-left:auto; }
   .builder-option-list { display:grid; gap:8px; }
   .builder-option-row { display:grid; grid-template-columns:1fr auto; gap:8px; }
-  .builder-preview-phone { background:linear-gradient(180deg, rgba(32,53,84,0.95), rgba(17,30,54,0.98)); border-radius:28px; padding:18px; box-shadow:inset 0 1px 0 rgba(255,255,255,0.09), 0 24px 42px rgba(7,18,36,0.26); }
-  .builder-preview-screen { background:#eef3fb; border-radius:22px; padding:14px; min-height:72vh; }
-  .form-preview-sheet { background:#fff; border-radius:22px; box-shadow:0 16px 36px rgba(14,36,72,0.1); overflow:hidden; }
+  .builder-preview-phone { background:linear-gradient(180deg, rgba(32,53,84,0.95), rgba(17,30,54,0.98)); border-radius:28px; padding:18px; box-shadow:inset 0 1px 0 rgba(255,255,255,0.09), 0 24px 42px rgba(7,18,36,0.26); min-height:72vh; }
+  .builder-preview-screen { background:#eef3fb; border-radius:22px; padding:14px; min-height:calc(72vh - 36px); height:100%; display:flex; }
+  .form-preview-sheet { background:#fff; border-radius:22px; box-shadow:0 16px 36px rgba(14,36,72,0.1); overflow:auto; min-height:100%; width:100%; display:flex; flex-direction:column; }
   .form-preview-hero { padding:22px 20px; background:linear-gradient(135deg, #1f6de0, #39a5d9); color:#fff; }
   .form-preview-hero h3 { margin:0 0 8px; font-size:24px; line-height:1.12; }
   .form-preview-hero p { margin:0; color:rgba(255,255,255,0.88); font-size:13px; }
   .preview-question { margin:14px; padding:16px; border-radius:18px; background:#fff; border:1px solid rgba(16,44,79,0.08); }
   .preview-question h4 { margin:0 0 8px; font-size:15px; color:#123255; }
   .preview-help { margin:0 0 10px; color:#607891; font-size:12px; }
+  .preview-note { margin:0 14px 14px; color:#607891; font-size:12px; }
+  .preview-info-card { margin:14px; padding:16px; border-radius:18px; background:linear-gradient(135deg, rgba(255,244,214,0.72), rgba(255,251,240,0.98)); border:1px dashed rgba(199,147,0,0.35); color:#6f5411; }
+  .preview-file-meta { margin-top:8px; font-size:12px; color:#607891; }
   .preview-required { color:#c62828; }
   .preview-input, .preview-option { width:100%; border:1px solid rgba(17,47,88,0.14); background:#fafcff; border-radius:12px; padding:11px 12px; font-size:13px; color:#445f7f; }
   .preview-option { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
@@ -852,7 +1127,7 @@ render_header([
   .alert-inline { margin-bottom:16px; padding:14px 16px; border-radius:16px; font-size:14px; }
   .alert-inline.success { background:rgba(28,160,98,0.12); color:#126741; border:1px solid rgba(28,160,98,0.22); }
   .alert-inline.error { background:rgba(204,41,54,0.1); color:#8a1f2a; border:1px solid rgba(204,41,54,0.2); }
-  @media (max-width:1180px) { .builder-grid { grid-template-columns:1fr; } .builder-preview-screen, .builder-list { max-height:none; min-height:0; } .builder-meta-grid { grid-template-columns:1fr; } }
+  @media (max-width:1180px) { .builder-grid { grid-template-columns:1fr; } .builder-preview-screen, .builder-list, .builder-question-list { max-height:none; min-height:0; } .builder-meta-grid { grid-template-columns:1fr; } }
   @media (max-width:640px) { .builder-container { width:min(100vw - 20px, 100%); } .builder-header { flex-direction:column; align-items:stretch; } .builder-inline { grid-template-columns:1fr; } .builder-card-body, .builder-card-head { padding-inline:14px; } .builder-question-head { flex-direction:column; align-items:stretch; } }
 </style>
 <main class="builder-shell">
@@ -944,7 +1219,12 @@ render_header([
                         <?php foreach ($answers as $answerItem): ?>
                           <div class="response-answer-item">
                             <strong><?= h((string)($answerItem['label'] ?? 'Pertanyaan')) ?></strong>
-                            <div><?= nl2br(h(is_array($answerItem['answer'] ?? null) ? implode(', ', $answerItem['answer']) : (string)($answerItem['answer'] ?? '-'))) ?></div>
+                            <?php $answerValue = $answerItem['answer'] ?? null; ?>
+                            <?php if (is_array($answerValue) && !empty($answerValue['path'])): ?>
+                              <div><a href="<?= h((string)$answerValue['path']) ?>" target="_blank" rel="noopener noreferrer"><?= h((string)($answerValue['name'] ?? 'Lihat file')) ?></a></div>
+                            <?php else: ?>
+                              <div><?= nl2br(h(is_array($answerValue) ? implode(', ', $answerValue) : (string)($answerValue ?? '-'))) ?></div>
+                            <?php endif; ?>
                           </div>
                         <?php endforeach; ?>
                       <?php endif; ?>
@@ -991,7 +1271,11 @@ render_header([
             </div>
             <div class="builder-toolbar">
               <div class="builder-badge"><i class="bi bi-ui-checks-grid"></i> Editor Pertanyaan</div>
-              <button class="btn ghost" type="button" data-add-question><i class="bi bi-plus-circle"></i> Tambah Pertanyaan</button>
+              <div class="builder-actions">
+                <button class="btn ghost" type="button" data-add-section><i class="bi bi-layout-text-window-reverse"></i> Tambah Bagian</button>
+                <button class="btn ghost" type="button" data-add-info><i class="bi bi-info-circle"></i> Tambah Info</button>
+                <button class="btn ghost" type="button" data-add-question><i class="bi bi-plus-circle"></i> Tambah Pertanyaan</button>
+              </div>
             </div>
             <div class="builder-question-list" data-question-list></div>
             <div class="builder-actions">
@@ -1039,10 +1323,20 @@ render_header([
 <template id="builderQuestionTemplate">
   <article class="builder-question" data-question-item>
     <div class="builder-question-head">
-      <div class="builder-question-title" data-question-index>PERTANYAAN</div>
+      <div class="builder-question-head-main">
+        <button class="builder-drag-handle" type="button" draggable="true" data-drag-handle title="Geser untuk ubah urutan" aria-label="Geser untuk ubah urutan"><i class="bi bi-grip-vertical"></i></button>
+        <div class="builder-question-title" data-question-index>PERTANYAAN</div>
+      </div>
       <button class="btn ghost small" type="button" data-remove-question><i class="bi bi-x-lg"></i> Hapus</button>
     </div>
     <div class="builder-field"><label>Judul pertanyaan</label><input type="text" data-field="label" placeholder="Masukkan pertanyaan"></div>
+    <div class="builder-field">
+      <label>Kategori blok</label>
+      <select data-field="category">
+        <option value="question">Pertanyaan</option>
+        <option value="identity">Identitas</option>
+      </select>
+    </div>
     <div class="builder-inline">
       <div class="builder-field">
         <label>Tipe jawaban</label>
@@ -1057,6 +1351,8 @@ render_header([
           <option value="email">Email</option>
           <option value="phone">Phone</option>
           <option value="date">Date</option>
+          <option value="file">File upload</option>
+          <option value="info_text">Informasi saja</option>
         </select>
       </div>
       <div class="builder-field"><label>Placeholder</label><input type="text" data-field="placeholder" placeholder="Opsional"></div>
@@ -1087,19 +1383,34 @@ render_header([
     var collectEmailInput = root.querySelector('[data-setting-collect-email]');
     var showProgressInput = root.querySelector('[data-setting-show-progress]');
     var addQuestionButton = root.querySelector('[data-add-question]');
-    if (!schemaOutput || !questionList || !previewSheet || !titleInput || !descriptionInput || !collectEmailInput || !showProgressInput || !addQuestionButton) return;
+    var addSectionButton = root.querySelector('[data-add-section]');
+    var addInfoButton = root.querySelector('[data-add-info]');
+    if (!schemaOutput || !questionList || !previewSheet || !titleInput || !descriptionInput || !collectEmailInput || !showProgressInput || !addQuestionButton || !addSectionButton || !addInfoButton) return;
     var state = JSON.parse(schemaOutput.value || '{}');
 
     if (!Array.isArray(state.questions)) state.questions = [];
+    var previewPageIndex = 0;
     if (!state.settings || typeof state.settings !== 'object') state.settings = {};
+    var dragState = { fromIndex: -1, toIndex: -1, position: 'after', scrollFrame: 0 };
 
     function supportsOptions(type) {
       return type === 'single_choice' || type === 'multiple_choice' || type === 'dropdown';
     }
 
+    function isInfoBlock(question) {
+      return String((question && question.type) || '').toLowerCase() === 'info_text';
+    }
+
     function isIdentityQuestion(question) {
+      var category = String((question && question.category) || '').toLowerCase();
+      if (category === 'identity') return true;
       var label = String((question && question.label) || '').toLowerCase();
       return label === 'nama lengkap' || label === 'nama peserta' || label === 'email' || label === 'email peserta';
+    }
+
+    function isSectionBreak(question) {
+      return String((question && question.kind) || '').toLowerCase() === 'page_break'
+        || String((question && question.category) || '').toLowerCase() === 'section_break';
     }
 
     function createEmptyQuestion() {
@@ -1107,10 +1418,48 @@ render_header([
       return {
         id: 'q_' + count + '_new',
         label: 'Pertanyaan baru ' + count,
+        kind: 'field',
+        category: 'question',
         type: 'short_text',
         required: true,
         options: [],
         help_text: '',
+        placeholder: ''
+      };
+    }
+
+    function createInfoBlock() {
+      var count = state.questions.filter(function(question) {
+        return isInfoBlock(question);
+      }).length + 1;
+
+      return {
+        id: 'info_' + count,
+        label: 'Informasi ' + count,
+        kind: 'field',
+        category: 'question',
+        type: 'info_text',
+        required: false,
+        options: [],
+        help_text: 'Teks ini hanya ditampilkan sebagai informasi untuk responden.',
+        placeholder: ''
+      };
+    }
+
+    function createSectionBreak() {
+      var count = state.questions.filter(function(question) {
+        return isSectionBreak(question);
+      }).length + 2;
+
+      return {
+        id: 'section_' + count,
+        label: 'Bagian ' + count,
+        kind: 'page_break',
+        category: 'question',
+        type: 'short_text',
+        required: false,
+        options: [],
+        help_text: 'Deskripsi singkat untuk bagian ini.',
         placeholder: ''
       };
     }
@@ -1152,13 +1501,77 @@ render_header([
       return row;
     }
 
+    function clearDragMarkers() {
+      var items = questionList.querySelectorAll('[data-question-item]');
+      Array.prototype.forEach.call(items, function(item) {
+        item.classList.remove('is-dragging', 'drop-before', 'drop-after');
+      });
+    }
+
+    function stopAutoScroll() {
+      if (dragState.scrollFrame) {
+        window.cancelAnimationFrame(dragState.scrollFrame);
+        dragState.scrollFrame = 0;
+      }
+    }
+
+    function autoScrollQuestionList(clientY) {
+      stopAutoScroll();
+      if (dragState.fromIndex < 0) return;
+
+      var rect = questionList.getBoundingClientRect();
+      var threshold = 72;
+      var speed = 18;
+      var delta = 0;
+
+      if (clientY < rect.top + threshold) {
+        delta = -speed;
+      } else if (clientY > rect.bottom - threshold) {
+        delta = speed;
+      }
+
+      if (!delta) return;
+
+      function tick() {
+        questionList.scrollTop += delta;
+        dragState.scrollFrame = window.requestAnimationFrame(tick);
+      }
+
+      dragState.scrollFrame = window.requestAnimationFrame(tick);
+    }
+
+    function reorderQuestions(fromIndex, toIndex, position) {
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+        return false;
+      }
+
+      var moved = state.questions.splice(fromIndex, 1)[0];
+      var insertIndex = toIndex;
+
+      if (fromIndex < toIndex) {
+        insertIndex -= 1;
+      }
+      if (position === 'after') {
+        insertIndex += 1;
+      }
+
+      if (insertIndex < 0) insertIndex = 0;
+      if (insertIndex > state.questions.length) insertIndex = state.questions.length;
+
+      state.questions.splice(insertIndex, 0, moved);
+      return true;
+    }
+
     function renderQuestions() {
       questionList.innerHTML = '';
       var visibleQuestionNumber = 0;
 
       state.questions.forEach(function(question, index) {
         var fragment = template.content.cloneNode(true);
+        var questionItem = fragment.querySelector('[data-question-item]');
+        var dragHandle = fragment.querySelector('[data-drag-handle]');
         var indexEl = fragment.querySelector('[data-question-index]');
+        var categoryInput = fragment.querySelector('[data-field="category"]');
         var labelInput = fragment.querySelector('[data-field="label"]');
         var typeInput = fragment.querySelector('[data-field="type"]');
         var placeholderInput = fragment.querySelector('[data-field="placeholder"]');
@@ -1169,17 +1582,36 @@ render_header([
         var optionsList = fragment.querySelector('[data-options-list]');
         var addOptionButton = fragment.querySelector('[data-add-option]');
 
-        if (isIdentityQuestion(question)) {
+        questionItem.dataset.index = String(index);
+        questionItem.classList.toggle('is-page-break', isSectionBreak(question));
+        questionItem.classList.toggle('is-info-block', isInfoBlock(question));
+
+        if (isSectionBreak(question)) {
+          indexEl.textContent = 'Halaman Berikutnya';
+        } else if (isInfoBlock(question)) {
+          indexEl.textContent = 'Informasi';
+        } else if (isIdentityQuestion(question)) {
           indexEl.textContent = 'Identitas';
         } else {
           visibleQuestionNumber += 1;
           indexEl.textContent = 'Pertanyaan ' + visibleQuestionNumber;
         }
+        categoryInput.value = isIdentityQuestion(question) ? 'identity' : (question.category || 'question');
         labelInput.value = question.label || '';
         typeInput.value = question.type || 'short_text';
         placeholderInput.value = question.placeholder || '';
         helpInput.value = question.help_text || '';
         requiredInput.checked = !!question.required;
+
+        categoryInput.addEventListener('change', function() {
+          question.category = categoryInput.value;
+          question.kind = isSectionBreak(question) ? 'page_break' : 'field';
+          if (!question.type) {
+            question.type = 'short_text';
+          }
+          renderQuestions();
+          sync();
+        });
 
         labelInput.addEventListener('input', function() {
           question.label = labelInput.value;
@@ -1192,6 +1624,13 @@ render_header([
             question.options = [];
           } else if (!Array.isArray(question.options) || !question.options.length) {
             question.options = ['Opsi 1', 'Opsi 2'];
+          }
+          if (question.type === 'info_text') {
+            question.required = false;
+            question.placeholder = '';
+          }
+          if (question.type === 'file') {
+            question.placeholder = '';
           }
           renderQuestions();
           sync();
@@ -1218,6 +1657,66 @@ render_header([
           sync();
         });
 
+        dragHandle.addEventListener('dragstart', function(event) {
+          dragState.fromIndex = index;
+          dragState.toIndex = index;
+          dragState.position = 'after';
+          questionItem.classList.add('is-dragging');
+          if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', String(index));
+          }
+        });
+
+        questionItem.addEventListener('dragover', function(event) {
+          if (dragState.fromIndex < 0 || dragState.fromIndex === index) {
+            return;
+          }
+          event.preventDefault();
+          autoScrollQuestionList(event.clientY);
+          var rect = questionItem.getBoundingClientRect();
+          var position = (event.clientY - rect.top) < (rect.height / 2) ? 'before' : 'after';
+          dragState.toIndex = index;
+          dragState.position = position;
+          clearDragMarkers();
+          questionItem.classList.add(position === 'before' ? 'drop-before' : 'drop-after');
+          var draggingItem = questionList.querySelector('[data-question-item].is-dragging');
+          if (draggingItem) {
+            draggingItem.classList.add('is-dragging');
+          }
+        });
+
+        questionItem.addEventListener('dragleave', function(event) {
+          if (event.relatedTarget && questionItem.contains(event.relatedTarget)) {
+            return;
+          }
+          questionItem.classList.remove('drop-before', 'drop-after');
+        });
+
+        questionItem.addEventListener('drop', function(event) {
+          event.preventDefault();
+          stopAutoScroll();
+          if (!reorderQuestions(dragState.fromIndex, index, dragState.position)) {
+            clearDragMarkers();
+            dragState.fromIndex = -1;
+            dragState.toIndex = -1;
+            return;
+          }
+          dragState.fromIndex = -1;
+          dragState.toIndex = -1;
+          dragState.position = 'after';
+          renderQuestions();
+          sync();
+        });
+
+        questionItem.addEventListener('dragend', function() {
+          stopAutoScroll();
+          clearDragMarkers();
+          dragState.fromIndex = -1;
+          dragState.toIndex = -1;
+          dragState.position = 'after';
+        });
+
         if (supportsOptions(question.type)) {
           optionsWrap.hidden = false;
           if (!Array.isArray(question.options) || !question.options.length) {
@@ -1233,7 +1732,39 @@ render_header([
           });
         }
 
+        if (isSectionBreak(question)) {
+          categoryInput.closest('.builder-field').hidden = true;
+          typeInput.closest('.builder-field').hidden = true;
+          placeholderInput.closest('.builder-field').hidden = true;
+          requiredInput.closest('.builder-check').hidden = true;
+          optionsWrap.hidden = true;
+          helpInput.placeholder = 'Deskripsi bagian berikutnya';
+          labelInput.placeholder = 'Judul halaman berikutnya';
+        } else if (isInfoBlock(question)) {
+          categoryInput.closest('.builder-field').hidden = true;
+          typeInput.closest('.builder-field').hidden = false;
+          placeholderInput.closest('.builder-field').hidden = true;
+          requiredInput.closest('.builder-check').hidden = true;
+          optionsWrap.hidden = true;
+          helpInput.placeholder = 'Isi informasi yang ingin ditampilkan';
+          labelInput.placeholder = 'Judul blok informasi';
+        } else {
+          categoryInput.closest('.builder-field').hidden = false;
+          typeInput.closest('.builder-field').hidden = false;
+          placeholderInput.closest('.builder-field').hidden = question.type === 'file';
+          requiredInput.closest('.builder-check').hidden = false;
+          helpInput.placeholder = 'Petunjuk singkat untuk responden';
+          labelInput.placeholder = 'Masukkan pertanyaan';
+        }
+
         questionList.appendChild(fragment);
+
+        if (isSectionBreak(question)) {
+          var gap = document.createElement('div');
+          gap.className = 'builder-page-gap';
+          gap.textContent = 'Batas Halaman';
+          questionList.appendChild(gap);
+        }
       });
 
       if (!state.questions.length) {
@@ -1243,6 +1774,38 @@ render_header([
         questionList.appendChild(empty);
       }
     }
+
+    questionList.addEventListener('dragover', function(event) {
+      if (dragState.fromIndex < 0) return;
+      event.preventDefault();
+      autoScrollQuestionList(event.clientY);
+
+      var items = questionList.querySelectorAll('[data-question-item]');
+      if (!items.length) return;
+
+      var lastItem = items[items.length - 1];
+      var rect = lastItem.getBoundingClientRect();
+      if (event.clientY > rect.bottom) {
+        clearDragMarkers();
+        lastItem.classList.add('drop-after');
+        dragState.toIndex = items.length - 1;
+        dragState.position = 'after';
+      }
+    });
+
+    questionList.addEventListener('drop', function(event) {
+      if (dragState.fromIndex < 0 || dragState.toIndex < 0) return;
+      event.preventDefault();
+      stopAutoScroll();
+      if (reorderQuestions(dragState.fromIndex, dragState.toIndex, dragState.position)) {
+        renderQuestions();
+        sync();
+      }
+      clearDragMarkers();
+      dragState.fromIndex = -1;
+      dragState.toIndex = -1;
+      dragState.position = 'after';
+    });
 
     function scrollToLastQuestion() {
       var items = questionList.querySelectorAll('[data-question-item]');
@@ -1262,6 +1825,7 @@ render_header([
 
     function renderPreviewInput(question) {
       var type = question.type || 'short_text';
+      if (isSectionBreak(question)) return '';
       if (type === 'paragraph') return '<div class="preview-input" style="min-height:82px;">Jawaban panjang...</div>';
       if (type === 'rating') return '<div class="preview-chip">1 2 3 4 5</div>';
       if (type === 'single_choice' || type === 'multiple_choice') {
@@ -1275,15 +1839,104 @@ render_header([
       if (type === 'email') return '<div class="preview-input">nama@email.com</div>';
       if (type === 'phone') return '<div class="preview-input">08xxxxxxxxxx</div>';
       if (type === 'number') return '<div class="preview-input">0</div>';
+      if (type === 'file') return '<div class="preview-input">Pilih file...</div><div class="preview-file-meta">Responden dapat mengunggah dokumen atau gambar.</div>';
+      if (type === 'info_text') return '';
       return '<div class="preview-input">' + escapeHtml(question.placeholder || 'Jawaban singkat') + '</div>';
     }
 
-    function renderPreview() {
-      var questionsHtml = state.questions.map(function(question) {
-        return '<section class="preview-question"><h4>' + escapeHtml(question.label || 'Pertanyaan') + (question.required ? ' <span class="preview-required">*</span>' : '') + '</h4>' + (question.help_text ? '<p class="preview-help">' + escapeHtml(question.help_text) + '</p>' : '') + renderPreviewInput(question) + '</section>';
-      }).join('');
+    function buildPreviewPages() {
+      var pages = [];
+      var currentPage = { marker: null, questions: [] };
 
-      previewSheet.innerHTML = '<div class="form-preview-hero"><h3>' + escapeHtml(state.title || 'Form Baru') + '</h3><p>' + escapeHtml(state.description || '') + '</p></div><div class="builder-preview-stack">' + (questionsHtml || '<div class="preview-question"><h4>Belum ada pertanyaan</h4><p class="preview-help">Tambahkan pertanyaan untuk melihat preview.</p></div>') + '</div>';
+      state.questions.forEach(function(question) {
+        if (isSectionBreak(question)) {
+          if (currentPage.marker || currentPage.questions.length) {
+            pages.push(currentPage);
+          }
+          currentPage = { marker: question, questions: [] };
+          return;
+        }
+
+        currentPage.questions.push(question);
+      });
+
+      if (currentPage.marker || currentPage.questions.length) {
+        pages.push(currentPage);
+      }
+
+      if (!pages.length) {
+        pages.push({ marker: null, questions: [] });
+      }
+
+      return pages;
+    }
+
+    function renderPreview() {
+      var pages = buildPreviewPages();
+      if (previewPageIndex >= pages.length) {
+        previewPageIndex = pages.length - 1;
+      }
+      if (previewPageIndex < 0) {
+        previewPageIndex = 0;
+      }
+
+      var activePage = pages[previewPageIndex] || { marker: null, questions: [] };
+      var sectionHeader = '';
+      if (activePage.marker) {
+        sectionHeader = '<div class="builder-section-card"><strong>' + escapeHtml(activePage.marker.label || ('Bagian ' + (previewPageIndex + 1))) + '</strong>' + (activePage.marker.help_text ? '<p>' + escapeHtml(activePage.marker.help_text) + '</p>' : '') + '</div>';
+      }
+
+      var previewQuestions = activePage.questions.slice(0, 5);
+      var questionsHtml = previewQuestions.map(function(question) {
+          if (isInfoBlock(question)) {
+            return '<section class="preview-info-card"><h4>' + escapeHtml(question.label || 'Informasi') + '</h4>' + (question.help_text ? '<p class="preview-help">' + escapeHtml(question.help_text) + '</p>' : '') + '</section>';
+          }
+          return '<section class="preview-question"><h4>' + escapeHtml(question.label || 'Pertanyaan') + (question.required ? ' <span class="preview-required">*</span>' : '') + '</h4>' + (question.help_text ? '<p class="preview-help">' + escapeHtml(question.help_text) + '</p>' : '') + renderPreviewInput(question) + '</section>';
+      }).join('');
+      var previewNote = activePage.questions.length > 5
+        ? '<p class="preview-note">Preview dibatasi 5 pertanyaan. Form asli tetap menampilkan semua pertanyaan di bagian ini.</p>'
+        : '';
+
+      var progressHtml = '';
+      if (state.settings && state.settings.show_progress && pages.length > 1) {
+        progressHtml = '<div class="preview-progress"><span class="preview-progress-bar" style="width:' + (((previewPageIndex + 1) / pages.length) * 100) + '%"></span></div>';
+      }
+
+      var prevHtml = previewPageIndex > 0
+        ? '<button class="preview-nav-button prev" type="button" data-preview-prev>Sebelumnya</button>'
+        : '<span></span>';
+      var actionHtml = previewPageIndex < pages.length - 1
+        ? '<button class="preview-nav-button next" type="button" data-preview-next>Selanjutnya</button>'
+        : '<button class="preview-nav-button submit" type="button" disabled>Kirim Jawaban</button>';
+      var navigationHtml = '<div class="preview-section-actions">' + prevHtml + actionHtml + '</div>';
+
+      previewSheet.innerHTML = ''
+        + '<div class="form-preview-hero"><h3>' + escapeHtml(state.title || 'Form Baru') + '</h3><p>' + escapeHtml(state.description || '') + '</p></div>'
+        + progressHtml
+        + (pages.length > 1 ? '<div class="preview-page-indicator">Halaman ' + (previewPageIndex + 1) + ' dari ' + pages.length + '</div>' : '')
+        + '<div class="builder-preview-stack">'
+        + sectionHeader
+        + (questionsHtml || '<div class="preview-question"><h4>Belum ada pertanyaan</h4><p class="preview-help">Tambahkan pertanyaan untuk melihat preview.</p></div>')
+        + previewNote
+        + navigationHtml
+        + '</div>';
+
+      var prevButton = previewSheet.querySelector('[data-preview-prev]');
+      var nextButton = previewSheet.querySelector('[data-preview-next]');
+      if (prevButton) {
+        prevButton.addEventListener('click', function() {
+          if (previewPageIndex <= 0) return;
+          previewPageIndex -= 1;
+          renderPreview();
+        });
+      }
+      if (nextButton) {
+        nextButton.addEventListener('click', function() {
+          if (previewPageIndex >= pages.length - 1) return;
+          previewPageIndex += 1;
+          renderPreview();
+        });
+      }
     }
 
     function sync() {
@@ -1315,6 +1968,18 @@ render_header([
     showProgressInput.addEventListener('change', sync);
     addQuestionButton.addEventListener('click', function() {
       state.questions.push(createEmptyQuestion());
+      renderQuestions();
+      sync();
+      scrollToLastQuestion();
+    });
+    addInfoButton.addEventListener('click', function() {
+      state.questions.push(createInfoBlock());
+      renderQuestions();
+      sync();
+      scrollToLastQuestion();
+    });
+    addSectionButton.addEventListener('click', function() {
+      state.questions.push(createSectionBreak());
       renderQuestions();
       sync();
       scrollToLastQuestion();
