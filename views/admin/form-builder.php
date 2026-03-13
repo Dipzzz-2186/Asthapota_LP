@@ -59,13 +59,13 @@ function form_builder_question(string $label, string $type = 'short_text', bool 
 
 function form_builder_extract_question_count(string $prompt): int
 {
-    if (preg_match('/(\d{1,2})\s*(pertanyaan|questions|soal)/i', $prompt, $match)) {
+    if (preg_match('/(\d{1,2})\s*(pertanyaan|questions|soal|items|q(?:uestions)?)/i', $prompt, $match)) {
         return max(3, min(20, (int)$match[1]));
     }
-    if (stripos($prompt, 'singkat') !== false) {
+    if (stripos($prompt, 'singkat') !== false || stripos($prompt, 'short') !== false || stripos($prompt, 'brief') !== false) {
         return 5;
     }
-    if (stripos($prompt, 'mendalam') !== false || stripos($prompt, 'detail') !== false) {
+    if (stripos($prompt, 'mendalam') !== false || stripos($prompt, 'detail') !== false || stripos($prompt, 'in-depth') !== false || stripos($prompt, 'detailed') !== false) {
         return 12;
     }
     return 8;
@@ -76,7 +76,13 @@ function form_builder_extract_age_group(string $prompt): string
     if (preg_match('/(?:umur|usia)\s*(\d{1,2})\s*(?:-|sampai|to)\s*(\d{1,2})/i', $prompt, $match)) {
         return $match[1] . '-' . $match[2] . ' tahun';
     }
+    if (preg_match('/(?:age|ages?)\s*(\d{1,2})\s*(?:-|to)\s*(\d{1,2})/i', $prompt, $match)) {
+        return $match[1] . '-' . $match[2] . ' tahun';
+    }
     if (preg_match('/(?:umur|usia)\s*(?:di atas|lebih dari)\s*(\d{1,2})/i', $prompt, $match)) {
+        return 'di atas ' . $match[1] . ' tahun';
+    }
+    if (preg_match('/(?:age|ages?)\s*(?:over|above|more than)\s*(\d{1,2})/i', $prompt, $match)) {
         return 'di atas ' . $match[1] . ' tahun';
     }
     return '';
@@ -84,7 +90,7 @@ function form_builder_extract_age_group(string $prompt): string
 
 function form_builder_detect_mode(string $prompt): string
 {
-    return preg_match('/\b(quiz|kuis|ujian|tes|pre[- ]?test|post[- ]?test)\b/i', $prompt) ? 'quiz' : 'survey';
+    return preg_match('/\b(quiz|kuis|ujian|tes|test|assessment|pre[- ]?test|post[- ]?test|exam)\b/i', $prompt) ? 'quiz' : 'survey';
 }
 
 function form_builder_detect_topic(string $prompt): string
@@ -96,14 +102,14 @@ function form_builder_detect_topic(string $prompt): string
         'run' => ['run', 'running', 'lari', 'marathon', 'jogging'],
         'tenis' => ['tenis', 'tennis', 'forehand', 'backhand'],
         'sepatu roda' => ['sepatu roda', 'roller skate', 'roller skating', 'inline skate'],
-        'triathlon' => ['triathlon', 'renang sepeda lari', 'swim bike run'],
-        'kepuasan pelanggan' => ['kepuasan', 'pelanggan', 'customer satisfaction'],
-        'event' => ['event', 'acara', 'seminar', 'workshop'],
-        'pendidikan' => ['sekolah', 'siswa', 'guru', 'belajar', 'pendidikan'],
-        'kesehatan' => ['kesehatan', 'rumah sakit', 'klinik', 'pasien'],
-        'produk' => ['produk', 'fitur', 'aplikasi', 'layanan'],
-        'karyawan' => ['karyawan', 'pegawai', 'tim internal', 'employee'],
-        'komunitas' => ['komunitas', 'warga', 'masyarakat'],
+        'triathlon' => ['triathlon', 'renang sepeda lari', 'swim bike run', 'swim bike', 'triathlete'],
+        'kepuasan pelanggan' => ['kepuasan', 'pelanggan', 'customer satisfaction', 'customer feedback', 'customer experience', 'cx', 'nps'],
+        'event' => ['event', 'acara', 'seminar', 'workshop', 'webinar', 'conference', 'meetup'],
+        'pendidikan' => ['sekolah', 'siswa', 'guru', 'belajar', 'pendidikan', 'education', 'learning', 'training', 'course', 'kelas', 'class'],
+        'kesehatan' => ['kesehatan', 'rumah sakit', 'klinik', 'pasien', 'health', 'hospital', 'clinic', 'patient', 'wellness'],
+        'produk' => ['produk', 'fitur', 'aplikasi', 'layanan', 'product', 'feature', 'app', 'service', 'saas', 'platform'],
+        'karyawan' => ['karyawan', 'pegawai', 'tim internal', 'employee', 'staff', 'team', 'people ops', 'hr'],
+        'komunitas' => ['komunitas', 'warga', 'masyarakat', 'community', 'volunteer', 'nonprofit', 'ngo'],
     ];
     foreach ($topics as $label => $keywords) {
         foreach ($keywords as $keyword) {
@@ -121,10 +127,10 @@ function form_builder_detect_audience_level(string $prompt): string
     if (preg_match('/\b(amatir|pemula|beginner|newbie|dasar)\b/', $normalized)) {
         return 'beginner';
     }
-    if (preg_match('/\b(intermediate|menengah)\b/', $normalized)) {
+    if (preg_match('/\b(intermediate|menengah|mid|mid-level)\b/', $normalized)) {
         return 'intermediate';
     }
-    if (preg_match('/\b(advanced|mahir|pro|lanjutan)\b/', $normalized)) {
+    if (preg_match('/\b(advanced|mahir|pro|lanjutan|expert|professional)\b/', $normalized)) {
         return 'advanced';
     }
     return 'general';
@@ -135,11 +141,11 @@ function form_builder_detect_requested_types(string $prompt): array
     $normalized = strtolower($prompt);
     $types = [];
     $map = [
-        'multiple_choice' => ['multiple', 'multi select', 'multiple choice', 'checkbox', 'jamak'],
-        'single_choice' => ['single', 'single select', 'radio', 'pilihan tunggal'],
-        'dropdown' => ['dropdown', 'select box'],
-        'rating' => ['rating', 'nilai', 'skala'],
-        'paragraph' => ['essay', 'paragraf', 'alasan', 'deskriptif'],
+        'multiple_choice' => ['multiple', 'multi select', 'multiple choice', 'checkbox', 'jamak', 'checkboxes', 'tick all', 'select all'],
+        'single_choice' => ['single', 'single select', 'radio', 'pilihan tunggal', 'one choice', 'single choice'],
+        'dropdown' => ['dropdown', 'select box', 'select', 'pick list'],
+        'rating' => ['rating', 'nilai', 'skala', 'scale', 'likert', 'score'],
+        'paragraph' => ['essay', 'paragraf', 'alasan', 'deskriptif', 'long answer', 'long text', 'free text', 'open ended'],
     ];
 
     foreach ($map as $type => $keywords) {
@@ -166,15 +172,43 @@ function form_builder_cycle_types(array $types, int $index): string
     return (string)$types[$index % count($types)];
 }
 
+function form_builder_extract_title_from_prompt(string $prompt): string
+{
+    $prompt = trim($prompt);
+    if ($prompt === '') {
+        return '';
+    }
+
+    $normalized = preg_replace('/\s+/', ' ', $prompt) ?? $prompt;
+    $normalized = preg_replace('/^(buatkan|bikin|tolong buat|tolong|please create|please make|create|make)\s+/i', '', $normalized) ?? $normalized;
+
+    if (preg_match('/\b(survey|survei|kuis|quiz|form|formulir)\s+([^."\n]+)/i', $normalized, $match)) {
+        $candidate = trim((string)$match[2]);
+    } else {
+        $candidate = $normalized;
+    }
+
+    $candidate = preg_split('/(,|\s+dengan\s+|\s+untuk\s+|\s+bagi\s+|\s+for\s+|\s+agar\s+|\s+supaya\s+|\s+yang\s+|\s+di\s+)/i', $candidate)[0] ?? '';
+    $candidate = trim(preg_replace('/\s+/', ' ', (string)$candidate) ?? '');
+
+    if (mb_strlen($candidate) < 3) {
+        return '';
+    }
+
+    return mb_convert_case($candidate, MB_CASE_TITLE, 'UTF-8');
+}
+
 function form_builder_generate_title(string $prompt, string $mode, string $topic, string $ageGroup): string
 {
+    $extracted = form_builder_extract_title_from_prompt($prompt);
+    if ($extracted !== '') {
+        return $extracted;
+    }
+
     $base = $mode === 'quiz' ? 'Kuis' : 'Survey';
     $title = $base . ' ' . ucfirst($topic);
     if ($ageGroup !== '') {
         $title .= ' untuk ' . $ageGroup;
-    }
-    if (trim($prompt) !== '' && $topic === 'umum') {
-        $title = $base . ' dari Prompt';
     }
     return $title;
 }
@@ -190,10 +224,6 @@ function form_builder_generate_description(string $prompt, string $mode, string 
     }
     if ($ageGroup !== '') {
         $parts[] = 'Target responden: ' . $ageGroup . '.';
-    }
-    $prompt = trim($prompt);
-    if ($prompt !== '') {
-        $parts[] = 'Prompt admin: "' . mb_substr($prompt, 0, 180) . (mb_strlen($prompt) > 180 ? '...' : '') . '"';
     }
     return implode(' ', $parts);
 }
