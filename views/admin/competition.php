@@ -3882,10 +3882,8 @@ render_header([
                                 $st = ($sa !== null && $sb !== null) ? ($sa + $sb) : 0;
                                 $configuredTotal = isset($game['match_total_points']) && $game['match_total_points'] !== null ? (int)$game['match_total_points'] : 0;
                                 $notesRaw = trim((string)($game['notes'] ?? ''));
-                                $byeInfo = '';
-                                if (preg_match('/(?:^|;)bye:\s*(.+)$/i', $notesRaw, $mBye)) {
-                                    $byeInfo = trim((string)($mBye[1] ?? ''));
-                                }
+                                $byeMembers = extract_bye_members_from_notes($notesRaw);
+                                $byeInfo = $byeMembers ? implode(', ', $byeMembers) : '';
                                 if (!in_array($configuredTotal, PADEL_ALLOWED_TOTAL_POINTS, true) && in_array($st, PADEL_ALLOWED_TOTAL_POINTS, true)) {
                                     $configuredTotal = $st;
                                 }
@@ -4670,9 +4668,12 @@ render_header([
     }
   }
 
-  function buildPartnerSelectOptions(selectedPlayers, currentValue, placeholder) {
+  function buildPartnerSelectOptions(selectedPlayers, currentValue, placeholder, blockedMap) {
     var options = ['<option value="">' + placeholder + '</option>'];
     selectedPlayers.forEach(function (name) {
+      if (blockedMap && blockedMap[name] && name !== currentValue) {
+        return;
+      }
       var selectedAttr = name === currentValue ? ' selected' : '';
       options.push('<option value="' + escapeHtml(name) + '"' + selectedAttr + '>' + escapeHtml(name) + '</option>');
     });
@@ -4723,13 +4724,38 @@ render_header([
     });
 
     var html = [];
+    var globallyUsed = {};
+    existingPairs.forEach(function (pair) {
+      var leftValue = String(pair && pair.a ? pair.a : '').trim();
+      var rightValue = String(pair && pair.b ? pair.b : '').trim();
+      if (leftValue) globallyUsed[leftValue] = true;
+      if (rightValue) globallyUsed[rightValue] = true;
+    });
     for (var i = 0; i < pairCount; i++) {
       var existing = existingPairs[i] || { a: '', b: '' };
+      var blockedForLeft = {};
+      var blockedForRight = {};
+      Object.keys(globallyUsed).forEach(function (name) {
+        blockedForLeft[name] = true;
+        blockedForRight[name] = true;
+      });
+      if (existing.a) {
+        delete blockedForLeft[existing.a];
+      }
+      if (existing.b) {
+        delete blockedForRight[existing.b];
+      }
+      if (existing.b) {
+        blockedForLeft[existing.b] = true;
+      }
+      if (existing.a) {
+        blockedForRight[existing.a] = true;
+      }
       html.push(
         '<div class="fixed-partner-row" data-fixed-partner-row>' +
-          '<select data-partner-a>' + buildPartnerSelectOptions(selectedPlayers, existing.a, '-- pemain 1 --') + '</select>' +
+          '<select data-partner-a>' + buildPartnerSelectOptions(selectedPlayers, existing.a, '-- pemain 1 --', blockedForLeft) + '</select>' +
           '<div class="fixed-partner-vs">+</div>' +
-          '<select data-partner-b>' + buildPartnerSelectOptions(selectedPlayers, existing.b, '-- pemain 2 --') + '</select>' +
+          '<select data-partner-b>' + buildPartnerSelectOptions(selectedPlayers, existing.b, '-- pemain 2 --', blockedForRight) + '</select>' +
         '</div>'
       );
     }
