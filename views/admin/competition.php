@@ -243,6 +243,79 @@ function fetch_competition_attendees(PDO $db): array {
     return array_values(array_unique($names));
 }
 
+function sanitize_competition_player_selection(array $submittedPlayers, array $availablePlayers): array {
+    $availableMap = [];
+    foreach ($availablePlayers as $availableNameRaw) {
+        $availableName = trim((string)$availableNameRaw);
+        if ($availableName === '') {
+            continue;
+        }
+        $availableMap[mb_strtolower($availableName)] = $availableName;
+    }
+    $selected = [];
+    foreach ($submittedPlayers as $playerRaw) {
+        $player = trim((string)$playerRaw);
+        if ($player === '') {
+            continue;
+        }
+        $lookupKey = mb_strtolower($player);
+        if (!isset($availableMap[$lookupKey])) {
+            continue;
+        }
+        $selected[$lookupKey] = $availableMap[$lookupKey];
+    }
+    return array_values($selected);
+}
+
+function parse_fixed_partner_teams(string $json, array $selectedPlayers): array {
+    $json = trim($json);
+    if ($json === '') {
+        return [];
+    }
+    $decoded = json_decode($json, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+    $selectedMap = [];
+    foreach ($selectedPlayers as $playerRaw) {
+        $player = trim((string)$playerRaw);
+        if ($player === '') {
+            continue;
+        }
+        $selectedMap[mb_strtolower($player)] = $player;
+    }
+    $used = [];
+    $teams = [];
+    foreach ($decoded as $teamRaw) {
+        if (!is_array($teamRaw)) {
+            return [];
+        }
+        $leftRaw = trim((string)($teamRaw['a'] ?? ''));
+        $rightRaw = trim((string)($teamRaw['b'] ?? ''));
+        if ($leftRaw === '' || $rightRaw === '') {
+            return [];
+        }
+        $leftKey = mb_strtolower($leftRaw);
+        $rightKey = mb_strtolower($rightRaw);
+        if ($leftKey === $rightKey) {
+            return [];
+        }
+        if (!isset($selectedMap[$leftKey]) || !isset($selectedMap[$rightKey])) {
+            return [];
+        }
+        if (isset($used[$leftKey]) || isset($used[$rightKey])) {
+            return [];
+        }
+        $used[$leftKey] = true;
+        $used[$rightKey] = true;
+        $teams[] = $selectedMap[$leftKey] . ' & ' . $selectedMap[$rightKey];
+    }
+    if (count($used) !== count($selectedMap)) {
+        return [];
+    }
+    return $teams;
+}
+
 function build_ranking_points(PDO $db, string $competitionType): array {
     $points = [];
     try {
@@ -378,6 +451,51 @@ function canonical_pair_key(string $a, string $b): string {
     return strtolower($x . '|' . $y);
 }
 
+function normalize_partner_mode(string $mode): string {
+    $mode = strtolower(trim($mode));
+    return $mode === 'fixed' ? 'fixed' : 'random';
+}
+
+function read_note_flag(string $notes, string $key, string $default = ''): string {
+    $notes = trim($notes);
+    if ($notes === '' || $key === '') {
+        return $default;
+    }
+    $segments = preg_split('/\s*;\s*/', $notes) ?: [];
+    foreach ($segments as $segment) {
+        $segment = trim((string)$segment);
+        if ($segment === '' || strpos($segment, '=') === false) {
+            continue;
+        }
+        [$segmentKey, $segmentValue] = array_map('trim', explode('=', $segment, 2));
+        if (strcasecmp($segmentKey, $key) === 0) {
+            return $segmentValue;
+        }
+    }
+    return $default;
+}
+
+function append_note_flag(string $notes, string $key, string $value): string {
+    $notes = trim($notes);
+    $parts = $notes !== '' ? (preg_split('/\s*;\s*/', $notes) ?: []) : [];
+    $filtered = [];
+    foreach ($parts as $part) {
+        $part = trim((string)$part);
+        if ($part === '') {
+            continue;
+        }
+        if (strpos($part, '=') !== false) {
+            [$segmentKey] = array_map('trim', explode('=', $part, 2));
+            if (strcasecmp($segmentKey, $key) === 0) {
+                continue;
+            }
+        }
+        $filtered[] = $part;
+    }
+    $filtered[] = trim($key) . '=' . trim($value);
+    return implode(';', $filtered);
+}
+
 function build_americano_full_rounds(array $players, int $courtCount): array {
     $players = array_values(array_filter(array_map(static function ($name): string {
         return trim((string)$name);
@@ -490,6 +608,103 @@ function build_americano_full_rounds(array $players, int $courtCount): array {
     ];
 }
 
+function build_americano_fixed_partner_rounds(array $players, int $courtCount): array {
+    $players = array_values(array_filter(array_map(static function ($name): string {
+        return trim((string)$name);
+    }, $players), static function (string $name): bool {
+        return $name !== '';
+    }));
+    if (count($players) < 4 || count($players) % 4 !== 0) {
+        return [];
+    }
+    $courtCount = normalize_court_count($courtCount);
+    $teams = build_teams_from_players($players);
+    return build_americano_fixed_partner_rounds_from_teams($teams, $courtCount);
+}
+
+function build_americano_fixed_partner_rounds_from_teams(array $teams, int $courtCount): array {
+    $teams = array_values(array_filter(array_map(static function ($team): string {
+        return trim((string)$team);
+    }, $teams), static function (string $team): bool {
+        return $team !== '';
+    }));
+    if (count($teams) < 2 || count($teams) % 2 !== 0) {
+        return [];
+    }
+    $players = [];
+    foreach ($teams as $team) {
+        foreach (split_team_members($team) as $member) {
+            $players[] = $member;
+        }
+    }
+    $players = array_values(array_unique($players));
+    if (count($teams) < 2 || count($teams) % 2 !== 0) {
+        return [];
+    }
+    $teamRounds = build_round_robin($teams);
+    if (!$teamRounds) {
+        return [];
+    }
+
+    $allMatches = [];
+    $matchPerRound = intdiv(count($teams), 2);
+    $sesiPerRound = (int)ceil($matchPerRound / max(1, $courtCount));
+    $executionRoundNo = 0;
+    $logicalRoundNo = 0;
+
+    foreach ($teamRounds as $roundMatches) {
+        $logicalRoundNo++;
+        $chunks = array_chunk($roundMatches, $courtCount);
+        foreach ($chunks as $sessionChunk) {
+            $executionRoundNo++;
+            $playingMembers = [];
+            foreach ($sessionChunk as $m) {
+                foreach (split_team_members((string)($m[0] ?? '')) as $name) {
+                    $playingMembers[$name] = true;
+                }
+                foreach (split_team_members((string)($m[1] ?? '')) as $name) {
+                    $playingMembers[$name] = true;
+                }
+            }
+            $bye = [];
+            foreach ($players as $p) {
+                $name = trim((string)$p);
+                if ($name === '' || isset($playingMembers[$name])) {
+                    continue;
+                }
+                $bye[] = $name;
+            }
+            foreach ($sessionChunk as $idx => $m) {
+                $courtNo = $idx + 1;
+                $allMatches[] = [
+                    'round_no' => $executionRoundNo,
+                    'session_no' => $logicalRoundNo,
+                    'match_no' => $courtNo,
+                    'court_no' => $courtNo,
+                    'player_a_name' => (string)($m[0] ?? ''),
+                    'player_b_name' => (string)($m[1] ?? ''),
+                    'notes' => 'logical_round=' . $logicalRoundNo . ';bye:' . implode(', ', $bye),
+                ];
+            }
+        }
+    }
+
+    $expectedMatches = count($teamRounds) * $matchPerRound;
+    if (count($allMatches) !== $expectedMatches) {
+        return [];
+    }
+
+    return [
+        'mode_cycle' => 'fixed',
+        'logical_rounds' => count($teamRounds),
+        'match_per_round' => $matchPerRound,
+        'sesi_per_round' => $sesiPerRound,
+        'total_sesi' => $executionRoundNo,
+        'teams' => $teams,
+        'matches' => $allMatches,
+    ];
+}
+
 function build_standings_from_games(array $gamesRows, array $seedPlayers = [], string $sortMode = 'point'): array {
     $sortMode = normalize_leaderboard_sort_mode($sortMode);
     $table = [];
@@ -583,6 +798,115 @@ function build_standings_from_games(array $gamesRows, array $seedPlayers = [], s
     });
 
     return $rows;
+}
+
+function build_team_standings_from_games(array $gamesRows, array $seedTeams = [], string $sortMode = 'point'): array {
+    $sortMode = normalize_leaderboard_sort_mode($sortMode);
+    $table = [];
+    foreach ($seedTeams as $seedTeamRaw) {
+        $seedTeam = trim((string)$seedTeamRaw);
+        if ($seedTeam === '') {
+            continue;
+        }
+        if (!isset($table[$seedTeam])) {
+            $table[$seedTeam] = [
+                'name' => $seedTeam,
+                'point_total' => 0,
+                'point_diff' => 0,
+                'played' => 0,
+                'win' => 0,
+                'loss' => 0,
+                'tie' => 0,
+            ];
+        }
+    }
+    foreach ($gamesRows as $row) {
+        $teamA = trim((string)($row['player_a_name'] ?? ''));
+        $teamB = trim((string)($row['player_b_name'] ?? ''));
+        $sa = isset($row['score_a']) && $row['score_a'] !== null ? (int)$row['score_a'] : null;
+        $sb = isset($row['score_b']) && $row['score_b'] !== null ? (int)$row['score_b'] : null;
+        if ($teamA === '' || $teamB === '' || $sa === null || $sb === null || !in_array($sa + $sb, PADEL_ALLOWED_TOTAL_POINTS, true)) {
+            continue;
+        }
+        foreach ([$teamA, $teamB] as $teamName) {
+            if (!isset($table[$teamName])) {
+                $table[$teamName] = [
+                    'name' => $teamName,
+                    'point_total' => 0,
+                    'point_diff' => 0,
+                    'played' => 0,
+                    'win' => 0,
+                    'loss' => 0,
+                    'tie' => 0,
+                ];
+            }
+        }
+
+        $table[$teamA]['played']++;
+        $table[$teamB]['played']++;
+        $table[$teamA]['point_total'] += $sa;
+        $table[$teamB]['point_total'] += $sb;
+        $table[$teamA]['point_diff'] += ($sa - $sb);
+        $table[$teamB]['point_diff'] += ($sb - $sa);
+        if ($sa > $sb) {
+            $table[$teamA]['win']++;
+            $table[$teamB]['loss']++;
+        } elseif ($sb > $sa) {
+            $table[$teamB]['win']++;
+            $table[$teamA]['loss']++;
+        } else {
+            $table[$teamA]['tie']++;
+            $table[$teamB]['tie']++;
+        }
+    }
+
+    $rows = array_values($table);
+    usort($rows, static function (array $x, array $y) use ($sortMode): int {
+        if ((int)$x['played'] !== (int)$y['played']) {
+            return (int)$x['played'] <=> (int)$y['played'];
+        }
+        if ($sortMode === 'wins') {
+            if ((int)$x['win'] !== (int)$y['win']) return (int)$y['win'] <=> (int)$x['win'];
+            if ((int)$x['point_total'] !== (int)$y['point_total']) return (int)$y['point_total'] <=> (int)$x['point_total'];
+            if ((int)$x['point_diff'] !== (int)$y['point_diff']) return (int)$y['point_diff'] <=> (int)$x['point_diff'];
+            return strcmp((string)$x['name'], (string)$y['name']);
+        }
+        if ((int)$x['point_total'] !== (int)$y['point_total']) return (int)$y['point_total'] <=> (int)$x['point_total'];
+        if ((int)$x['point_diff'] !== (int)$y['point_diff']) return (int)$y['point_diff'] <=> (int)$x['point_diff'];
+        if ((int)$x['win'] !== (int)$y['win']) return (int)$y['win'] <=> (int)$x['win'];
+        return strcmp((string)$x['name'], (string)$y['name']);
+    });
+
+    return $rows;
+}
+
+function select_fixed_team_matchups(array $teams, array $gamesRows, int $courtCount, string $sortMode = 'point'): array {
+    $teams = array_values(array_unique(array_filter(array_map(static function ($team): string {
+        return trim((string)$team);
+    }, $teams), static function (string $team): bool {
+        return $team !== '';
+    })));
+    if (count($teams) < 2) {
+        return [];
+    }
+    $standings = build_team_standings_from_games($gamesRows, $teams, $sortMode);
+    $orderedTeams = array_map(static function (array $row): string {
+        return (string)($row['name'] ?? '');
+    }, $standings);
+    $orderedTeams = array_values(array_filter($orderedTeams, static function (string $name): bool {
+        return $name !== '';
+    }));
+    if (!$orderedTeams) {
+        $orderedTeams = $teams;
+    }
+    $maxActiveTeams = max(2, normalize_court_count($courtCount) * 2);
+    if (count($orderedTeams) > $maxActiveTeams) {
+        $orderedTeams = array_slice($orderedTeams, 0, $maxActiveTeams);
+    }
+    if (count($orderedTeams) % 2 !== 0) {
+        array_pop($orderedTeams);
+    }
+    return build_pairs_from_teams($orderedTeams);
 }
 
 function sort_mexicano_members_by_ranking(array $members, array $rankingStats): array {
@@ -1108,27 +1432,53 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
 
     $baseTitle = trim((string)($rows[0]['game_title'] ?? ''));
     $label = trim($label) !== '' ? trim($label) : build_competition_label_from_title($type, $baseTitle);
+    $partnerMode = normalize_partner_mode(read_note_flag((string)($rows[0]['notes'] ?? ''), 'partner_mode', 'random'));
+    $tournamentState = read_tournament_state($db, $type, $label);
+    $leaderboardSortBy = normalize_leaderboard_sort_mode((string)($tournamentState['leaderboard_sort_by'] ?? 'point'));
+    $tournamentRows = [];
+    try {
+        $allGamesStmt = $db->prepare(
+            "SELECT game_title, player_a_name, player_b_name, score_a, score_b
+             FROM competition_games
+             WHERE competition_type = ?"
+        );
+        $allGamesStmt->execute([$type]);
+        $tournamentRows = filter_rows_by_competition_label($allGamesStmt->fetchAll(PDO::FETCH_ASSOC), $type, $label);
+    } catch (Throwable $e) {
+        $tournamentRows = $rows;
+    }
 
     if ($type === 'Americano') {
-        $members = [];
-        foreach ($completedTeams as $teamName) {
-            foreach (split_team_members($teamName) as $member) {
-                $members[] = $member;
+        if ($partnerMode === 'fixed') {
+            $nextTeams = $completedTeams;
+            shuffle($nextTeams);
+        } else {
+            $members = [];
+            foreach ($completedTeams as $teamName) {
+                foreach (split_team_members($teamName) as $member) {
+                    $members[] = $member;
+                }
+            }
+            $members = array_values(array_unique($members));
+            shuffle($members);
+            $nextTeams = build_teams_from_players($members);
+            shuffle($nextTeams);
+        }
+    } else {
+        if ($partnerMode === 'fixed') {
+            if (count($allTeams) < 2) {
+                return [0, 0];
+            }
+        } else {
+            $memberStats = fetch_competition_member_stats($db, 'Mexicano', $label);
+            $memberPool = array_values((array)($memberStats['members'] ?? []));
+            $playedCounts = (array)($memberStats['played'] ?? []);
+            $ranking = build_player_ranking_stats($db, 'Mexicano', $label);
+            if (count($memberPool) < 4) {
+                return [0, 0];
             }
         }
-        $members = array_values(array_unique($members));
-        shuffle($members);
-        $nextTeams = build_teams_from_players($members);
-        shuffle($nextTeams);
-    } else {
-        $memberStats = fetch_competition_member_stats($db, 'Mexicano', $label);
-        $memberPool = array_values((array)($memberStats['members'] ?? []));
-        $playedCounts = (array)($memberStats['played'] ?? []);
-        $ranking = build_player_ranking_stats($db, 'Mexicano', $label);
-        if (count($memberPool) < 4) {
-            return [0, 0];
-        }
-        $blockSpan = mexicano_block_round_span(count($memberPool), $configuredCourtCount);
+        $blockSpan = mexicano_block_round_span($partnerMode === 'fixed' ? count($allTeams) * 2 : count($memberPool), $configuredCourtCount);
         if (($sourceRound % $blockSpan) !== 0) {
             return [0, 0];
         }
@@ -1136,12 +1486,16 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
         if (!are_rounds_completed($db, $type, $blockStart, $sourceRound, $label)) {
             return [0, 0];
         }
-        $selection = select_mexicano_active_players($memberPool, $playedCounts, $configuredCourtCount, $ranking);
-        $activePlayers = array_values((array)($selection['players'] ?? []));
-        if (count($activePlayers) < 4) {
-            return [0, 0];
+        if ($partnerMode === 'fixed') {
+            $pairs = select_fixed_team_matchups($allTeams, $tournamentRows, $configuredCourtCount, $leaderboardSortBy);
+        } else {
+            $selection = select_mexicano_active_players($memberPool, $playedCounts, $configuredCourtCount, $ranking);
+            $activePlayers = array_values((array)($selection['players'] ?? []));
+            if (count($activePlayers) < 4) {
+                return [0, 0];
+            }
+            $pairs = build_mexicano_pairs_for_round($activePlayers, $configuredCourtCount);
         }
-        $pairs = build_mexicano_pairs_for_round($activePlayers, $configuredCourtCount);
         if (!$pairs) {
             return [0, 0];
         }
@@ -1197,7 +1551,7 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
             $pairs,
             $configuredCourtCount,
             $memberUniverse,
-            'mode_cycle=single',
+            append_note_flag('mode_cycle=single', 'partner_mode', $partnerMode),
             $nextRound,
             true
         );
@@ -1210,7 +1564,7 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
             $title = $label . ' - R' . $roundNo . ' M' . $matchNo;
             $a = (string)($slot['player_a_name'] ?? '');
             $b = (string)($slot['player_b_name'] ?? '');
-            $notes = (string)($slot['notes'] ?? 'mode_cycle=single');
+            $notes = (string)($slot['notes'] ?? append_note_flag('mode_cycle=single', 'partner_mode', $partnerMode));
 
             $insert->execute([
                 null,
@@ -1238,7 +1592,7 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
         return [$created, 0];
     }
 
-    $scheduledRows = build_session_bye_notes($pairs, $configuredCourtCount, $memberUniverse, 'mode_cycle=single');
+    $scheduledRows = build_session_bye_notes($pairs, $configuredCourtCount, $memberUniverse, append_note_flag('mode_cycle=single', 'partner_mode', $partnerMode));
     $fetchExisting = $db->prepare(
         "SELECT id, game_title, session_no, match_no, score_a, score_b
          FROM competition_games
@@ -1266,7 +1620,7 @@ function sync_next_round_from_round(PDO $db, string $type, int $sourceRound, int
         $title = $label . ' - R' . $nextRound . ' M' . $matchNo;
         $a = (string)($slot['player_a_name'] ?? '');
         $b = (string)($slot['player_b_name'] ?? '');
-        $notes = (string)($slot['notes'] ?? 'mode_cycle=single');
+        $notes = (string)($slot['notes'] ?? append_note_flag('mode_cycle=single', 'partner_mode', $partnerMode));
 
         if (isset($existingRows[$idx])) {
             $row = $existingRows[$idx];
@@ -1750,9 +2104,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $titlePrefix = trim((string)($_POST['game_title'] ?? ''));
         $gameDateRaw = trim((string)($_POST['game_date'] ?? ''));
         $matchTotalPoints = isset($_POST['match_total_points']) ? (int)$_POST['match_total_points'] : 0;
+        $partnerMode = normalize_partner_mode((string)($_POST['partner_mode'] ?? 'random'));
         $leaderboardSortBy = normalize_leaderboard_sort_mode((string)($_POST['leaderboard_sort_by'] ?? 'point'));
         $playerCountRaw = trim((string)($_POST['player_count'] ?? ''));
         $playerCount = ctype_digit($playerCountRaw) ? (int)$playerCountRaw : 0;
+        $selectedPlayers = isset($_POST['selected_players']) && is_array($_POST['selected_players'])
+            ? sanitize_competition_player_selection((array)$_POST['selected_players'], fetch_competition_attendees($db))
+            : [];
+        $fixedTeams = [];
+        $fixedPairsJson = trim((string)($_POST['fixed_partner_pairs'] ?? ''));
         $courtCount = normalize_court_count($_POST['court_count'] ?? 1);
         $adminId = (int)($_SESSION['admin_id'] ?? 0);
 
@@ -1769,13 +2129,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $availableCount = count($attendees);
             if ($availableCount < 4) {
                 $flash['error'] = 'Attendee accepted belum cukup untuk format team (minimal 4 orang).';
-            } elseif ($playerCount > 0 && ($playerCount < 4 || $playerCount > $availableCount)) {
-                $flash['error'] = 'Jumlah pemain tidak valid. Isi 4 sampai ' . $availableCount . ' pemain.';
+            } elseif (!$selectedPlayers) {
+                $flash['error'] = 'Pilih minimal 4 pemain yang ikut.';
             } else {
-                $effectivePlayerCount = $playerCount > 0 ? $playerCount : $availableCount;
-                shuffle($attendees);
-                if ($effectivePlayerCount < $availableCount) {
-                    $attendees = array_slice($attendees, 0, $effectivePlayerCount);
+                $attendees = $selectedPlayers;
+                $playerCount = count($attendees);
+                if ($playerCount < 4) {
+                    $flash['error'] = 'Pilih minimal 4 pemain yang ikut.';
+                } elseif ($playerCount > $availableCount) {
+                    $flash['error'] = 'Jumlah pemain tidak valid.';
+                } elseif ($partnerMode === 'fixed' && ($playerCount % 2) !== 0) {
+                    $flash['error'] = 'Mode fix partner membutuhkan jumlah pemain genap.';
+                } elseif ($partnerMode === 'fixed') {
+                    $fixedTeams = parse_fixed_partner_teams($fixedPairsJson, $attendees);
+                    if (!$fixedTeams || count($fixedTeams) !== (int)($playerCount / 2)) {
+                        $flash['error'] = 'Pasangan fix partner belum lengkap atau ada pemain yang dobel.';
+                    }
                 }
             }
             if ($flash['error'] !== '') {
@@ -1828,7 +2197,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } catch (Throwable $e) {
                     }
                     if ($type === 'Americano') {
-                        $schedule = build_americano_full_rounds($attendees, $courtCount);
+                        $schedule = $partnerMode === 'fixed'
+                            ? build_americano_fixed_partner_rounds_from_teams($fixedTeams, $courtCount)
+                            : build_americano_full_rounds($attendees, $courtCount);
                         if (!$schedule || empty($schedule['matches'])) {
                             throw new RuntimeException('Gagal menyusun jadwal Americano.');
                         }
@@ -1841,26 +2212,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $insert->execute([
                                 null, $type, $title, $roundNo, $sessionNo, $matchNo, $courtNo, $courtCount, $matchTotalPoints,
                                 null, (string)($row['player_a_name'] ?? ''), null, (string)($row['player_b_name'] ?? ''),
-                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, (string)($row['notes'] ?? 'mode_cycle=single'),
+                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, append_note_flag((string)($row['notes'] ?? 'mode_cycle=single'), 'partner_mode', $partnerMode),
                                 $adminId > 0 ? $adminId : null, date('Y-m-d H:i:s'),
                             ]);
                             $created++;
                         }
-                        $flash['success'] = 'Americano: '
-                            . count($attendees) . ' pemain random, '
+                        $flash['success'] = 'Americano (' . ($partnerMode === 'fixed' ? 'fix partner' : 'random partner') . '): '
+                            . count($attendees) . ' pemain terpilih, '
                             . (int)($schedule['logical_rounds'] ?? 0) . ' ronde logika, '
                             . (int)($schedule['sesi_per_round'] ?? 0) . ' sesi/ronde, total '
                             . (int)($schedule['total_sesi'] ?? 0) . ' sesi, '
                             . $created . ' match.';
                     } else {
-                        // Mexicano Round 1 starts from random order, then next rounds follow ranking.
-                        $roundOneOrder = $attendees;
-                        shuffle($roundOneOrder);
-                        $pairs = build_mexicano_pairs_for_round($roundOneOrder, $courtCount);
+                        if ($partnerMode === 'fixed') {
+                            $initialTeams = $fixedTeams;
+                            shuffle($initialTeams);
+                            $pairs = build_pairs_from_teams($initialTeams);
+                        } else {
+                            // Mexicano Round 1 starts from random order, then next rounds follow ranking.
+                            $roundOneOrder = $attendees;
+                            shuffle($roundOneOrder);
+                            $pairs = build_mexicano_pairs_for_round($roundOneOrder, $courtCount);
+                        }
                         if (!$pairs) {
                             throw new RuntimeException('Gagal membentuk bagan Mexicano.');
                         }
-                        $scheduledRows = build_session_bye_notes($pairs, $courtCount, $attendees, 'mode_cycle=single', 1, true);
+                        $scheduledRows = build_session_bye_notes(
+                            $pairs,
+                            $courtCount,
+                            $attendees,
+                            append_note_flag('mode_cycle=single', 'partner_mode', $partnerMode),
+                            1,
+                            true
+                        );
                         foreach ($scheduledRows as $mIdx => $slot) {
                             $roundNo = (int)($slot['round_no'] ?? 1);
                             $matchNo = (int)($slot['match_no'] ?? (($mIdx % max(1, $courtCount)) + 1));
@@ -1870,14 +2254,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $insert->execute([
                                 null, $type, $title, $roundNo, $sessionNo, $matchNo, $courtNo, $courtCount, $matchTotalPoints,
                                 null, (string)($slot['player_a_name'] ?? ''), null, (string)($slot['player_b_name'] ?? ''),
-                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, (string)($slot['notes'] ?? 'mode_cycle=single'),
+                                null, null, $gameDateRaw !== '' ? $gameDateRaw : null, (string)($slot['notes'] ?? append_note_flag('mode_cycle=single', 'partner_mode', $partnerMode)),
                                 $adminId > 0 ? $adminId : null, date('Y-m-d H:i:s'),
                             ]);
                             $created++;
                         }
                         $estimation = calculate_round_estimation(count($attendees), $courtCount, $type);
                         $wavesPerRound = (int)($estimation['waves_per_logical_round'] ?? 0);
-                        $flash['success'] = 'Berhasil generate batch awal Mexicano (' . $created . ' match) dengan ' . count($attendees) . ' pemain random di ' . $courtCount . ' court. Per ronde butuh ' . max(1, $wavesPerRound) . ' wave.';
+                        $flash['success'] = 'Berhasil generate batch awal Mexicano (' . ($partnerMode === 'fixed' ? 'fix partner' : 'random partner') . ', ' . $created . ' match) dengan ' . count($attendees) . ' pemain terpilih di ' . $courtCount . ' court. Per ronde butuh ' . max(1, $wavesPerRound) . ' wave.';
                     }
                 } catch (Throwable $e) {
                     $flash['error'] = 'Gagal menambahkan jadwal competition.';
@@ -2213,6 +2597,77 @@ $extraHead = <<<HTML
     border-radius:10px;
     padding:8px 10px;
     margin:0
+  }
+  .player-count-chip {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    width:max-content;
+    max-width:100%;
+    padding:7px 10px;
+    border-radius:999px;
+    background:#eef4ff;
+    border:1px solid #d3e3ff;
+    color:#1b4d8f;
+    font-size:12px;
+    font-weight:800
+  }
+  .attendee-picker {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:8px;
+    max-height:220px;
+    overflow:auto;
+    padding:4px
+  }
+  .attendee-choice {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:9px 10px;
+    border-radius:10px;
+    border:1px solid #d7e2f3;
+    background:#fbfdff;
+    cursor:pointer
+  }
+  .attendee-choice input {
+    width:auto;
+    margin:0
+  }
+  .attendee-choice span {
+    font-size:13px;
+    font-weight:700;
+    color:#173b68
+  }
+  .fixed-partner-builder {
+    display:grid;
+    gap:10px;
+    padding:12px;
+    border:1px solid #d7e2f3;
+    border-radius:14px;
+    background:#f8fbff
+  }
+  .fixed-partner-head {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap
+  }
+  .fixed-partner-list {
+    display:grid;
+    gap:8px
+  }
+  .fixed-partner-row {
+    display:grid;
+    grid-template-columns:1fr 40px 1fr;
+    gap:8px;
+    align-items:center
+  }
+  .fixed-partner-vs {
+    text-align:center;
+    font-weight:900;
+    color:#355a8a
   }
   .type-filter {
     display:flex;
@@ -3129,6 +3584,12 @@ $extraHead = <<<HTML
       height:54px;
       font-size:15px
     }
+    .fixed-partner-row {
+      grid-template-columns:1fr
+    }
+    .fixed-partner-vs {
+      display:none
+    }
     .game-input-modal-body .competition-form .btn.primary {
       min-height:52px;
       font-size:18px
@@ -3548,12 +4009,24 @@ render_header([
                     <input id="gameTitle" name="game_title" type="text" maxlength="160" placeholder="Contoh: Week 1" required>
                   </div>
                   <div class="create-step-block" data-step-block="players" hidden>
-                    <label for="playerCount">Jumlah Pemain (Random)</label>
-                    <div class="player-stepper" data-player-stepper>
-                      <button type="button" class="player-stepper-btn" data-player-step="down" aria-label="Kurangi jumlah pemain">-</button>
-                      <input id="playerCount" class="player-stepper-input" name="player_count" type="number" min="4" max="<?= max(4, (int)$registeredAttendeeCount) ?>" value="<?= max(4, (int)$registeredAttendeeCount) ?>" inputmode="none" readonly required>
-                      <button type="button" class="player-stepper-btn" data-player-step="up" aria-label="Tambah jumlah pemain">+</button>
+                    <label>Pilih Pemain Yang Ikut</label>
+                    <input id="playerCount" name="player_count" type="hidden" value="<?= max(4, (int)$registeredAttendeeCount) ?>">
+                    <div class="player-count-chip" data-selected-player-summary>0 pemain dipilih</div>
+                    <div class="attendee-picker" data-attendee-picker>
+                      <?php foreach ($attendeeNames as $attendeeName): ?>
+                        <label class="attendee-choice">
+                          <input type="checkbox" name="selected_players[]" value="<?= h($attendeeName) ?>" checked>
+                          <span><?= h($attendeeName) ?></span>
+                        </label>
+                      <?php endforeach; ?>
                     </div>
+                  </div>
+                  <div class="create-step-block" data-step-block="partner-mode" hidden>
+                    <label for="partnerMode">Mode Partner</label>
+                    <select id="partnerMode" name="partner_mode" required>
+                      <option value="random">Random Partner</option>
+                      <option value="fixed">Fix Partner</option>
+                    </select>
                   </div>
                   <div class="create-step-block" data-step-block="total" hidden>
                     <label for="matchTotalPoints">Total Poin Match</label>
@@ -3576,6 +4049,14 @@ render_header([
                     <input id="courtCount" name="court_count" type="number" min="1" max="12" value="1" required>
                   </div>
                   <div class="create-step-block" data-step-block="final" hidden>
+                    <div class="fixed-partner-builder" data-fixed-partner-builder hidden>
+                      <div class="fixed-partner-head">
+                        <label style="margin:0;">Tentukan Pasangan Fix Partner</label>
+                        <span class="player-count-chip" data-fixed-partner-status>Lengkapi pasangan pemain</span>
+                      </div>
+                      <input type="hidden" name="fixed_partner_pairs" value="">
+                      <div class="fixed-partner-list" data-fixed-partner-list></div>
+                    </div>
                     <div>
                       <label for="gameDate">Tanggal Game (Opsional)</label>
                       <input id="gameDate" name="game_date" type="date">
@@ -3583,7 +4064,7 @@ render_header([
                     <p class="note" id="courtEstimatorText" hidden>
                       Isi jumlah court untuk hitung ronde logika vs sesi eksekusi. Jika court kurang, sistem otomatis pecah jadi beberapa sesi per ronde.
                     </p>
-                    <p class="note" id="generateInfoRandom" hidden>Sistem akan memilih pemain secara acak dari attendee accepted sesuai jumlah yang kamu isi.</p>
+                    <p class="note" id="generateInfoRandom" hidden>Pilih sendiri siapa saja yang ikut dari attendee accepted. Jika pilih fix partner, kamu juga bisa tentukan pasangan tetapnya sebelum generate.</p>
                     <p class="note" id="generateInfoScoring" hidden>Scoring: setiap pemain dapat poin sesuai skor timnya (tanpa bonus win/loss). Sorting leaderboard mengikuti pilihan: berdasarkan poin atau jumlah menang. Americano pakai format default (single cycle). Mexicano tetap bertahap per ranking.</p>
                     <button class="btn primary" type="submit"><i class="bi bi-diagram-3"></i> Generate Semua Match</button>
                   </div>
@@ -3609,8 +4090,18 @@ render_header([
   var alertOkBtn = alertModal ? alertModal.querySelector('[data-alert-ok]') : null;
   var alertCancelBtn = alertModal ? alertModal.querySelector('[data-alert-cancel]') : null;
   var acceptedPlayerCount = <?= (int)$registeredAttendeeCount ?>;
+  var availableAttendees = <?= json_encode(array_values($attendeeNames), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   var initialFlashSuccess = <?= json_encode((string)($flash['success'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   var initialFlashError = <?= json_encode((string)($flash['error'] ?? ''), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
   function openAlertModal(options) {
     options = options || {};
@@ -4152,80 +4643,122 @@ render_header([
     initBoardInteractions(board);
   }
 
-  function initPlayerCountStepper(createForm) {
+  function getSelectedPlayers(createForm) {
+    if (!createForm) return [];
+    var values = [];
+    createForm.querySelectorAll('input[name="selected_players[]"]:checked').forEach(function (el) {
+      var value = String(el.value || '').trim();
+      if (value) values.push(value);
+    });
+    return values;
+  }
+
+  function syncSelectedPlayers(createForm, triggerEvents) {
     if (!createForm) return;
     var playerEl = createForm.querySelector('#playerCount');
-    var wrap = createForm.querySelector('[data-player-stepper]');
-    if (!playerEl || !wrap) return;
-    if (wrap.dataset.stepperReady === '1') {
-      if (typeof createForm.__syncPlayerStepper === 'function') {
-        createForm.__syncPlayerStepper();
-      }
+    var summaryEl = createForm.querySelector('[data-selected-player-summary]');
+    var selectedPlayers = getSelectedPlayers(createForm);
+    if (playerEl) {
+      playerEl.value = String(selectedPlayers.length);
+    }
+    if (summaryEl) {
+      summaryEl.textContent = selectedPlayers.length + ' pemain dipilih';
+    }
+    if (triggerEvents && playerEl) {
+      playerEl.dispatchEvent(new Event('input', { bubbles: true }));
+      playerEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  function buildPartnerSelectOptions(selectedPlayers, currentValue, placeholder) {
+    var options = ['<option value="">' + placeholder + '</option>'];
+    selectedPlayers.forEach(function (name) {
+      var selectedAttr = name === currentValue ? ' selected' : '';
+      options.push('<option value="' + escapeHtml(name) + '"' + selectedAttr + '>' + escapeHtml(name) + '</option>');
+    });
+    return options.join('');
+  }
+
+  function syncFixedPartnerBuilder(createForm) {
+    if (!createForm) return;
+    var builder = createForm.querySelector('[data-fixed-partner-builder]');
+    var partnerModeEl = createForm.querySelector('[name="partner_mode"]');
+    var hiddenInput = createForm.querySelector('[name="fixed_partner_pairs"]');
+    var listEl = createForm.querySelector('[data-fixed-partner-list]');
+    var statusEl = createForm.querySelector('[data-fixed-partner-status]');
+    if (!builder || !partnerModeEl || !hiddenInput || !listEl || !statusEl) return;
+
+    var selectedPlayers = getSelectedPlayers(createForm);
+    var isFixed = String(partnerModeEl.value || '') === 'fixed';
+    builder.hidden = !isFixed;
+    if (!isFixed) {
+      hiddenInput.value = '';
+      listEl.innerHTML = '';
+      statusEl.textContent = 'Mode random partner aktif';
       return;
     }
-    var downBtn = wrap.querySelector('[data-player-step="down"]');
-    var upBtn = wrap.querySelector('[data-player-step="up"]');
-    var min = parseInt(playerEl.getAttribute('min') || '4', 10);
-    var max = parseInt(playerEl.getAttribute('max') || String(acceptedPlayerCount), 10);
-    if (!Number.isFinite(min)) min = 4;
-    if (!Number.isFinite(max)) max = acceptedPlayerCount;
-    if (max < min) max = min;
 
-    function clamp(val) {
-      var n = parseInt(String(val || ''), 10);
-      if (!Number.isFinite(n)) n = min;
-      if (n < min) n = min;
-      if (n > max) n = max;
-      return n;
+    if (selectedPlayers.length < 4) {
+      hiddenInput.value = '';
+      listEl.innerHTML = '';
+      statusEl.textContent = 'Pilih minimal 4 pemain';
+      return;
+    }
+    if ((selectedPlayers.length % 2) !== 0) {
+      hiddenInput.value = '';
+      listEl.innerHTML = '';
+      statusEl.textContent = 'Jumlah pemain harus genap';
+      return;
     }
 
-    function renderButtons(n) {
-      var stepperDisabled = !!playerEl.disabled || !!wrap.closest('[hidden]');
-      if (downBtn) downBtn.disabled = stepperDisabled || n <= min;
-      if (upBtn) upBtn.disabled = stepperDisabled || n >= max;
-    }
+    var pairCount = Math.floor(selectedPlayers.length / 2);
+    var existingPairs = [];
+    listEl.querySelectorAll('[data-fixed-partner-row]').forEach(function (row) {
+      var left = row.querySelector('[data-partner-a]');
+      var right = row.querySelector('[data-partner-b]');
+      existingPairs.push({
+        a: left ? String(left.value || '') : '',
+        b: right ? String(right.value || '') : ''
+      });
+    });
 
-    function setValue(next, triggerEvents) {
-      var n = clamp(next);
-      playerEl.value = String(n);
-      renderButtons(n);
-      if (triggerEvents) {
-        playerEl.dispatchEvent(new Event('input', { bubbles: true }));
-        playerEl.dispatchEvent(new Event('change', { bubbles: true }));
+    var html = [];
+    for (var i = 0; i < pairCount; i++) {
+      var existing = existingPairs[i] || { a: '', b: '' };
+      html.push(
+        '<div class="fixed-partner-row" data-fixed-partner-row>' +
+          '<select data-partner-a>' + buildPartnerSelectOptions(selectedPlayers, existing.a, '-- pemain 1 --') + '</select>' +
+          '<div class="fixed-partner-vs">+</div>' +
+          '<select data-partner-b>' + buildPartnerSelectOptions(selectedPlayers, existing.b, '-- pemain 2 --') + '</select>' +
+        '</div>'
+      );
+    }
+    listEl.innerHTML = html.join('');
+
+    var used = {};
+    var pairs = [];
+    var isValid = true;
+    listEl.querySelectorAll('[data-fixed-partner-row]').forEach(function (row) {
+      var left = row.querySelector('[data-partner-a]');
+      var right = row.querySelector('[data-partner-b]');
+      var leftValue = left ? String(left.value || '').trim() : '';
+      var rightValue = right ? String(right.value || '').trim() : '';
+      if (!leftValue || !rightValue || leftValue === rightValue || used[leftValue] || used[rightValue]) {
+        isValid = false;
+        return;
       }
-    }
+      used[leftValue] = true;
+      used[rightValue] = true;
+      pairs.push({ a: leftValue, b: rightValue });
+    });
 
-    if (downBtn) {
-      downBtn.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        if (downBtn.disabled) return;
-        setValue(clamp(playerEl.value) - 1, true);
-      });
+    if (isValid && Object.keys(used).length === selectedPlayers.length) {
+      hiddenInput.value = JSON.stringify(pairs);
+      statusEl.textContent = 'Semua pasangan fix partner sudah lengkap';
+    } else {
+      hiddenInput.value = '';
+      statusEl.textContent = 'Lengkapi pasangan tanpa pemain dobel';
     }
-    if (upBtn) {
-      upBtn.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        if (upBtn.disabled) return;
-        setValue(clamp(playerEl.value) + 1, true);
-      });
-    }
-    playerEl.addEventListener('keydown', function (ev) {
-      ev.preventDefault();
-    });
-    playerEl.addEventListener('wheel', function () {
-      playerEl.blur();
-    });
-    playerEl.addEventListener('input', function () {
-      renderButtons(clamp(playerEl.value));
-    });
-    playerEl.addEventListener('change', function () {
-      renderButtons(clamp(playerEl.value));
-    });
-    createForm.__syncPlayerStepper = function () {
-      setValue(playerEl.value, false);
-    };
-    wrap.dataset.stepperReady = '1';
-    setValue(playerEl.value, false);
   }
 
   function updateCourtEstimator() {
@@ -4235,15 +4768,20 @@ render_header([
     var typeEl = createForm.querySelector('[name=\"competition_type\"]');
     var courtEl = createForm.querySelector('[name=\"court_count\"]');
     var playerEl = createForm.querySelector('[name=\"player_count\"]');
+    var partnerModeEl = createForm.querySelector('[name=\"partner_mode\"]');
     if (!infoEl || !typeEl || !courtEl || !playerEl) return;
 
     var type = String(typeEl.value || '');
+    var partnerMode = partnerModeEl ? String(partnerModeEl.value || 'random') : 'random';
     var courts = parseInt(courtEl.value || '1', 10);
-    var selectedPlayers = parseInt(playerEl.value || String(acceptedPlayerCount), 10);
+    var selectedPlayers = parseInt(playerEl.value || '0', 10);
     if (!Number.isFinite(courts) || courts < 1) courts = 1;
     if (courts > 12) courts = 12;
-    if (!Number.isFinite(selectedPlayers)) selectedPlayers = acceptedPlayerCount;
-    if (selectedPlayers < 4) selectedPlayers = 4;
+    if (!Number.isFinite(selectedPlayers)) selectedPlayers = 0;
+    if (selectedPlayers < 4) {
+      infoEl.textContent = 'Pilih minimal 4 pemain untuk mulai generate match.';
+      return;
+    }
     if (selectedPlayers > acceptedPlayerCount) selectedPlayers = acceptedPlayerCount;
     if (String(playerEl.value || '') !== String(selectedPlayers)) {
       playerEl.value = String(selectedPlayers);
@@ -4266,13 +4804,13 @@ render_header([
       }
       var logicalRounds = Math.max(1, selectedPlayers - 1);
       var estimatedSlots = logicalRounds * wavesPerLogicalRound;
-      infoEl.textContent = 'Americano: ' + selectedPlayers + ' pemain random, ' + courts + ' court aktif, ' + logicalRounds + ' ronde logika, ' + wavesPerLogicalRound + ' sesi/ronde, total ' + estimatedSlots + ' sesi.';
+      infoEl.textContent = 'Americano: ' + selectedPlayers + ' pemain terpilih, mode partner ' + (partnerMode === 'fixed' ? 'fix' : 'random') + ', ' + courts + ' court aktif, ' + logicalRounds + ' ronde logika, ' + wavesPerLogicalRound + ' sesi/ronde, total ' + estimatedSlots + ' sesi.';
       return;
     }
     if (type === 'Mexicano') {
       var recommendedRounds = 6;
       var estimatedMexSlots = recommendedRounds * wavesPerLogicalRound;
-      infoEl.textContent = 'Mexicano: ' + selectedPlayers + ' pemain random. Dengan ' + courts + ' court aktif, estimasi ' + wavesPerLogicalRound + ' wave/ronde, rekomendasi awal ' + recommendedRounds + ' ronde (' + estimatedMexSlots + ' slot ronde).';
+      infoEl.textContent = 'Mexicano: ' + selectedPlayers + ' pemain terpilih, mode partner ' + (partnerMode === 'fixed' ? 'fix' : 'random') + '. Dengan ' + courts + ' court aktif, estimasi ' + wavesPerLogicalRound + ' wave/ronde, rekomendasi awal ' + recommendedRounds + ' ronde (' + estimatedMexSlots + ' slot ronde).';
       return;
     }
     infoEl.textContent = 'Pilih tipe game dulu untuk lihat estimasi ronde dari jumlah court.';
@@ -4286,16 +4824,21 @@ render_header([
     var stepHint = createForm.querySelector('[data-create-step-hint]');
     var nameEl = createForm.querySelector('[name=\"game_title\"]');
     var playerEl = createForm.querySelector('[name=\"player_count\"]');
+    var partnerModeEl = createForm.querySelector('[name=\"partner_mode\"]');
     var totalEl = createForm.querySelector('[name=\"match_total_points\"]');
     var sortEl = createForm.querySelector('[name=\"leaderboard_sort_by\"]');
     var courtEl = createForm.querySelector('[name=\"court_count\"]');
     var nameBlock = createForm.querySelector('[data-step-block=\"name\"]');
     var playersBlock = createForm.querySelector('[data-step-block=\"players\"]');
+    var partnerModeBlock = createForm.querySelector('[data-step-block=\"partner-mode\"]');
     var totalBlock = createForm.querySelector('[data-step-block=\"total\"]');
     var sortBlock = createForm.querySelector('[data-step-block=\"leaderboard-sort\"]');
     var courtsBlock = createForm.querySelector('[data-step-block=\"courts\"]');
     var finalBlock = createForm.querySelector('[data-step-block=\"final\"]');
     if (!typeEl || !progressBody) return;
+
+    syncSelectedPlayers(createForm, false);
+    syncFixedPartnerBuilder(createForm);
 
     var hasType = String(typeEl.value || '').trim() !== '';
     progressBody.hidden = !hasType;
@@ -4306,10 +4849,13 @@ render_header([
 
     var playerCount = playerEl ? parseInt(playerEl.value || '', 10) : NaN;
     var hasPlayers = hasName && Number.isFinite(playerCount) && playerCount >= 4;
-    if (totalBlock) totalBlock.hidden = !hasPlayers;
+    if (partnerModeBlock) partnerModeBlock.hidden = !hasPlayers;
+
+    var hasPartnerMode = hasPlayers && partnerModeEl && (String(partnerModeEl.value || '') === 'random' || String(partnerModeEl.value || '') === 'fixed');
+    if (totalBlock) totalBlock.hidden = !hasPartnerMode;
 
     var totalPoints = totalEl ? parseInt(totalEl.value || '', 10) : NaN;
-    var hasTotal = hasPlayers && Number.isFinite(totalPoints) && totalPoints > 0;
+    var hasTotal = hasPartnerMode && Number.isFinite(totalPoints) && totalPoints > 0;
     if (sortBlock) sortBlock.hidden = !hasTotal;
 
     var hasSort = hasTotal && sortEl && (String(sortEl.value || '') === 'point' || String(sortEl.value || '') === 'wins');
@@ -4325,9 +4871,6 @@ render_header([
         el.disabled = !enabled;
       });
     });
-    if (typeof createForm.__syncPlayerStepper === 'function') {
-      createForm.__syncPlayerStepper();
-    }
     if (stepHint) {
       stepHint.style.display = hasType ? 'none' : '';
     }
@@ -4338,7 +4881,8 @@ render_header([
     if (openBtn) {
       var createForm = document.querySelector('[data-create-match-form]');
       if (createForm) createForm.reset();
-      initPlayerCountStepper(createForm);
+      syncSelectedPlayers(createForm, false);
+      syncFixedPartnerBuilder(createForm);
       setGameInputModalState(true);
       syncCreateFormProgress();
       updateCourtEstimator();
@@ -4362,9 +4906,13 @@ render_header([
       target.matches('[data-create-match-form] [name="competition_type"]') ||
       target.matches('[data-create-match-form] [name="game_title"]') ||
       target.matches('[data-create-match-form] [name="player_count"]') ||
+      target.matches('[data-create-match-form] [name="selected_players[]"]') ||
+      target.matches('[data-create-match-form] [name="partner_mode"]') ||
       target.matches('[data-create-match-form] [name="match_total_points"]') ||
       target.matches('[data-create-match-form] [name="leaderboard_sort_by"]') ||
-      target.matches('[data-create-match-form] [name="court_count"]')
+      target.matches('[data-create-match-form] [name="court_count"]') ||
+      target.matches('[data-create-match-form] [data-partner-a]') ||
+      target.matches('[data-create-match-form] [data-partner-b]')
     ) {
       syncCreateFormProgress();
       updateCourtEstimator();
@@ -4383,13 +4931,28 @@ render_header([
     }
   });
   syncCreateFormProgress();
-  initPlayerCountStepper(document.querySelector('[data-create-match-form]'));
+  syncSelectedPlayers(document.querySelector('[data-create-match-form]'), false);
+  syncFixedPartnerBuilder(document.querySelector('[data-create-match-form]'));
   updateCourtEstimator();
 
   document.addEventListener('submit', function (ev) {
     var createForm = ev.target && ev.target.closest ? ev.target.closest('[data-create-match-form]') : null;
     if (!createForm) return;
     ev.preventDefault();
+    syncSelectedPlayers(createForm, false);
+    syncFixedPartnerBuilder(createForm);
+    var selectedPlayers = getSelectedPlayers(createForm);
+    var partnerModeEl = createForm.querySelector('[name="partner_mode"]');
+    var fixedPairsInput = createForm.querySelector('[name="fixed_partner_pairs"]');
+    var partnerModeValue = partnerModeEl ? String(partnerModeEl.value || 'random') : 'random';
+    if (selectedPlayers.length < 4) {
+      showToast('Pilih minimal 4 pemain yang ikut.', 'error', 4500);
+      return;
+    }
+    if (partnerModeValue === 'fixed' && !String(fixedPairsInput ? fixedPairsInput.value : '').trim()) {
+      showToast('Lengkapi pasangan fix partner dulu sebelum generate.', 'error', 4500);
+      return;
+    }
     var runGenerate = function () {
       var btn = createForm.querySelector('button[type="submit"]');
       if (btn) btn.disabled = true;
